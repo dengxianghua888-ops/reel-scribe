@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import inspect
 import re
 import uuid
 from pathlib import Path
@@ -51,6 +52,24 @@ def shorten_text(
     return result
 
 
+def prepare_edge_tts(*, text: str, voice: str, rate: str, pitch: str, volume: str):
+    """Validate the installed API and inputs without opening a network stream."""
+    try:
+        import edge_tts
+    except ImportError as exc:
+        raise RuntimeError("edge-tts is not installed. Install with pip install -e '.[tts]'") from exc
+    kwargs = dict(text=text, voice=voice, rate=rate, pitch=pitch, volume=volume,
+                  boundary="WordBoundary")
+    try:
+        inspect.signature(edge_tts.Communicate).bind(**kwargs)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(
+            "Incompatible edge-tts API: WordBoundary is required. "
+            "Install the supported version with pip install -U -e '.[tts]'"
+        ) from exc
+    return edge_tts.Communicate(**kwargs)
+
+
 async def _edge_tts_stream(
     *,
     text: str,
@@ -63,15 +82,15 @@ async def _edge_tts_stream(
 ) -> list[dict[str, Any]]:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     boundaries: list[dict[str, Any]] = []
-    async def send():
-        try:
-            import edge_tts
-        except ImportError as exc:
-            raise RuntimeError("edge-tts is not installed. Install with pip install -e '.[tts]'") from exc
-        communicate = edge_tts.Communicate(
+    communicate = None
+
+    def prepare():
+        nonlocal communicate
+        communicate = prepare_edge_tts(
             text=text, voice=voice, rate=rate, pitch=pitch, volume=volume,
-            boundary="WordBoundary",
         )
+
+    async def send():
         audio = bytearray()
         check_active_send()
         async for chunk in communicate.stream():
@@ -90,7 +109,7 @@ async def _edge_tts_stream(
 
     result = await guarded_async_send("edge_tts", {"text": text, "voice": voice,
         "rate": rate, "pitch": pitch, "volume": volume, "boundary": "WordBoundary"}, send,
-        intent_key=intent_key)
+        intent_key=intent_key, prepare=prepare)
     with output_path.open("xb") as audio_handle:
         audio_handle.write(base64.b64decode(result["audio_base64"], validate=True))
     return result["boundaries"]

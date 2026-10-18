@@ -36,11 +36,11 @@ local-asr = [
   "faster-whisper>=1.0.3,<2",
 ]
 tts = [
-  "edge-tts>=6.1.12,<8",
+  "edge-tts>=7.2.0,<8",
 ]
 all = [
   "faster-whisper>=1.0.3,<2",
-  "edge-tts>=6.1.12,<8",
+  "edge-tts>=7.2.0,<8",
 ]
 dev = [
   "pytest>=8.2,<9",

@@ -46,11 +46,11 @@ class SendSession:
         if self._cancelled.is_set():
             raise SendCancelled("REMOTE_SEND_CANCELLED: no new sends in this session")
 
-    def _reserve(self, kind: str, payload: dict, intent_key=None):
+    def _reserve(self, kind: str, payload: dict, intent_key=None, prepare=None):
         with self._lock:
-            return self._reserve_locked(kind, payload, intent_key)
+            return self._reserve_locked(kind, payload, intent_key, prepare)
 
-    def _reserve_locked(self, kind, payload, intent_key):
+    def _reserve_locked(self, kind, payload, intent_key, prepare=None):
         self.check_cancelled()
         policy = self.scope.get("remote_policy")
         if policy:
@@ -101,6 +101,10 @@ class SendSession:
                 used += sum(a.get("authorization_id") == self.grant["id"] for a in prior.get("send_attempts", []))
             if self.grant.get("max_requests") is not None and used >= self.grant["max_requests"]:
                 raise SendBlocked("LOCAL_REQUEST_LIMIT_REACHED: persisted authorization exhausted")
+        # Local-only preparation happens after replay/authorization checks but before
+        # a durable send reservation. Never perform network I/O in this callback.
+        if prepare is not None:
+            prepare()
         attempts = previous.get("send_attempts", []) if path.exists() else []
         attempts = [*attempts, {"reserved_at": now(),
                                "authorization_id": self.grant["id"] if self.grant else None}]
@@ -154,8 +158,8 @@ class SendSession:
             raise
         return self._finish(path, record, result)
 
-    async def perform_async(self, kind, payload, send, intent_key=None):
-        path, record, cached = self._reserve(kind, payload, intent_key)
+    async def perform_async(self, kind, payload, send, intent_key=None, prepare=None):
+        path, record, cached = self._reserve(kind, payload, intent_key, prepare)
         if cached:
             return record["result"]
         self._check_before_transport(path, record)
@@ -201,11 +205,11 @@ def guarded_send(kind, payload, send, *, intent_key=None):
     return current.perform(kind, payload, send, intent_key)
 
 
-async def guarded_async_send(kind, payload, send, *, intent_key=None):
+async def guarded_async_send(kind, payload, send, *, intent_key=None, prepare=None):
     current = _session.get()
     if current is None:
         raise SendBlocked("REMOTE_AUTHORIZATION_REQUIRED: no active scoped send session")
-    return await current.perform_async(kind, payload, send, intent_key)
+    return await current.perform_async(kind, payload, send, intent_key, prepare)
 
 
 def reconcile(root, intent, evidence):
