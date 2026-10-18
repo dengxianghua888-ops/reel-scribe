@@ -70,6 +70,23 @@ jobs:
           if-no-files-found: warn
       - name: Check fatal Python errors
         run: python -m ruff check src tests scripts --select F821,F822,F823,E9
+  tts-offline-compatibility:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        edge-tts: ["edge-tts==7.2.0", "edge-tts>=7.2.0,<8"]
+    defaults:
+      run:
+        working-directory: workflows/raven-film-recap/douyin-film-recap
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install actual TTS dependency boundary
+        run: python -m pip install -e ".[dev,tts]" "${{ matrix.edge-tts }}"
+      - name: Offline constructor and durable send regressions (no provider calls)
+        run: python -m pytest tests/test_tts_preflight.py tests/test_send_guard.py tests/test_send_guard_resume.py
   local-alignment-engineering:
     runs-on: ubuntu-latest
     defaults:

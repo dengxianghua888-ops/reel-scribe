@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .config import AppConfig
 from .providers import OpenAICompatibleClient
+from .tts import prepare_edge_tts
 from .utils import run_command
 
 
@@ -79,12 +80,17 @@ def run_doctor(config: AppConfig, config_path: Path | None = None) -> list[Docto
             critical=False,
         )
     )
-    tts_available = importlib.util.find_spec("edge_tts") is not None
+    try:
+        prepare_edge_tts(text="doctor", voice=config.tts.voice, rate=config.tts.rate,
+                         pitch=config.tts.pitch, volume=config.tts.volume)
+        tts_available, tts_detail = True, "edge-tts WordBoundary API and settings validated (offline)"
+    except Exception as exc:
+        tts_available, tts_detail = False, str(exc)
     checks.append(
         DoctorCheck(
             name="TTS",
             status="PASS" if tts_available else "FAIL",
-            detail="edge-tts installed" if tts_available else "edge-tts not installed",
+            detail=tts_detail,
             critical=config.tts.provider == "edge_tts" and not tts_available,
         )
     )
