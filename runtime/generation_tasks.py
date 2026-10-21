@@ -403,7 +403,7 @@ class GenerationStore:
             ack = adapter.submit(payload, idempotency_key=key, max_cost_micros=maximum)
             if not isinstance(ack, SubmissionAck) or not ack.provider_task_id or ack.state not in ("QUEUED", "RUNNING"):
                 raise GenerationError("PROVIDER_ACK_INVALID")
-            _word(ack.provider_task_id,"PROVIDER_TASK_ID")
+            _external_id(ack.provider_task_id,"PROVIDER_TASK_ID")
         except Exception as exc:
             # The call may have reached the provider. Keep reservation and unknown state.
             with self._write() as db:
