@@ -132,6 +132,16 @@ def _emit(value):
         sys.stdout.flush()
 
 
+def _reject_json_constant(value):
+    # Python's JSON reader otherwise accepts NaN/Infinity, which are not JSON.
+    raise ValueError('NON_JSON_CONSTANT')
+
+
+def _valid_request_id(value):
+    # Match MCP RequestId: bool, float and null are not request identifiers.
+    return type(value) in (str, int)
+
+
 def serve():
     # One execution lane preserves store/work ordering. Protocol input remains
     # live for ping and cancellation; output is atomic across both threads.
@@ -176,23 +186,35 @@ def serve():
             if not line.strip():
                 continue
             try:
-                message = json.loads(line)
+                try:
+                    message = json.loads(line, parse_constant=_reject_json_constant)
+                except ValueError:
+                    # No usable ID is available. Keep stdout valid for MCP
+                    # clients and never echo a payload that may hold secrets.
+                    print('MCP_PARSE_ERROR: invalid JSON message', file=sys.stderr, flush=True)
+                    continue
                 if not isinstance(message, dict):
-                    raise ValueError('JSON_RPC_OBJECT_REQUIRED')
+                    print('MCP_INVALID_REQUEST: no usable request id', file=sys.stderr, flush=True)
+                    continue
                 identifier = message.get('id')
                 method = message.get('method')
+                if (message.get('jsonrpc') != '2.0' or not isinstance(method, str)
+                        or ('id' in message and not _valid_request_id(identifier))):
+                    if _valid_request_id(identifier):
+                        _response(identifier, error={'code': -32600, 'message': 'INVALID_MCP_REQUEST'})
+                    else:
+                        print('MCP_INVALID_REQUEST: no usable request id', file=sys.stderr, flush=True)
+                    continue
                 params = message.get('params', {})
-                if identifier is None:
+                if 'id' not in message:
                     if method == 'notifications/cancelled' and isinstance(params, dict):
                         request_id = params.get('requestId')
-                        if type(request_id) in (str, int, float):
+                        if _valid_request_id(request_id):
                             with pending_lock:
                                 cancellation = pending.get(request_id)
                                 if cancellation is not None:
                                     cancellation.set()
                     continue
-                if type(identifier) not in (str, int, float):
-                    raise ValueError('JSON_RPC_ID_REQUIRED')
                 if not isinstance(params, dict):
                     _response(identifier, error={'code': -32602, 'message': 'PARAMS_OBJECT_REQUIRED'})
                     continue
@@ -220,7 +242,7 @@ def serve():
                 else:
                     _response(identifier, error={'code': -32601, 'message': 'Method not found'})
             except (ValueError, TypeError, KeyError) as exc:
-                if isinstance(message, dict) and message.get('id') is not None:
+                if isinstance(message, dict) and _valid_request_id(message.get('id')):
                     _response(message['id'], error={'code': -32600, 'message': str(exc)})
     return 0
 

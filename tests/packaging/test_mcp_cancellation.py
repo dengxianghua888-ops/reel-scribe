@@ -54,7 +54,7 @@ def test_live_ping_progress_and_cancel(monkeypatch):
     thread = threading.Thread(target=server.serve)
     thread.start()
     def send(value):
-        incoming.put(json.dumps(value) + '\n')
+        incoming.put(json.dumps({'jsonrpc': '2.0', **value}) + '\n')
     try:
         send({'id': 1, 'method': 'tools/call', 'params': {
             'name': 'run_operation', 'arguments': {}, '_meta': {'progressToken': 'p'}}})
@@ -84,7 +84,7 @@ def test_serialized_work_directory_guard_and_eof_drain(tmp_path):
                'currency': 'USD', 'limit_micros': 100}
     env = dict(os.environ, EDITING_SKILL_WORK_ROOT=str(work),
                EDITING_FFMPEG=str(tmp_path / 'missing'), EDITING_FFPROBE=str(tmp_path / 'missing'))
-    messages = [{'id': i, 'method': 'tools/call', 'params': {'name': 'run_operation',
+    messages = [{'jsonrpc': '2.0', 'id': i, 'method': 'tools/call', 'params': {'name': 'run_operation',
         'arguments': {'request': request, 'work_dir': str(work / 'same')},
         '_meta': {'progressToken': f'p{i}'}}} for i in (1, 2)]
     result = subprocess.run([sys.executable, str(ROOT / 'scripts/mcp_server.py')],
@@ -170,7 +170,7 @@ def test_completed_id_can_be_reused_without_erasing_new_cancel_token(monkeypatch
     worker = threading.Thread(target=server.serve)
     worker.start()
     def send(value):
-        incoming.put(json.dumps(value) + '\n')
+        incoming.put(json.dumps({'jsonrpc': '2.0', **value}) + '\n')
     call = {'id': 1, 'method': 'tools/call', 'params': {'name': 'run_operation'}}
     try:
         send(call)

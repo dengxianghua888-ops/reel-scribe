@@ -301,6 +301,78 @@ class McpRequestTests(unittest.TestCase):
             content = json.loads(response['result']['content'][0]['text'])
             self.assertTrue(content['entries'])
 
+    def raw_exchange(self, lines, *, diagnostic=None):
+        result = subprocess.run(
+            [sys.executable, str(SERVER)], input="\n".join(lines) + "\n",
+            text=True, capture_output=True, timeout=20,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, diagnostic + "\n" if diagnostic else "")
+        return [json.loads(line) for line in result.stdout.splitlines()]
+
+    def test_uncorrelatable_parse_errors_use_diagnostics_and_preserve_ping(self):
+        for malformed in ('{"private-marker"', '{"id": 1, "method": "ping",}', 'NaN'):
+            with self.subTest(malformed=malformed):
+                responses = self.raw_exchange([
+                    malformed, json.dumps({'jsonrpc': '2.0', 'id': 91, 'method': 'ping'}),
+                ], diagnostic='MCP_PARSE_ERROR: invalid JSON message')
+                self.assertEqual(responses, [{'jsonrpc': '2.0', 'id': 91, 'result': {}}])
+
+    def test_invalid_envelopes_reject_usable_ids_and_preserve_ping(self):
+        cases = [
+            (None, None), ([], None), ([{'jsonrpc': '2.0', 'id': 8, 'method': 'ping'}], None),
+            ('private-marker', None), (1, None), (True, None), ({}, None),
+            ({'id': 8, 'method': 'ping'}, 8),
+            ({'jsonrpc': '1.0', 'id': 8, 'method': 'ping'}, 8),
+            ({'jsonrpc': '2.0', 'id': 8}, 8),
+            ({'jsonrpc': '2.0', 'id': 'string-id', 'method': []}, 'string-id'),
+            ({'jsonrpc': '2.0', 'method': 1}, None),
+            ({'jsonrpc': '2.0', 'id': True, 'method': 'ping'}, None),
+            ({'jsonrpc': '2.0', 'id': [], 'method': 'ping'}, None),
+            ({'jsonrpc': '2.0', 'id': {}, 'method': 'ping'}, None),
+            ({'jsonrpc': '2.0', 'id': 1.5, 'method': 'ping'}, None),
+            ({'jsonrpc': '2.0', 'id': None, 'method': 'ping'}, None),
+        ]
+        for message, expected_id in cases:
+            with self.subTest(message=message):
+                diagnostic = 'MCP_INVALID_REQUEST: no usable request id' if expected_id is None else None
+                responses = self.raw_exchange([
+                    json.dumps(message), json.dumps({'jsonrpc': '2.0', 'id': 91, 'method': 'ping'}),
+                ], diagnostic=diagnostic)
+                if expected_id is not None:
+                    self.assertEqual(len(responses), 2)
+                    self.assertEqual(responses[0]['id'], expected_id)
+                    self.assertEqual(responses[0]['error']['code'], -32600)
+                else:
+                    self.assertEqual(len(responses), 1)
+                self.assertEqual(responses[-1], {'jsonrpc': '2.0', 'id': 91, 'result': {}})
+
+    def test_invalid_version_cannot_execute_writable_tool(self):
+        with tempfile.TemporaryDirectory() as raw:
+            directory = Path(raw).resolve()
+            message = self.call(1, 'run_operation', {
+                'request': self.budget_request(directory / 'never-created.sqlite3'),
+                'work_dir': str(directory / 'never-created'),
+            })
+            message['jsonrpc'] = '1.0'
+            before = self.snapshot(directory)
+            responses = self.exchange([
+                message, {'jsonrpc': '2.0', 'id': 2, 'method': 'ping'},
+            ], env=self.child_environment(directory))
+            self.assertEqual(responses[0]['error']['code'], -32600)
+            self.assertEqual(responses[1]['result'], {})
+            self.assertEqual(self.snapshot(directory), before)
+
+    def test_mcp_valid_string_ids_and_notifications_remain_supported(self):
+        responses = self.raw_exchange([
+            json.dumps({'jsonrpc': '2.0', 'id': 'string-id', 'method': 'ping'}),
+            json.dumps({'jsonrpc': '2.0', 'method': 'ping'}),
+            json.dumps({'jsonrpc': '2.0', 'id': 91, 'method': 'unknown-method'}),
+        ])
+        self.assertEqual(responses[0], {'jsonrpc': '2.0', 'id': 'string-id', 'result': {}})
+        self.assertEqual(responses[1]['id'], 91)
+        self.assertEqual(responses[1]['error']['code'], -32601)
+
     def test_malformed_notifications_are_silent_and_connection_continues(self):
         responses = self.exchange([
             {'jsonrpc': '2.0', 'method': 'initialize', 'params': None},
