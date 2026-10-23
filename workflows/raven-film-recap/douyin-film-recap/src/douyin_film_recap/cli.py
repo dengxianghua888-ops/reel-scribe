@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from enum import Enum
 from pathlib import Path
 from typing import Annotated
 
@@ -219,6 +220,11 @@ def revision_snapshot_command(
         raise typer.Exit(code=2) from exc
 
 
+class PreviewFormat(str, Enum):
+    json = "json"
+    html = "html"
+
+
 @app.command("revision-preview")
 def revision_preview_command(
     work_dir: Annotated[Path, typer.Argument(help="已有作品；只读，不初始化工作区")],
@@ -226,6 +232,7 @@ def revision_preview_command(
     base: Annotated[Path | None, typer.Option("--base", help="既有 revision-snapshot，拒绝过期引用")] = None,
     beat_id: Annotated[list[str] | None, typer.Option("--beat-id", help="只查看指定 beat，可重复")] = None,
     raw_cards: Annotated[Path | None, typer.Option("--raw-cards", help="已有 RawEvidenceCard 数组；仅投影声明")] = None,
+    format: Annotated[PreviewFormat, typer.Option("--format", help="输出 JSON 或离线只读 HTML；只写标准输出")] = PreviewFormat.json,
 ) -> None:
     """定位选材、分镜引用与已绑定的渲染消费；预览不表示验证或采用通过。"""
     from .revision_preview import preview_revision
@@ -243,7 +250,11 @@ def revision_preview_command(
             raw_cards=documents[raw_cards] if raw_cards is not None else None)
         if any(sha(path) != value for path, value in identities.items()):
             raise ValueError("PREVIEW_INPUT_DOCUMENT_CHANGED")
-        typer.echo(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
+        if format == PreviewFormat.html:
+            from .revision_report import render_preview_html
+            typer.echo(render_preview_html(result))
+        else:
+            typer.echo(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
     except (ValueError, OSError, RuntimeError, KeyError, TypeError) as exc:
         console.print(f"只读预览失败：{exc}", markup=False)
         raise typer.Exit(code=2) from exc

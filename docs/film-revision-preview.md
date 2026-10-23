@@ -12,9 +12,14 @@ douyin-film-recap revision-preview /existing/work --beat-id beat-1 --beat-id bea
 douyin-film-recap revision-preview /existing/work --base /existing/base.json
 douyin-film-recap revision-preview /existing/work --proposal /existing/local-proposal.json
 douyin-film-recap revision-preview /existing/work --raw-cards /existing/raw-cards.json
+douyin-film-recap revision-preview /existing/work --format html > /outside/work/review.html
 ```
 
 默认将 `film-revision-preview/1` JSON 输出到标准输出。命令不初始化工作区、不创建锁、不写状态或派生产物，不调用模型、TTS、FFmpeg 或原声提取。若需保存报告，由调用方明确选择工作区之外的文件；不要覆盖原有作品文件。
+
+`--format html` 将同一预览结果输出为中文只读评审页，可以保存到工作区之外并离线用浏览器打开。默认 JSON 接口不变。评审页不加载远程字体、脚本、图片或视频，不自动读取或播放引用的源媒体，也不提供采用修改的按钮。页面中的来源路径、哈希、字幕和旁白可能属于私有材料，分享报告前需确认接收者与授权范围。
+
+评审页提供按 Beat 定位、折叠详情和清晰的记录／声明／未知标签；材料正文不是经过本工具认证的事实。报告生成后是静态快照，无法感知工程随后发生的变化；修改后必须重新运行预览，不能拿已打开的旧页面证明当前版本仍有效。
 
 `--base` 接受已有的 `revision-snapshot` 结果；`--proposal` 接受已有 `revise` 局部候选（`base`、`artifacts`、`scope`，以及可选 `kind`、`reason`），二者不能同时提供。候选必须只包含 `09_storyboard.json`，不接受边界或旁白专用修改请求。`--raw-cards` 是已存在的 RawEvidenceCard 数组，不会创建或提取原声。
 
