@@ -26,6 +26,8 @@
 
 可以只运行到任意阶段。找高光不必生成配音，只要方案不必渲染成片。
 
+已有作品可用 `douyin-film-recap revision-preview /existing/work` 按 Beat 只读查看选材、分镜引用、局部候选范围及已有渲染消费记录。预览不会采用修改、调用模型或渲染，也不继承 QC；用法与证据边界见[只读预览说明](../../../docs/film-revision-preview.md)。
+
 ```mermaid
 flowchart LR
     A[影片 / 剧集 / 字幕] --> B[镜头与对白索引]
