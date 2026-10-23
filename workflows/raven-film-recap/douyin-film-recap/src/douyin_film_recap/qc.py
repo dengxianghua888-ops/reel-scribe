@@ -29,7 +29,7 @@ from .prompts import SEMANTIC_QC_SYSTEM, semantic_qc_prompt
 from .providers import OpenAICompatibleClient
 from .subtitles import build_cues, output_timeline, resolved_visual_spans, segment_output_duration
 from .utils import content_fingerprint, overlap_seconds, run_command
-from .narrative_contracts import get_plan_constraints, hook_eligibility
+from .narrative_contracts import diagnose_plan_references, get_plan_constraints, hook_eligibility
 from .visual_evidence import VisualEvidenceError, validate_storyboard_visual_evidence
 
 
@@ -230,7 +230,6 @@ def preflight_qc(
                         message="Storyboard 的实际渲染来源与已索引 Manifest 不一致。", evidence=differences)
     highlight_ids = {candidate.highlight_id for candidate in highlights.candidates}
     beat_ids = {beat.beat_id for beat in plan.beats}
-    event_ids = {event.event_id for event in story.story_graph.events}
     character_ids = {character.character_id for character in story.character_registry.characters}
 
     if story.character_registry.unresolved_conflicts:
@@ -301,28 +300,18 @@ def preflight_qc(
                     source_time=span.start,
                     evidence={"start": span.start, "end": span.end},
                 )
-    for beat in plan.beats:
-        unknown_events = set(beat.event_ids) - event_ids
-        unknown_highlights = set(beat.preferred_highlights) - highlight_ids
-        if unknown_events:
+    for diagnostic in diagnose_plan_references(plan, story, highlights):
+        # Keep historical missing-ID gates, including on manually edited plans.
+        # Narrative uncertainty is not promoted to a deterministic QC failure.
+        if diagnostic["blocking"]:
             builder.add(
                 stage="pre_render",
                 severity="critical",
                 blocking=True,
                 deterministic=True,
-                rule_id="BEAT_UNKNOWN_EVENT",
-                message=f"Beat {beat.beat_id} 引用了未知事件。",
-                evidence={"unknown": sorted(unknown_events)},
-            )
-        if unknown_highlights:
-            builder.add(
-                stage="pre_render",
-                severity="critical",
-                blocking=True,
-                deterministic=True,
-                rule_id="BEAT_UNKNOWN_HIGHLIGHT",
-                message=f"Beat {beat.beat_id} 引用了未知高光。",
-                evidence={"unknown": sorted(unknown_highlights)},
+                rule_id=diagnostic["rule_id"],
+                message=f"Beat {diagnostic['beat_id']} {diagnostic['path']}: {diagnostic['message']}",
+                evidence={"unknown": diagnostic["references"], **diagnostic},
             )
 
     if manifest.publish_mode == "publish" and not manifest.rights_confirmed:

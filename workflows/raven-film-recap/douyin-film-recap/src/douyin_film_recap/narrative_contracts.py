@@ -6,10 +6,11 @@ claim to establish whether a model's description of a shot is true.
 from __future__ import annotations
 
 from copy import deepcopy
+from collections import defaultdict
 from typing import Any
 
 from .config import AppConfig
-from .models import HighlightCandidate, RecapPlan, StoryBundle, VisualReference
+from .models import HighlightCandidate, HighlightDocument, RecapPlan, StoryBundle, VisualReference
 
 
 _FORMAT_FIELDS = (
@@ -118,6 +119,79 @@ def get_plan_constraints(plan: RecapPlan, config: AppConfig) -> dict[str, Any]:
     constraints = resolve_format_constraints(config, duration_mode=plan.duration_mode)
     constraints.update(deepcopy(plan.resolved_constraints))
     return constraints
+
+
+def diagnose_plan_references(
+    plan: RecapPlan, story: StoryBundle, highlights: HighlightDocument | None = None
+) -> list[dict[str, Any]]:
+    """Locate declared references without resolving names or certifying story facts.
+
+    A missing ID is a structural error in the supplied artifacts, not proof that
+    the person/event never exists in the source. Empty mappings, temporary
+    identities and unsupported links stay unknown. An empty result certifies
+    neither semantic consistency nor complete source/episode coverage.
+    """
+    events, characters, candidates = defaultdict(list), defaultdict(list), defaultdict(list)
+    for event in story.story_graph.events:
+        events[event.event_id].append(event)
+    for character in story.character_registry.characters:
+        characters[character.character_id].append(character)
+    if highlights is not None:
+        for candidate in highlights.candidates:
+            candidates[candidate.highlight_id].append(candidate)
+    diagnostics: list[dict[str, Any]] = []
+
+    for index, beat in enumerate(plan.beats):
+        def add(rule: str, field: str, refs: list[str], message: str, *, missing=False):
+            diagnostics.append({
+                "rule_id": rule, "beat_id": beat.beat_id, "field": field,
+                "path": f"beats[{index}].{field}", "references": refs,
+                "status": "missing_reference" if missing else "unknown",
+                "blocking": missing, "deterministic": missing, "message": message,
+            })
+
+        fields = [("event_ids", "EVENT", events), ("character_focus", "CHARACTER", characters)]
+        if highlights is not None:
+            fields.append(("preferred_highlights", "HIGHLIGHT", candidates))
+        for field, kind, registry in fields:
+            refs = set(getattr(beat, field))
+            missing = sorted(refs - registry.keys())
+            if missing:
+                add(f"BEAT_UNKNOWN_{kind}", field, missing,
+                    f"IDs absent from the supplied {kind.lower()} registry: {', '.join(missing)}",
+                    missing=True)
+            ambiguous = sorted(ref for ref in refs if len(registry.get(ref, [])) > 1)
+            if ambiguous:
+                add(f"BEAT_AMBIGUOUS_{kind}_ID", field, ambiguous,
+                    "Multiple entries share these IDs; identity is unresolved.")
+
+        linked_events = [events[eid][0] for eid in dict.fromkeys(beat.event_ids)
+                         if len(events.get(eid, [])) == 1]
+        if not beat.event_ids or any(not event.source_spans for event in linked_events):
+            add("BEAT_EVENT_MAPPING_UNKNOWN", "event_ids", list(beat.event_ids),
+                "Event evidence mapping is missing; source coverage is unknown.")
+        temporary = sorted(cid for cid in set(beat.character_focus)
+                           if len(characters.get(cid, [])) == 1 and characters[cid][0].temporary_name)
+        if temporary:
+            add("BEAT_CHARACTER_IDENTITY_UNKNOWN", "character_focus", temporary,
+                "Temporary identities remain unverified; names and aliases do not bind them.")
+        participants = {cid for event in linked_events for cid in event.participants}
+        unlinked = sorted(cid for cid in set(beat.character_focus) if cid in characters
+                          and linked_events and cid not in participants)
+        if unlinked:
+            add("BEAT_CHARACTER_EVENT_LINK_UNKNOWN", "character_focus", unlinked,
+                "The declared events do not establish these focus links; this is not a contradiction.")
+        for hid in dict.fromkeys(beat.preferred_highlights):
+            if len(candidates.get(hid, [])) != 1:
+                continue
+            candidate = candidates[hid][0]
+            if not candidate.selected:
+                add("BEAT_HIGHLIGHT_NOT_SELECTED", "preferred_highlights", [hid],
+                    "The highlight exists but was not offered in the selected planning pool.")
+            if not candidate.event_ids or not beat.event_ids or not set(candidate.event_ids) & set(beat.event_ids):
+                add("BEAT_HIGHLIGHT_EVENT_LINK_UNKNOWN", "preferred_highlights", [hid],
+                    "No shared event mapping establishes this preference; contextual use remains possible.")
+    return diagnostics
 
 
 def hook_eligibility(
