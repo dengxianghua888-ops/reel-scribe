@@ -21,6 +21,7 @@ from .models import (
 )
 from .prompts import PLAN_SYSTEM, STORYBOARD_SYSTEM, plan_prompt, storyboard_prompt
 from .narrative_contracts import (
+    diagnose_plan_references,
     duration_bounds,
     get_plan_constraints,
     hook_eligibility,
@@ -202,6 +203,17 @@ def build_plan(
         if not beat.beat_id or beat.beat_id in seen_beat_ids:
             beat.beat_id = f"beat_{index:02d}"
         seen_beat_ids.add(beat.beat_id)
+    diagnostics = diagnose_plan_references(plan, story, highlights)
+    missing = [item for item in diagnostics if item["blocking"]]
+    if missing:
+        raise ValueError("Plan reference check failed: " + "; ".join(
+            f"{item['path']} (beat {item['beat_id']!r}): {item['message']}" for item in missing
+        ))
+    for item in diagnostics:
+        plan.risks.append(
+            f"{item['rule_id']} {item['path']} (beat {item['beat_id']!r}): "
+            f"{item['message']} [status=unknown]"
+        )
     return plan
 
 

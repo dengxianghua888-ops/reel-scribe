@@ -171,7 +171,11 @@ def highlight_rerank_prompt(
 def plan_prompt(payload: dict[str, Any]) -> str:
     return (
         "根据以下事实底座生成一份完整 RecapPlan。rhythm 字段必须可执行，"
-        "preferred_highlights 只能引用给定 highlight_id。\n\n"
+        "event_ids、character_focus、preferred_highlights 只能引用给定的 event_id、"
+        "character_id、highlight_id。人物线、关系线和主题意图沿用 editorial_brief、pov、"
+        "main_spine 与各 beat 表达；分析后才按 character_id 绑定人物，不按同名、别名或"
+        "临时身份推断合并。缺证据的身份和关系保留 unknown；引用存在不代表跨集证据齐全，"
+        "创作重点不得扩大剧透或揭示许可。\n\n"
         + json.dumps(payload, ensure_ascii=False, indent=2)
     )
 

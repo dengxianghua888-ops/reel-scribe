@@ -6,6 +6,7 @@ retained. Actual provider token/compute equality is unknown unless instrumented.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from collections import Counter
 import hashlib
 import json
 import math
@@ -13,6 +14,7 @@ import re
 from typing import Any, Callable
 
 from .utils import fingerprint_json
+from .narrative_contracts import diagnose_plan_references
 
 
 @dataclass(frozen=True)
@@ -27,6 +29,7 @@ class RetrievalRequest:
     allowed_knowledge_event_ids: tuple[str, ...] = ()
     desired_visual_role: str = "direct_evidence"
     claims_are_derived: bool = True
+    reference_diagnostics: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass
@@ -55,13 +58,19 @@ def _text(row):
 
 
 def build_retrieval_requests(plan, story) -> list[RetrievalRequest]:
-    events = {event.event_id: event for event in story.story_graph.events}
-    characters = {c.character_id: c for c in story.character_registry.characters}
+    event_counts = Counter(event.event_id for event in story.story_graph.events)
+    character_counts = Counter(c.character_id for c in story.character_registry.characters)
+    events = {event.event_id: event for event in story.story_graph.events
+              if event_counts[event.event_id] == 1}
+    characters = {c.character_id: c for c in story.character_registry.characters
+                  if character_counts[c.character_id] == 1}
+    diagnostics = diagnose_plan_references(plan, story)
     allowed = set()
     requests = []
     for beat in plan.beats:
         linked = [events[eid] for eid in beat.event_ids if eid in events]
-        allowed.update(beat.event_ids)
+        # Unknown/ambiguous IDs are reported, never converted into knowledge permission.
+        allowed.update(eid for eid in beat.event_ids if eid in events)
         spans = tuple((span.source_id, span.start, span.end) for e in linked for span in e.source_spans)
         verified_characters = tuple(cid for cid in beat.character_focus if cid in characters
                                     and not characters[cid].temporary_name)
@@ -78,7 +87,8 @@ def build_retrieval_requests(plan, story) -> list[RetrievalRequest]:
             query_provenance=(f"beat:{beat.beat_id}:change", *[f"event:{e.event_id}:text" for e in linked]),
             event_ids=tuple(beat.event_ids), canonical_character_ids=verified_characters,
             allowed_source_ids=tuple(sorted({span[0] for span in spans})), preferred_spans=spans,
-            allowed_knowledge_event_ids=tuple(sorted(allowed))))
+            allowed_knowledge_event_ids=tuple(sorted(allowed)),
+            reference_diagnostics=tuple(item for item in diagnostics if item["beat_id"] == beat.beat_id)))
     return requests
 
 

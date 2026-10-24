@@ -140,6 +140,10 @@ python -m douyin_film_recap run "/path/to/movie.mp4" \
 
 内容单位与时长分开。你可以讲一个场景、一段关系、一集、全片或一个系列 Part，也可以用 `project.editorial_brief` 指定核心问题、叙述立场、观众知识、必须保留内容和剧透策略。
 
+人物线、关系线和主题沿用 `editorial_brief.narrative_question`、`preserve`、`stance` 以及计划中的 `pov`、`main_spine` 表达。人物分析完成后，Beat 的 `character_focus` 绑定注册表中的 `character_id`；显示名、别名和临时身份不会自动合并或替换 ID。旧配置无需增加字段。
+
+规划结束时统一检查各 Beat 的 `event_ids`、`character_focus` 和 `preferred_highlights`。引用缺失于本次提供的注册表时，错误列出 Beat、字段路径和 ID；手改计划也会在 pre-QC 检查。临时/歧义身份、缺证据映射、未建立的人物/高光事件联系保留为 `unknown`，新计划在现有 `risks` 中记录，不把上下文用法当作事实矛盾。R1 的请求记录还保留引用诊断；未知或重复事件 ID 不增加揭示许可。有效引用和 `candidate_evidence` 均不证明事实正确、跨集证据齐全或已经进入成片，剧透约束仍由原有规则执行。
+
 ## 交付物
 
 完整运行会保留：
