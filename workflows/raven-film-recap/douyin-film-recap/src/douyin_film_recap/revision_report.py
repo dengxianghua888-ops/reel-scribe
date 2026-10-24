@@ -84,7 +84,8 @@ def _retrieval(value):
     result = _value({k: v for k, v in value.items() if k not in large})
     for key in ("rankings", "exclusions", "budget_exclusions"):
         rows = value.get(key, [])
-        result += _details(f"{_LABELS[key]}：{len(rows)} 条（展开查看原记录）", rows)
+        summary = f"{len(rows)} 条" if isinstance(rows, list) else "格式异常，非列表"
+        result += _details(f"{_LABELS[key]}：{summary}（展开查看原记录）", rows)
     return result
 
 

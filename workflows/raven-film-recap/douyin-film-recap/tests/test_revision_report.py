@@ -161,3 +161,30 @@ def test_code_translation_is_contextual_and_navigation_is_early(workspace):
     assert '检索排名声明：3 条' in html
     assert html.index('href="#beat-0"') < html.index('1. 基线与源素材身份')
     assert '源素材 1 个 · Beat 1 个' in html
+
+
+@pytest.mark.parametrize('rows', [None, 42, False, '<script>alert(1)</script>', {'reason': '<img src=x>'}])
+def test_malformed_exclusions_preserved_without_count_or_side_effects(workspace, rows):
+    board = read(workspace / BOARD)
+    board['retrieval_provenance']['exclusions']['beat'] = rows
+    atomic(workspace / BOARD, board)
+    before = inventory(workspace.parent)
+    value = preview_revision(workspace)
+    original = copy.deepcopy(value)
+    assert value['beats'][0]['retrieval']['exclusions'] == rows
+    default = CliRunner().invoke(app, ['revision-preview', str(workspace)])
+    assert default.exit_code == 0
+    assert json.loads(default.stdout)['beats'][0]['retrieval']['exclusions'] == rows
+    result = CliRunner().invoke(app, ['revision-preview', str(workspace), '--format', 'html'])
+    assert result.exit_code == 0, result.output
+    assert '排除记录：格式异常，非列表（展开查看原记录）' in result.stdout
+    assert '排除记录：0 条' not in result.stdout
+    assert 'QC：NOT_RUN' in result.stdout
+    doc = Document(result.stdout)
+    assert not any(tag in {'script', 'img', 'iframe'} for tag, _ in doc.tags)
+    if isinstance(rows, str):
+        assert rows in ''.join(doc.text)
+    if isinstance(rows, dict):
+        assert rows['reason'] in ''.join(doc.text)
+    assert value == original
+    assert inventory(workspace.parent) == before
