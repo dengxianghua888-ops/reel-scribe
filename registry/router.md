@@ -27,6 +27,8 @@
 
 ## 当前入口与相邻歧义
 
+- 原创或授权改编的剧情、短剧、漫剧、分章节叙事：`raven-drama-production`（W17）。先定 ANALYZE / PLAN / PRODUCE / EDITABLE / REVISION；只要剧本/分镜即完成相应文本交付，不启动媒体任务。既有作品保持原身份与手改。已有影片的原声剧情剪辑或纯解说仍走 `raven-film-recap`；单镜补足走 `raven-script-generation` 并复用局部修订。六类示例见[剧情路由](../workflows/raven-drama-production/references/route-and-reuse.md)。
+
 - 影视、电视剧或当前作品已为剧情解说：`raven-film-recap`，可按模式只理解、选段、规划或修改。
 - 文件哈希/规格：`media-inspect`；指定时间截图：`frame-extract`；指定区间提音轨：`audio-extract`。
 - 参数齐全的拼剪：`timeline-render`；明确入出点/增益/恒定片段速度更新：`timeline-patch`。本库 `timeline-render` 接受显式 `speed` 0.5–2（省略为 1），例如已指定片段 0.5 倍慢放可走该参数路径；实际有效源窗内有可消费的非 1× 原声时，默认 `rubberband-r3-stream-v5` 依赖未分发、固定身份的 `rubberband-offline-f32-stream-v5` helper，本源码预览不能直接运行该默认路径，缺失或身份不符时不自动回退。显式支持 `audio_backend.kind="ffmpeg-atempo"`（不接 helper，不继承严格音频证据）和历史兼容 `audio_backend.kind="rubberband-r3-v4"`（有声变速须提供原固定版本、通过身份校验的可执行 helper，源音频时钟须为 `SAMPLE_RESOLVING`，DSP 输入为 48kHz mono/stereo f32，保留 256MiB 整段输入上限）；后端前提与证据边界见[音频后端合同](../contracts/operation-contract.md#默认与显式本地音频后端开发态)。1× 与无声路径按各自合同执行，输出声画仍须验收。速度曲线、光流补帧、跟踪式慢放只在当前 Agent 实查到对应工具后路由，不把恒速能力冒充这些效果。

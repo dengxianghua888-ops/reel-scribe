@@ -7,12 +7,14 @@ marks the library delivered. Missing runs/scores stay in frozen denominators.
 import argparse
 import hashlib
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
 METRICS = ('scope_coverage', 'routing_mode', 'execution', 'production_usability')
 THRESHOLDS = dict(zip(METRICS, (90, 90, 90, 85)))
+# Version 1 is frozen: extending the live registry must not change old floors.
 PACKAGES = {f'W{i:02d}' for i in range(1, 17)}
+KNOWN_PACKAGES = PACKAGES | {'W17'}
 STRATA = {'package', 'shared-atomic', 'cross-package', 'revision-recovery', 'failure-outside'}
 FLAGS = ('in_declared_scope', 'full_production', 'critical')
 CHECKS = ('scope_supported', 'routing_correct', 'execution_accepted', 'production_usable', 'critical_pass')
@@ -42,8 +44,26 @@ def indexed(rows, label):
     return result
 
 
+def roster_scope(roster):
+    """Choose the denominator universe from a frozen roster, never the registry."""
+    if roster.get('schema') == 'evaluation-roster/1':
+        return PACKAGES, 'legacy-full-library'
+    require(roster.get('schema') == 'evaluation-roster/2', 'Unsupported roster schema')
+    declared = roster.get('package_ids')
+    require(isinstance(declared, list) and bool(declared)
+            and all(isinstance(p, str) for p in declared)
+            and len(declared) == len(set(declared)), 'Explicit unique package_ids required')
+    packages = set(declared)
+    require(packages <= KNOWN_PACKAGES, 'Unknown declared package')
+    scope = roster.get('evaluation_scope')
+    require(scope in ('declared-package-pilot', 'full-library'), 'Explicit evaluation_scope required')
+    require(scope != 'full-library' or packages == KNOWN_PACKAGES,
+            'Full-library roster requires every W01-W17 package')
+    return packages, scope
+
+
 def summarize(roster, runs_doc, scores_doc, roster_hash):
-    require(roster.get('schema') == 'evaluation-roster/1', 'Unsupported roster schema')
+    packages, evaluation_scope = roster_scope(roster)
     evidence_class = roster.get('evidence_class')
     require(evidence_class in ('synthetic-harness-check', 'independent-holdout'), 'Explicit evidence_class required')
     require(isinstance(roster.get('revision'), str) and bool(roster['revision']), 'Frozen revision required')
@@ -52,8 +72,8 @@ def summarize(roster, runs_doc, scores_doc, roster_hash):
     for case in cases.values():
         require(isinstance(case.get('family_id'), str) and bool(case['family_id']), 'family_id required')
         require(case.get('stratum') in STRATA, 'Unknown stratum')
-        require(case.get('work_package') in PACKAGES or case.get('work_package') is None, 'Unknown package')
-        require(case['stratum'] != 'package' or case.get('work_package') in PACKAGES, 'Package stratum requires W01-W16')
+        require(case.get('work_package') in packages or case.get('work_package') is None, 'Unknown or undeclared package')
+        require(case['stratum'] != 'package' or case.get('work_package') in packages, 'Package stratum requires a declared package')
         for field in FLAGS:
             require(type(case.get(field)) is bool, 'Boolean roster flag required: ' + field)
     for doc, schema in ((runs_doc, 'evaluation-runs/1'), (scores_doc, 'evaluation-scores/1')):
@@ -109,16 +129,21 @@ def summarize(roster, runs_doc, scores_doc, roster_hash):
     critical = [key for key, c in cases.items() if c['critical']]
     critical_missing = [key for key in critical if scores.get(key, {}).get('critical_pass') is not True]
     allocation = {stratum: sum(c['stratum'] == stratum for c in cases.values()) for stratum in sorted(STRATA)}
-    package_floor = {p: sum(c['stratum'] == 'package' and c['work_package'] == p for c in cases.values()) for p in sorted(PACKAGES)}
-    floor_met = (len(cases) >= 180 and all(n >= 8 for n in package_floor.values()) and
+    package_floor = {p: sum(c['stratum'] == 'package' and c['work_package'] == p for c in cases.values()) for p in sorted(packages)}
+    minimum_cases = 8 * len(packages) + 52
+    floor_met = (len(cases) >= minimum_cases and all(n >= 8 for n in package_floor.values()) and
                  allocation['shared-atomic'] >= 20 and allocation['cross-package'] >= 16 and
                  allocation['revision-recovery'] >= 8 and allocation['failure-outside'] >= 8)
+    if evaluation_scope == 'declared-package-pilot':
+        # The full-library allocation gate does not apply to a scoped pilot.
+        # Null is deliberately not a passing floor or an acceptance conclusion.
+        floor_met = None
     numeric_pass = all(m['threshold_met'] for m in metrics.values()) and bool(critical) and not critical_missing
-    return {'schema': 'evaluation-summary/1', 'status': 'AGGREGATED_NOT_ACCEPTANCE_CERTIFICATION',
+    report = {'schema': 'evaluation-summary/1', 'status': 'AGGREGATED_NOT_ACCEPTANCE_CERTIFICATION',
             'evidence_class': evidence_class, 'roster_revision': roster['revision'], 'case_count': len(cases),
             'allocation': allocation, 'package_allocation': package_floor, 'initial_allocation_floor_met': floor_met,
             'metrics': metrics, 'family_metrics': family_metrics, 'family_macro': macro,
-            'per_package': {p: {m: rate([key for key, c in cases.items() if c['work_package'] == p], m) for m in METRICS} for p in sorted(PACKAGES)},
+            'per_package': {p: {m: rate([key for key, c in cases.items() if c['work_package'] == p], m) for m in METRICS} for p in sorted(packages)},
             'critical': {'denominator': len(critical), 'numerator': len(critical) - len(critical_missing),
                          'all_passed': bool(critical) and not critical_missing, 'not_passed_ids': critical_missing},
             'numeric_thresholds_met': numeric_pass,
@@ -129,6 +154,12 @@ def summarize(roster, runs_doc, scores_doc, roster_hash):
                                    'Review actual source/work/output identity and score validity',
                                    'Review per-package category/material coverage beyond allocation counts',
                                    'Complete separate style, host, installation and publication gates']}
+    if roster.get('schema') == 'evaluation-roster/2':
+        report.update(schema='evaluation-summary/2', package_ids=sorted(packages),
+                      evaluation_scope=evaluation_scope,
+                      allocation_floor_applicable=evaluation_scope == 'full-library',
+                      allocation_minimum_cases=minimum_cases if evaluation_scope == 'full-library' else None)
+    return report
 
 
 def main():

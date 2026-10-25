@@ -1,0 +1,657 @@
+{
+  "schema": "drama-context-receipt/0.1-design",
+  "scene_id": "SC02",
+  "authority": "fixture_assumed",
+  "source": {
+    "path": "drama-content.json",
+    "sha256": "ee6ba97aac5328ff6209abe41ad03d2ccdb04f026046972772ba08e3f6f864ff",
+    "content_revision": "return-key-candidate-01"
+  },
+  "payload": {
+    "task": {
+      "mode": "PLAN",
+      "title": "归还钥匙",
+      "content_origin": "original_proposal_by_assistant",
+      "target_duration_sec": 150,
+      "constraints": [
+        "两角色、两地点、三场戏",
+        "不使用旁白或煽情音乐",
+        "动作修复先于解释",
+        "有限动态表现的可行性待媒体试验"
+      ],
+      "preserve": [
+        "P01身份特征与移交手位",
+        "误信和观众未知分离",
+        "D11发生在开门之后",
+        "中间动作与末尾选择完整"
+      ],
+      "subtitle_policy": {
+        "requested": null,
+        "selection": "undecided",
+        "note": "CAP槽位是可选预留；消息图形与对白字幕分开"
+      }
+    },
+    "scene": {
+      "scene_id": "SC02",
+      "location_id": "L02",
+      "story_position": 2,
+      "reveal_position": 2,
+      "story_layer": "present",
+      "purpose": "通过修整和物理归还，改变女儿对索钥匙的理解",
+      "pre_state": "ST01",
+      "post_state": "ST02",
+      "candidate_dependencies": [
+        "SC01"
+      ],
+      "estimated_duration_sec": 60,
+      "context_refs": [
+        "BG01",
+        "C01",
+        "C02",
+        "L02",
+        "P01",
+        "Q01",
+        "Q02",
+        "Q03",
+        "Q05",
+        "F01"
+      ],
+      "delta": [
+        {
+          "target": "P01.custodian",
+          "before": "C02",
+          "after": "C01",
+          "event_refs": [
+            "E05"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "P01.variant_id",
+          "before": "P01-V01",
+          "after": "P01-V02",
+          "event_refs": [
+            "E04"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "C01.Q01",
+          "before": "believes_true",
+          "after": "believes_false",
+          "event_refs": [
+            "E04",
+            "E05"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "AUDIENCE.Q01",
+          "before": "unknown",
+          "after": "believes_false",
+          "event_refs": [
+            "E05"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "C01.Q02",
+          "before": "unknown",
+          "after": "believes_true",
+          "event_refs": [
+            "E04",
+            "E05"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "AUDIENCE.Q02",
+          "before": "unknown",
+          "after": "believes_true",
+          "event_refs": [
+            "E04",
+            "E05"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "F01.status",
+          "before": "established",
+          "after": "reinforced",
+          "event_refs": [
+            "E04",
+            "E05"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "P01.hand",
+          "before": "left",
+          "after": "right",
+          "event_refs": [
+            "E05"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "P01.condition",
+          "before": "sticky",
+          "after": "adjusted_untried",
+          "event_refs": [
+            "E04"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "P01.location_id",
+          "before": "L02",
+          "after": "L01",
+          "event_refs": [
+            "E06"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "C01.location_id",
+          "before": "L02",
+          "after": "L01",
+          "event_refs": [
+            "E06"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "C02.location_id",
+          "before": "L02",
+          "after": "L01",
+          "event_refs": [
+            "E06"
+          ],
+          "story_layer": "present"
+        }
+      ],
+      "location_semantics": "location_id是主要表演地点；镜头可明确记录进出过渡，场间净状态与场内动作分别表达"
+    },
+    "pre_state": {
+      "snapshot_id": "ST01",
+      "story_position": 1,
+      "story_layer": "present",
+      "authority": "fixture_assumed",
+      "entity_state": {
+        "P01": {
+          "custodian": "C02",
+          "hand": "left",
+          "location_id": "L02",
+          "variant_id": "P01-V01",
+          "condition": "sticky"
+        },
+        "C01": {
+          "location_id": "L02",
+          "variant_id": "C01-V01"
+        },
+        "C02": {
+          "location_id": "L02",
+          "variant_id": "C02-V01"
+        }
+      },
+      "knowledge": [
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q01",
+          "attitude": "believes_true",
+          "basis_kind": "inferred",
+          "basis_event_refs": [
+            "E02"
+          ],
+          "reason": "从含混索钥匙消息产生的误信"
+        },
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q02",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q03",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q04",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q05",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [
+            "E01"
+          ],
+          "reason": "卡顿的过去事实，不表示修后仍卡"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q01",
+          "attitude": "believes_false",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "父亲自己的修整意图，BG01创作背景"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q02",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "自己的意图，非外部读心"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q03",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q04",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q05",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "依据片前C01抱怨BG01；父亲未见E01，不能借用观众看到的试锁"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q01",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q02",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q03",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q04",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q05",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [
+            "E01"
+          ],
+          "reason": "卡顿的过去事实，不表示修后仍卡"
+        }
+      ],
+      "foreshadow": [
+        {
+          "foreshadow_id": "F01",
+          "description": "卡住的钥匙与进入资格的误读",
+          "status": "established",
+          "event_refs": [
+            "E01",
+            "E02"
+          ]
+        }
+      ]
+    },
+    "candidate_dependencies": [
+      "SC01"
+    ],
+    "background": [
+      {
+        "background_id": "BG01",
+        "text": "林青已经搬出；此前提过钥匙卡。父亲本日发消息“走之前，把钥匙给我”。他计划修整后归还；林青误以为收回出入资格。没有真实消息截图或源媒体。",
+        "basis": {
+          "kind": "authored"
+        }
+      }
+    ],
+    "entities": [
+      {
+        "entity_id": "C01",
+        "kind": "character",
+        "name": "林青",
+        "invariants": [
+          "32岁，女儿",
+          "低马尾，左侧分缝",
+          "动作先于解释；不以哭泣替代选择"
+        ],
+        "variants": [
+          {
+            "variant_id": "C01-V01",
+            "description": "深灰直身外套、米白圆领内搭；全片保持"
+          }
+        ]
+      },
+      {
+        "entity_id": "C02",
+        "kind": "character",
+        "name": "老林",
+        "invariants": [
+          "63岁，父亲",
+          "说话短，行动具体",
+          "修钥匙时左手持钥匙、右手用锉"
+        ],
+        "variants": [
+          {
+            "variant_id": "C02-V01",
+            "description": "灰褐针织衫、深色长裤；袖口全片一致"
+          }
+        ]
+      },
+      {
+        "entity_id": "L02",
+        "kind": "location",
+        "name": "入户旁小厨房",
+        "invariants": [
+          "从入户门可连贯进入",
+          "父亲侧台面与门的方位固定"
+        ],
+        "variants": [
+          {
+            "variant_id": "L02-V01",
+            "description": "自然窗光；无情绪性调色突变"
+          }
+        ]
+      },
+      {
+        "entity_id": "P01",
+        "kind": "prop",
+        "name": "旧黄铜钥匙",
+        "invariants": [
+          "单把钥匙，椭圆头一侧小凹痕",
+          "褪色蓝线圈",
+          "不变为银色新钥匙或钥匙串"
+        ],
+        "variants": [
+          {
+            "variant_id": "P01-V01",
+            "description": "修前局部边缘毛刺"
+          },
+          {
+            "variant_id": "P01-V02",
+            "description": "修后只允许局部边缘变化；身份特征保持"
+          }
+        ]
+      },
+      {
+        "entity_id": "L01",
+        "kind": "location",
+        "name": "门外走廊与门槛",
+        "context_projection": "仅保留回门口目标和地理相连关系；详细门向在SC03写前加载"
+      }
+    ],
+    "propositions": [
+      {
+        "proposition_id": "Q01",
+        "text": "父亲索钥匙是为了收回林青自行进门的资格",
+        "truth": false,
+        "story_layer": "present",
+        "valid_from_event": null,
+        "basis": {
+          "kind": "authored",
+          "reference": "BG01",
+          "note": "作者对剧情的拟议设定；未来事件不自动授予角色/观众当前知识"
+        }
+      },
+      {
+        "proposition_id": "Q02",
+        "text": "父亲索取钥匙是为了修整后归还",
+        "truth": true,
+        "story_layer": "present",
+        "valid_from_event": null,
+        "basis": {
+          "kind": "authored",
+          "reference": "BG01",
+          "note": "作者对剧情的拟议设定；未来事件不自动授予角色/观众当前知识"
+        }
+      },
+      {
+        "proposition_id": "Q03",
+        "text": "P01经此次修整后能在E08这次尝试中打开门",
+        "truth": true,
+        "story_layer": "present",
+        "valid_from_event": "E08",
+        "basis": {
+          "kind": "authored",
+          "reference": "E08",
+          "note": "作者对剧情的拟议设定；未来事件不自动授予角色/观众当前知识"
+        }
+      },
+      {
+        "proposition_id": "Q04",
+        "text": "林青在E09决定并表达明天回来买菜",
+        "truth": true,
+        "story_layer": "present",
+        "valid_from_event": "E09",
+        "basis": {
+          "kind": "authored",
+          "reference": "E09",
+          "note": "作者对剧情的拟议设定；未来事件不自动授予角色/观众当前知识"
+        }
+      },
+      {
+        "proposition_id": "Q05",
+        "text": "P01修前有卡顿问题",
+        "truth": true,
+        "story_layer": "present",
+        "valid_from_event": null,
+        "basis": {
+          "kind": "authored",
+          "reference": "BG01",
+          "note": "作者对剧情的拟议设定；未来事件不自动授予角色/观众当前知识"
+        }
+      }
+    ],
+    "prior_events": [
+      {
+        "event_id": "E01",
+        "scene_id": "SC01",
+        "description": "林青用P01开门受阻，按铃",
+        "causes": [],
+        "background_refs": [
+          "BG01"
+        ],
+        "effects": [
+          "P01开场卡顿可呈现"
+        ],
+        "basis": {
+          "kind": "authored",
+          "note": "拟议剧情事件，未拍摄或生成"
+        }
+      },
+      {
+        "event_id": "E02",
+        "scene_id": "SC01",
+        "description": "复述父亲消息并交钥匙，C01右手→C02左手",
+        "causes": [
+          "E01"
+        ],
+        "background_refs": [],
+        "effects": [
+          "P01保管人C01→C02；父亲动机仍有歧义"
+        ],
+        "basis": {
+          "kind": "authored",
+          "note": "拟议剧情事件，未拍摄或生成"
+        }
+      },
+      {
+        "event_id": "E03",
+        "scene_id": "SC01",
+        "description": "父亲邀请女儿进入厨房",
+        "causes": [
+          "E02"
+        ],
+        "background_refs": [],
+        "effects": [
+          "两人由L01进入L02"
+        ],
+        "basis": {
+          "kind": "authored",
+          "note": "拟议剧情事件，未拍摄或生成"
+        }
+      }
+    ],
+    "target_events": [
+      {
+        "event_id": "E04",
+        "scene_id": "SC02",
+        "description": "父亲在自己侧台面处理钥匙毛刺",
+        "causes": [
+          "E03"
+        ],
+        "background_refs": [],
+        "effects": [
+          "P01修整；短暂放台面不转移保管权"
+        ],
+        "basis": {
+          "kind": "authored",
+          "note": "拟议剧情事件，未拍摄或生成"
+        }
+      },
+      {
+        "event_id": "E05",
+        "scene_id": "SC02",
+        "description": "女儿说出误会；父亲把P01交回，C02左手→C01右手",
+        "causes": [
+          "E04"
+        ],
+        "background_refs": [],
+        "effects": [
+          "P01保管人C02→C01；C01及观众重新推断Q01/Q02"
+        ],
+        "basis": {
+          "kind": "authored",
+          "note": "拟议剧情事件，未拍摄或生成"
+        }
+      },
+      {
+        "event_id": "E06",
+        "scene_id": "SC02",
+        "description": "父亲请女儿试开",
+        "causes": [
+          "E05"
+        ],
+        "background_refs": [],
+        "effects": [
+          "准备回走廊检验，尚未证明Q03"
+        ],
+        "basis": {
+          "kind": "authored",
+          "note": "拟议剧情事件，未拍摄或生成"
+        }
+      }
+    ],
+    "style_requirements": [
+      "低饱和写实插画；动作承担信息，无旁白无配乐",
+      "C01深灰外套米白内搭、C02灰褐针织衫；同场不换装",
+      "钥匙身份不变量与父左女右两次移交",
+      "允许停顿但实际媒体需要证明停顿有内容",
+      "父亲动机从行为推断，不用眼神写完全和解"
+    ],
+    "must_preserve": [
+      "SC01后钥匙在父亲左手",
+      "SH06台面暂放不改变保管责任",
+      "E05才发生父亲向女儿的现实归还",
+      "Q03需要E08试开，不得SC02先写已实测",
+      "Q04只在E09/D11形成与表达",
+      "父亲对修前卡顿的知情来自BG01，而非未见的E01"
+    ],
+    "next_scene_task": "C01带P01试开，父亲不代试；到D11才表达次日计划",
+    "environment": {
+      "mode": "PLAN",
+      "actual_media_available": false,
+      "real_work_bound": false
+    }
+  },
+  "budget": {
+    "unit": "unicode_codepoints_in_compact_JSON_payload",
+    "measurement": "payload按UTF-8 JSON语义序列化、无缩进和多余空格，计Unicode码点，含JSON标点；不含外层receipt，不是token数",
+    "limit": 12000,
+    "measured": 8329,
+    "fit": true,
+    "token_count": null,
+    "overflow_example": {
+      "limit": 2000,
+      "expected": "必需内容超限时报告并拆分；不得静默删除约束，未调用模型"
+    }
+  },
+  "selected_refs": [
+    "ST01",
+    "BG01",
+    "SC01",
+    "SC02",
+    "C01",
+    "C02",
+    "L02",
+    "P01",
+    "Q01",
+    "Q02",
+    "Q03",
+    "Q04",
+    "Q05",
+    "F01",
+    "E01",
+    "E02",
+    "E03",
+    "E04",
+    "E05",
+    "E06"
+  ],
+  "excluded": [
+    {
+      "ref": "L01详细几何/门锁近景规格",
+      "reason": "本场主体在厨房；保留回门口任务，SC03写前再加载精确门向"
+    },
+    {
+      "ref": "无关580张风格卡",
+      "reason": "本次主辅机制已确定，未要求全库加载"
+    },
+    {
+      "ref": "实际Provider/账号/媒体",
+      "reason": "本任务为PLAN且不存在这些输入"
+    }
+  ],
+  "result_scope": "实际组装与字符计数的设计示例；未实现上下文检索器，未做模型长度或领域运行验证"
+}

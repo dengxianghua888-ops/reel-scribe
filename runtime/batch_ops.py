@@ -35,7 +35,11 @@ def variant_create(q,directory,tools):
     lineage={'schema':'work-variant/1','variant_id':q['variant_id'],'parent_store':str(Path(q['parent_store']).resolve()),'parent_work_id':parent['work_id'],'parent_version':parent['version'],'parent_sequence':parent['sequence'],'parent_document_sha256':parent['document_sha256'],'candidate':q['candidate'],'inherited_lineage':inherited}
     doc['notes']['variant_lineage']=lineage
     # Store commit is authoritative if an outer receipt is interrupted afterwards.
-    rr=run({'operation':'work-version','action':'init','store':str(target),'work_id':q['variant_id'],'document':doc,'message':q['message'],'author':q['author']},directory/'initialize',tools)
+    drama_inheritance=({'drama_inheritance':{'store':str(Path(q['parent_store']).resolve()),
+                        'expected_version':parent['version']}}
+                       if 'drama_domain_ref' in doc['notes'] else {})
+    rr=run({'operation':'work-version','action':'init','store':str(target),'work_id':q['variant_id'],
+            'document':doc,'message':q['message'],'author':q['author'],**drama_inheritance},directory/'initialize',tools)
     require(rr['status']=='SUCCEEDED','VARIANT_INITIALIZE_FAILED: '+rr.get('error','unknown'))
     state=rr['result'];latest=work_state(q['parent_store'])
     result={'variant':state,'lineage':lineage,'diff':diff,'parent_current_at_finish':latest['version']==parent['version'],'parent_version_at_finish':latest['version'],'scope':'New editable variant from an exact parent revision; no parent mutation, no automatic inheritance of future edits, no native editor claim'}

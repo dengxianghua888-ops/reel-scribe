@@ -1,0 +1,45 @@
+{
+  "schema": "drama-package/0.1",
+  "package_id": "return-key-drama-example",
+  "package_revision": "b1-v-0.1-publish-format",
+  "upstream_ref": "0288db1a7c9ec3cbeb77673d5cf18279385c2340",
+  "content_path": "drama-content.json",
+  "work_binding": {
+    "authority_kind": "unbound_design",
+    "work_id": null,
+    "revision_id": null,
+    "adoption_receipt": null
+  },
+  "members": [
+    {
+      "path": "01-完整剧本.md",
+      "sha256": "1b61caeae26df96772a5225e35898c7a7a1485407c2fedbefd2c3fe0c4bb8086",
+      "size_bytes": 10901
+    },
+    {
+      "path": "02-风格与资产规格.md",
+      "sha256": "e8ee04a8df6ec252be2b57cb5b6461ce9fdd3c455dd9ac16129333c8ab8e0783",
+      "size_bytes": 11933
+    },
+    {
+      "path": "03-分镜与状态轨迹.md",
+      "sha256": "5d37c57ceee46ccc052f7f4d173526d88f6ec63219062ec535e3dd4347b111e0",
+      "size_bytes": 17229
+    },
+    {
+      "path": "context-SC02.json",
+      "sha256": "afbc0fe599fe3517a8f7fc5c921b6f5bccf8e3b06d9fb14d14614294ed33c202",
+      "size_bytes": 18542
+    },
+    {
+      "path": "drama-content.json",
+      "sha256": "ee6ba97aac5328ff6209abe41ad03d2ccdb04f026046972772ba08e3f6f864ff",
+      "size_bytes": 78570
+    },
+    {
+      "path": "variant-FB01.json",
+      "sha256": "e075bff0b5cdda9f1e235d3fe9a0e945299e299170f516bd857497aa469cd5c7",
+      "size_bytes": 5458
+    }
+  ]
+}

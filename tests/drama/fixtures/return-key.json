@@ -1,0 +1,3049 @@
+{
+  "schema": "drama-content/0.1-design",
+  "content_revision": "return-key-candidate-01",
+  "authority": "design_candidate",
+  "work_binding": {
+    "authority_kind": "unbound_design",
+    "work_id": null,
+    "revision_id": null,
+    "adoption_receipt": null
+  },
+  "task": {
+    "mode": "PLAN",
+    "title": "归还钥匙",
+    "content_origin": "original_proposal_by_assistant",
+    "target_duration_sec": 150,
+    "constraints": [
+      "两角色、两地点、三场戏",
+      "不使用旁白或煽情音乐",
+      "动作修复先于解释",
+      "有限动态表现的可行性待媒体试验"
+    ],
+    "preserve": [
+      "P01身份特征与移交手位",
+      "误信和观众未知分离",
+      "D11发生在开门之后",
+      "中间动作与末尾选择完整"
+    ],
+    "subtitle_policy": {
+      "requested": null,
+      "selection": "undecided",
+      "note": "CAP槽位是可选预留；消息图形与对白字幕分开"
+    }
+  },
+  "background": [
+    {
+      "background_id": "BG01",
+      "text": "林青已经搬出；此前提过钥匙卡。父亲本日发消息“走之前，把钥匙给我”。他计划修整后归还；林青误以为收回出入资格。没有真实消息截图或源媒体。",
+      "basis": {
+        "kind": "authored"
+      }
+    }
+  ],
+  "entities": [
+    {
+      "entity_id": "C01",
+      "kind": "character",
+      "name": "林青",
+      "invariants": [
+        "32岁，女儿",
+        "低马尾，左侧分缝",
+        "动作先于解释；不以哭泣替代选择"
+      ],
+      "variants": [
+        {
+          "variant_id": "C01-V01",
+          "description": "深灰直身外套、米白圆领内搭；全片保持"
+        }
+      ]
+    },
+    {
+      "entity_id": "C02",
+      "kind": "character",
+      "name": "老林",
+      "invariants": [
+        "63岁，父亲",
+        "说话短，行动具体",
+        "修钥匙时左手持钥匙、右手用锉"
+      ],
+      "variants": [
+        {
+          "variant_id": "C02-V01",
+          "description": "灰褐针织衫、深色长裤；袖口全片一致"
+        }
+      ]
+    },
+    {
+      "entity_id": "L01",
+      "kind": "location",
+      "name": "门外走廊与门槛",
+      "invariants": [
+        "和L02经同一入户门相连",
+        "门内外方向保持；推门动作不镜像"
+      ],
+      "variants": [
+        {
+          "variant_id": "L01-V01",
+          "description": "同日普通日光，固定门锁与门缝位置"
+        }
+      ]
+    },
+    {
+      "entity_id": "L02",
+      "kind": "location",
+      "name": "入户旁小厨房",
+      "invariants": [
+        "从入户门可连贯进入",
+        "父亲侧台面与门的方位固定"
+      ],
+      "variants": [
+        {
+          "variant_id": "L02-V01",
+          "description": "自然窗光；无情绪性调色突变"
+        }
+      ]
+    },
+    {
+      "entity_id": "P01",
+      "kind": "prop",
+      "name": "旧黄铜钥匙",
+      "invariants": [
+        "单把钥匙，椭圆头一侧小凹痕",
+        "褪色蓝线圈",
+        "不变为银色新钥匙或钥匙串"
+      ],
+      "variants": [
+        {
+          "variant_id": "P01-V01",
+          "description": "修前局部边缘毛刺"
+        },
+        {
+          "variant_id": "P01-V02",
+          "description": "修后只允许局部边缘变化；身份特征保持"
+        }
+      ]
+    }
+  ],
+  "propositions": [
+    {
+      "proposition_id": "Q01",
+      "text": "父亲索钥匙是为了收回林青自行进门的资格",
+      "truth": false,
+      "story_layer": "present",
+      "valid_from_event": null,
+      "basis": {
+        "kind": "authored",
+        "reference": "BG01",
+        "note": "作者对剧情的拟议设定；未来事件不自动授予角色/观众当前知识"
+      }
+    },
+    {
+      "proposition_id": "Q02",
+      "text": "父亲索取钥匙是为了修整后归还",
+      "truth": true,
+      "story_layer": "present",
+      "valid_from_event": null,
+      "basis": {
+        "kind": "authored",
+        "reference": "BG01",
+        "note": "作者对剧情的拟议设定；未来事件不自动授予角色/观众当前知识"
+      }
+    },
+    {
+      "proposition_id": "Q03",
+      "text": "P01经此次修整后能在E08这次尝试中打开门",
+      "truth": true,
+      "story_layer": "present",
+      "valid_from_event": "E08",
+      "basis": {
+        "kind": "authored",
+        "reference": "E08",
+        "note": "作者对剧情的拟议设定；未来事件不自动授予角色/观众当前知识"
+      }
+    },
+    {
+      "proposition_id": "Q04",
+      "text": "林青在E09决定并表达明天回来买菜",
+      "truth": true,
+      "story_layer": "present",
+      "valid_from_event": "E09",
+      "basis": {
+        "kind": "authored",
+        "reference": "E09",
+        "note": "作者对剧情的拟议设定；未来事件不自动授予角色/观众当前知识"
+      }
+    },
+    {
+      "proposition_id": "Q05",
+      "text": "P01修前有卡顿问题",
+      "truth": true,
+      "story_layer": "present",
+      "valid_from_event": null,
+      "basis": {
+        "kind": "authored",
+        "reference": "BG01",
+        "note": "作者对剧情的拟议设定；未来事件不自动授予角色/观众当前知识"
+      }
+    }
+  ],
+  "events": [
+    {
+      "event_id": "E01",
+      "scene_id": "SC01",
+      "description": "林青用P01开门受阻，按铃",
+      "causes": [],
+      "background_refs": [
+        "BG01"
+      ],
+      "effects": [
+        "P01开场卡顿可呈现"
+      ],
+      "basis": {
+        "kind": "authored",
+        "note": "拟议剧情事件，未拍摄或生成"
+      }
+    },
+    {
+      "event_id": "E02",
+      "scene_id": "SC01",
+      "description": "复述父亲消息并交钥匙，C01右手→C02左手",
+      "causes": [
+        "E01"
+      ],
+      "background_refs": [],
+      "effects": [
+        "P01保管人C01→C02；父亲动机仍有歧义"
+      ],
+      "basis": {
+        "kind": "authored",
+        "note": "拟议剧情事件，未拍摄或生成"
+      }
+    },
+    {
+      "event_id": "E03",
+      "scene_id": "SC01",
+      "description": "父亲邀请女儿进入厨房",
+      "causes": [
+        "E02"
+      ],
+      "background_refs": [],
+      "effects": [
+        "两人由L01进入L02"
+      ],
+      "basis": {
+        "kind": "authored",
+        "note": "拟议剧情事件，未拍摄或生成"
+      }
+    },
+    {
+      "event_id": "E04",
+      "scene_id": "SC02",
+      "description": "父亲在自己侧台面处理钥匙毛刺",
+      "causes": [
+        "E03"
+      ],
+      "background_refs": [],
+      "effects": [
+        "P01修整；短暂放台面不转移保管权"
+      ],
+      "basis": {
+        "kind": "authored",
+        "note": "拟议剧情事件，未拍摄或生成"
+      }
+    },
+    {
+      "event_id": "E05",
+      "scene_id": "SC02",
+      "description": "女儿说出误会；父亲把P01交回，C02左手→C01右手",
+      "causes": [
+        "E04"
+      ],
+      "background_refs": [],
+      "effects": [
+        "P01保管人C02→C01；C01及观众重新推断Q01/Q02"
+      ],
+      "basis": {
+        "kind": "authored",
+        "note": "拟议剧情事件，未拍摄或生成"
+      }
+    },
+    {
+      "event_id": "E06",
+      "scene_id": "SC02",
+      "description": "父亲请女儿试开",
+      "causes": [
+        "E05"
+      ],
+      "background_refs": [],
+      "effects": [
+        "准备回走廊检验，尚未证明Q03"
+      ],
+      "basis": {
+        "kind": "authored",
+        "note": "拟议剧情事件，未拍摄或生成"
+      }
+    },
+    {
+      "event_id": "E07",
+      "scene_id": "SC03",
+      "description": "女儿走到门外并带上门",
+      "causes": [
+        "E06"
+      ],
+      "background_refs": [],
+      "effects": [
+        "门闭，P01仍在C01右手"
+      ],
+      "basis": {
+        "kind": "authored",
+        "note": "拟议剧情事件，未拍摄或生成"
+      }
+    },
+    {
+      "event_id": "E08",
+      "scene_id": "SC03",
+      "description": "C01左手轻推门、右手转钥匙，门打开",
+      "causes": [
+        "E07"
+      ],
+      "background_refs": [],
+      "effects": [
+        "Q03获得拟呈现事件支持"
+      ],
+      "basis": {
+        "kind": "authored",
+        "note": "拟议剧情事件，未拍摄或生成"
+      }
+    },
+    {
+      "event_id": "E09",
+      "scene_id": "SC03",
+      "description": "女儿宣布明天买菜，父亲回应让路，她重新进门",
+      "causes": [
+        "E08"
+      ],
+      "background_refs": [],
+      "effects": [
+        "Q04成立；P01仍由C01保管，关系通过选择改变"
+      ],
+      "basis": {
+        "kind": "authored",
+        "note": "拟议剧情事件，未拍摄或生成"
+      }
+    }
+  ],
+  "snapshots": [
+    {
+      "snapshot_id": "ST00",
+      "story_position": 0,
+      "story_layer": "present",
+      "authority": "fixture_assumed",
+      "entity_state": {
+        "P01": {
+          "custodian": "C01",
+          "hand": "right",
+          "location_id": "L01",
+          "variant_id": "P01-V01",
+          "condition": "sticky"
+        },
+        "C01": {
+          "location_id": "L01",
+          "variant_id": "C01-V01"
+        },
+        "C02": {
+          "location_id": "L02",
+          "variant_id": "C02-V01"
+        }
+      },
+      "knowledge": [
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q01",
+          "attitude": "believes_true",
+          "basis_kind": "inferred",
+          "basis_event_refs": [],
+          "reason": "从含混索钥匙消息产生的误信"
+        },
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q02",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q03",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q04",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q05",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "卡顿的过去事实，不表示修后仍卡"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q01",
+          "attitude": "believes_false",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "父亲自己的修整意图，BG01创作背景"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q02",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "自己的意图，非外部读心"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q03",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q04",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q05",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "依据片前C01抱怨BG01；父亲未见E01，不能借用观众看到的试锁"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q01",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q02",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q03",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q04",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q05",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        }
+      ],
+      "foreshadow": [
+        {
+          "foreshadow_id": "F01",
+          "description": "卡住的钥匙与进入资格的误读",
+          "status": "planned",
+          "event_refs": []
+        }
+      ]
+    },
+    {
+      "snapshot_id": "ST01",
+      "story_position": 1,
+      "story_layer": "present",
+      "authority": "fixture_assumed",
+      "entity_state": {
+        "P01": {
+          "custodian": "C02",
+          "hand": "left",
+          "location_id": "L02",
+          "variant_id": "P01-V01",
+          "condition": "sticky"
+        },
+        "C01": {
+          "location_id": "L02",
+          "variant_id": "C01-V01"
+        },
+        "C02": {
+          "location_id": "L02",
+          "variant_id": "C02-V01"
+        }
+      },
+      "knowledge": [
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q01",
+          "attitude": "believes_true",
+          "basis_kind": "inferred",
+          "basis_event_refs": [
+            "E02"
+          ],
+          "reason": "从含混索钥匙消息产生的误信"
+        },
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q02",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q03",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q04",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q05",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [
+            "E01"
+          ],
+          "reason": "卡顿的过去事实，不表示修后仍卡"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q01",
+          "attitude": "believes_false",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "父亲自己的修整意图，BG01创作背景"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q02",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "自己的意图，非外部读心"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q03",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q04",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q05",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "依据片前C01抱怨BG01；父亲未见E01，不能借用观众看到的试锁"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q01",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q02",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q03",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q04",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q05",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [
+            "E01"
+          ],
+          "reason": "卡顿的过去事实，不表示修后仍卡"
+        }
+      ],
+      "foreshadow": [
+        {
+          "foreshadow_id": "F01",
+          "description": "卡住的钥匙与进入资格的误读",
+          "status": "established",
+          "event_refs": [
+            "E01",
+            "E02"
+          ]
+        }
+      ]
+    },
+    {
+      "snapshot_id": "ST02",
+      "story_position": 2,
+      "story_layer": "present",
+      "authority": "fixture_assumed",
+      "entity_state": {
+        "P01": {
+          "custodian": "C01",
+          "hand": "right",
+          "location_id": "L01",
+          "variant_id": "P01-V02",
+          "condition": "adjusted_untried"
+        },
+        "C01": {
+          "location_id": "L01",
+          "variant_id": "C01-V01"
+        },
+        "C02": {
+          "location_id": "L01",
+          "variant_id": "C02-V01"
+        }
+      },
+      "knowledge": [
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q01",
+          "attitude": "believes_false",
+          "basis_kind": "inferred",
+          "basis_event_refs": [
+            "E04",
+            "E05"
+          ],
+          "reason": "从修整与归还重新推断，不是所有内心已获证明"
+        },
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q02",
+          "attitude": "believes_true",
+          "basis_kind": "inferred",
+          "basis_event_refs": [
+            "E04",
+            "E05"
+          ],
+          "reason": "根据修整和归还推断动机"
+        },
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q03",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q04",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q05",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [
+            "E01"
+          ],
+          "reason": "卡顿的过去事实，不表示修后仍卡"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q01",
+          "attitude": "believes_false",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "父亲自己的修整意图，BG01创作背景"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q02",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "自己的意图，非外部读心"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q03",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q04",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q05",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "依据片前C01抱怨BG01；父亲未见E01，不能借用观众看到的试锁"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q01",
+          "attitude": "believes_false",
+          "basis_kind": "inferred",
+          "basis_event_refs": [
+            "E05"
+          ],
+          "reason": "归还削弱原先可能解释；保留推断性质"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q02",
+          "attitude": "believes_true",
+          "basis_kind": "inferred",
+          "basis_event_refs": [
+            "E04",
+            "E05"
+          ],
+          "reason": "根据修整和归还推断动机"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q03",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q04",
+          "attitude": "unknown",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "尚未在本版呈现中获得足够依据"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q05",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [
+            "E01"
+          ],
+          "reason": "卡顿的过去事实，不表示修后仍卡"
+        }
+      ],
+      "foreshadow": [
+        {
+          "foreshadow_id": "F01",
+          "description": "卡住的钥匙与进入资格的误读",
+          "status": "reinforced",
+          "event_refs": [
+            "E04",
+            "E05"
+          ]
+        }
+      ],
+      "position_note": "已从厨房走至入户过道/门槛内侧，尚未出门试开"
+    },
+    {
+      "snapshot_id": "ST03",
+      "story_position": 3,
+      "story_layer": "present",
+      "authority": "fixture_assumed",
+      "entity_state": {
+        "P01": {
+          "custodian": "C01",
+          "hand": "right",
+          "location_id": "L01",
+          "variant_id": "P01-V02",
+          "condition": "opened_in_trial"
+        },
+        "C01": {
+          "location_id": "L01",
+          "variant_id": "C01-V01"
+        },
+        "C02": {
+          "location_id": "L01",
+          "variant_id": "C02-V01"
+        }
+      },
+      "knowledge": [
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q01",
+          "attitude": "believes_false",
+          "basis_kind": "inferred",
+          "basis_event_refs": [
+            "E04",
+            "E05"
+          ],
+          "reason": "从修整与归还重新推断，不是所有内心已获证明"
+        },
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q02",
+          "attitude": "believes_true",
+          "basis_kind": "inferred",
+          "basis_event_refs": [
+            "E04",
+            "E05"
+          ],
+          "reason": "根据修整和归还推断动机"
+        },
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q03",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [
+            "E08"
+          ],
+          "reason": "拟议开门事件支持；未存在真实媒体观察"
+        },
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q04",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [
+            "E09"
+          ],
+          "reason": "D11表达新决定，不等于证明第二天已实际回来"
+        },
+        {
+          "holder_id": "C01",
+          "proposition_id": "Q05",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [
+            "E01"
+          ],
+          "reason": "卡顿的过去事实，不表示修后仍卡"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q01",
+          "attitude": "believes_false",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "父亲自己的修整意图，BG01创作背景"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q02",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "自己的意图，非外部读心"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q03",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [
+            "E08"
+          ],
+          "reason": "拟议开门事件支持；未存在真实媒体观察"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q04",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [
+            "E09"
+          ],
+          "reason": "D11表达新决定，不等于证明第二天已实际回来"
+        },
+        {
+          "holder_id": "C02",
+          "proposition_id": "Q05",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [],
+          "reason": "依据片前C01抱怨BG01；父亲未见E01，不能借用观众看到的试锁"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q01",
+          "attitude": "believes_false",
+          "basis_kind": "inferred",
+          "basis_event_refs": [
+            "E05"
+          ],
+          "reason": "归还削弱原先可能解释；保留推断性质"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q02",
+          "attitude": "believes_true",
+          "basis_kind": "inferred",
+          "basis_event_refs": [
+            "E04",
+            "E05"
+          ],
+          "reason": "根据修整和归还推断动机"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q03",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [
+            "E08"
+          ],
+          "reason": "拟议开门事件支持；未存在真实媒体观察"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q04",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [
+            "E09"
+          ],
+          "reason": "D11表达新决定，不等于证明第二天已实际回来"
+        },
+        {
+          "holder_id": "AUDIENCE",
+          "proposition_id": "Q05",
+          "attitude": "believes_true",
+          "basis_kind": "authored",
+          "basis_event_refs": [
+            "E01"
+          ],
+          "reason": "卡顿的过去事实，不表示修后仍卡"
+        }
+      ],
+      "foreshadow": [
+        {
+          "foreshadow_id": "F01",
+          "description": "卡住的钥匙与进入资格的误读",
+          "status": "paid_off",
+          "event_refs": [
+            "E08",
+            "E09"
+          ]
+        }
+      ],
+      "position_note": "两人在门内联系空间，准备向厨房去；不宣称已回到厨房"
+    }
+  ],
+  "scenes": [
+    {
+      "scene_id": "SC01",
+      "location_id": "L01",
+      "story_position": 1,
+      "reveal_position": 1,
+      "story_layer": "present",
+      "purpose": "把归还动作和人物误解落在可见的门槛上",
+      "pre_state": "ST00",
+      "post_state": "ST01",
+      "candidate_dependencies": [],
+      "estimated_duration_sec": 45,
+      "context_refs": [
+        "BG01",
+        "C01",
+        "C02",
+        "L01",
+        "L02",
+        "P01",
+        "Q01",
+        "Q02",
+        "Q05"
+      ],
+      "delta": [
+        {
+          "target": "P01.custodian",
+          "before": "C01",
+          "after": "C02",
+          "event_refs": [
+            "E02"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "C01.location_id",
+          "before": "L01",
+          "after": "L02",
+          "event_refs": [
+            "E03"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "P01.location_id",
+          "before": "L01",
+          "after": "L02",
+          "event_refs": [
+            "E03"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "AUDIENCE.Q05",
+          "before": "unknown",
+          "after": "believes_true",
+          "event_refs": [
+            "E01"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "F01.status",
+          "before": "planned",
+          "after": "established",
+          "event_refs": [
+            "E01",
+            "E02"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "P01.hand",
+          "before": "right",
+          "after": "left",
+          "event_refs": [
+            "E02"
+          ],
+          "story_layer": "present"
+        }
+      ],
+      "location_semantics": "location_id是主要表演地点；镜头可明确记录进出过渡，场间净状态与场内动作分别表达"
+    },
+    {
+      "scene_id": "SC02",
+      "location_id": "L02",
+      "story_position": 2,
+      "reveal_position": 2,
+      "story_layer": "present",
+      "purpose": "通过修整和物理归还，改变女儿对索钥匙的理解",
+      "pre_state": "ST01",
+      "post_state": "ST02",
+      "candidate_dependencies": [
+        "SC01"
+      ],
+      "estimated_duration_sec": 60,
+      "context_refs": [
+        "BG01",
+        "C01",
+        "C02",
+        "L02",
+        "P01",
+        "Q01",
+        "Q02",
+        "Q03",
+        "Q05",
+        "F01"
+      ],
+      "delta": [
+        {
+          "target": "P01.custodian",
+          "before": "C02",
+          "after": "C01",
+          "event_refs": [
+            "E05"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "P01.variant_id",
+          "before": "P01-V01",
+          "after": "P01-V02",
+          "event_refs": [
+            "E04"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "C01.Q01",
+          "before": "believes_true",
+          "after": "believes_false",
+          "event_refs": [
+            "E04",
+            "E05"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "AUDIENCE.Q01",
+          "before": "unknown",
+          "after": "believes_false",
+          "event_refs": [
+            "E05"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "C01.Q02",
+          "before": "unknown",
+          "after": "believes_true",
+          "event_refs": [
+            "E04",
+            "E05"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "AUDIENCE.Q02",
+          "before": "unknown",
+          "after": "believes_true",
+          "event_refs": [
+            "E04",
+            "E05"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "F01.status",
+          "before": "established",
+          "after": "reinforced",
+          "event_refs": [
+            "E04",
+            "E05"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "P01.hand",
+          "before": "left",
+          "after": "right",
+          "event_refs": [
+            "E05"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "P01.condition",
+          "before": "sticky",
+          "after": "adjusted_untried",
+          "event_refs": [
+            "E04"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "P01.location_id",
+          "before": "L02",
+          "after": "L01",
+          "event_refs": [
+            "E06"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "C01.location_id",
+          "before": "L02",
+          "after": "L01",
+          "event_refs": [
+            "E06"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "C02.location_id",
+          "before": "L02",
+          "after": "L01",
+          "event_refs": [
+            "E06"
+          ],
+          "story_layer": "present"
+        }
+      ],
+      "location_semantics": "location_id是主要表演地点；镜头可明确记录进出过渡，场间净状态与场内动作分别表达"
+    },
+    {
+      "scene_id": "SC03",
+      "location_id": "L01",
+      "story_position": 3,
+      "reveal_position": 3,
+      "story_layer": "present",
+      "purpose": "用再次开门及主动回来兑现修复",
+      "pre_state": "ST02",
+      "post_state": "ST03",
+      "candidate_dependencies": [
+        "SC01",
+        "SC02"
+      ],
+      "estimated_duration_sec": 45,
+      "context_refs": [
+        "C01",
+        "C02",
+        "L01",
+        "L02",
+        "P01",
+        "Q01",
+        "Q02",
+        "Q03",
+        "Q04",
+        "F01"
+      ],
+      "delta": [
+        {
+          "target": "C01.Q03",
+          "before": "unknown",
+          "after": "believes_true",
+          "event_refs": [
+            "E08"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "C01.Q04",
+          "before": "unknown",
+          "after": "believes_true",
+          "event_refs": [
+            "E09"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "C02.Q03",
+          "before": "unknown",
+          "after": "believes_true",
+          "event_refs": [
+            "E08"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "C02.Q04",
+          "before": "unknown",
+          "after": "believes_true",
+          "event_refs": [
+            "E09"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "AUDIENCE.Q03",
+          "before": "unknown",
+          "after": "believes_true",
+          "event_refs": [
+            "E08"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "AUDIENCE.Q04",
+          "before": "unknown",
+          "after": "believes_true",
+          "event_refs": [
+            "E09"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "F01.status",
+          "before": "reinforced",
+          "after": "paid_off",
+          "event_refs": [
+            "E08",
+            "E09"
+          ],
+          "story_layer": "present"
+        },
+        {
+          "target": "P01.condition",
+          "before": "adjusted_untried",
+          "after": "opened_in_trial",
+          "event_refs": [
+            "E08"
+          ],
+          "story_layer": "present"
+        }
+      ],
+      "location_semantics": "location_id是主要表演地点；镜头可明确记录进出过渡，场间净状态与场内动作分别表达"
+    }
+  ],
+  "beats": [
+    {
+      "beat_id": "B01",
+      "scene_id": "SC01",
+      "change": "P01开场卡顿可呈现",
+      "required": true,
+      "event_refs": [
+        "E01"
+      ]
+    },
+    {
+      "beat_id": "B02",
+      "scene_id": "SC01",
+      "change": "P01保管人C01→C02；父亲动机仍有歧义",
+      "required": true,
+      "event_refs": [
+        "E02"
+      ]
+    },
+    {
+      "beat_id": "B03",
+      "scene_id": "SC01",
+      "change": "两人由L01进入L02",
+      "required": true,
+      "event_refs": [
+        "E03"
+      ]
+    },
+    {
+      "beat_id": "B04",
+      "scene_id": "SC02",
+      "change": "P01修整；短暂放台面不转移保管权",
+      "required": true,
+      "event_refs": [
+        "E04"
+      ]
+    },
+    {
+      "beat_id": "B05",
+      "scene_id": "SC02",
+      "change": "P01保管人C02→C01；C01及观众重新推断Q01/Q02",
+      "required": true,
+      "event_refs": [
+        "E05"
+      ]
+    },
+    {
+      "beat_id": "B06",
+      "scene_id": "SC02",
+      "change": "准备回走廊检验，尚未证明Q03",
+      "required": true,
+      "event_refs": [
+        "E06"
+      ]
+    },
+    {
+      "beat_id": "B07",
+      "scene_id": "SC03",
+      "change": "门闭，P01仍在C01右手",
+      "required": true,
+      "event_refs": [
+        "E07"
+      ]
+    },
+    {
+      "beat_id": "B08",
+      "scene_id": "SC03",
+      "change": "Q03获得拟呈现事件支持",
+      "required": true,
+      "event_refs": [
+        "E08"
+      ]
+    },
+    {
+      "beat_id": "B09",
+      "scene_id": "SC03",
+      "change": "Q04成立；P01仍由C01保管，关系通过选择改变",
+      "required": true,
+      "event_refs": [
+        "E09"
+      ]
+    }
+  ],
+  "shots": [
+    {
+      "shot_id": "SH01",
+      "scene_id": "SC01",
+      "beat_refs": [
+        "B01"
+      ],
+      "occurrence": {
+        "index": 1,
+        "kind": "primary",
+        "reason": "主版线性呈现"
+      },
+      "purpose": "以完整小动作建立卡顿",
+      "estimated_duration_sec": 8,
+      "planned_range_sec": [
+        0,
+        8
+      ],
+      "actual_duration_sec": null,
+      "story_layer": "present",
+      "start": "钥匙在C01右手，门闭",
+      "action": "右手尝试转动，停住；不猛拧",
+      "end": "钥匙退出，门仍闭",
+      "visible_characters": [
+        "C01"
+      ],
+      "dialogue_refs": [],
+      "audio_owner": "action_sound",
+      "asset_refs": [
+        "A01",
+        "A03",
+        "A05",
+        "A08",
+        "A10",
+        "T-SH01-V01"
+      ],
+      "media_form": "有限动态候选方案；动作能否以真实素材清楚完成待B2评审",
+      "location_id": "L01",
+      "end_location_id": "L01",
+      "reference_note": "asset_refs为制作需求/上下文，不是实际媒体消费；可见角色看visible_characters；真实采用必须另有读回证据"
+    },
+    {
+      "shot_id": "SH02",
+      "scene_id": "SC01",
+      "beat_refs": [
+        "B01"
+      ],
+      "occurrence": {
+        "index": 1,
+        "kind": "primary",
+        "reason": "主版线性呈现"
+      },
+      "purpose": "建立空间与未说出的目的",
+      "estimated_duration_sec": 10,
+      "planned_range_sec": [
+        8,
+        18
+      ],
+      "actual_duration_sec": null,
+      "story_layer": "present",
+      "start": "C01门外，P01右手",
+      "action": "按铃，父亲开门问话",
+      "end": "两人隔门槛面对",
+      "visible_characters": [
+        "C01",
+        "C02"
+      ],
+      "dialogue_refs": [
+        "D01"
+      ],
+      "audio_owner": "character_dialogue",
+      "asset_refs": [
+        "A01",
+        "A02",
+        "A03",
+        "A05",
+        "A07",
+        "A08",
+        "A10",
+        "T-SH02-V01",
+        "AUD-D01",
+        "CAP-D01"
+      ],
+      "media_form": "有限动态候选方案；动作能否以真实素材清楚完成待B2评审",
+      "location_id": "L01",
+      "end_location_id": "L01",
+      "reference_note": "asset_refs为制作需求/上下文，不是实际媒体消费；可见角色看visible_characters；真实采用必须另有读回证据"
+    },
+    {
+      "shot_id": "SH03",
+      "scene_id": "SC01",
+      "beat_refs": [
+        "B02"
+      ],
+      "occurrence": {
+        "index": 1,
+        "kind": "primary",
+        "reason": "主版线性呈现"
+      },
+      "purpose": "让误解有具体起因",
+      "estimated_duration_sec": 7,
+      "planned_range_sec": [
+        18,
+        25
+      ],
+      "actual_duration_sec": null,
+      "story_layer": "present",
+      "start": "C01仍握P01",
+      "action": "复述消息D02",
+      "end": "观众知道索钥匙原话，动机仍未定",
+      "visible_characters": [
+        "C01"
+      ],
+      "dialogue_refs": [
+        "D02"
+      ],
+      "audio_owner": "character_dialogue",
+      "asset_refs": [
+        "A01",
+        "A03",
+        "A05",
+        "A06",
+        "A08",
+        "T-SH03-V01",
+        "AUD-D02",
+        "CAP-D02"
+      ],
+      "media_form": "有限动态候选方案；动作能否以真实素材清楚完成待B2评审",
+      "location_id": "L01",
+      "end_location_id": "L01",
+      "reference_note": "asset_refs为制作需求/上下文，不是实际媒体消费；可见角色看visible_characters；真实采用必须另有读回证据"
+    },
+    {
+      "shot_id": "SH04",
+      "scene_id": "SC01",
+      "beat_refs": [
+        "B02",
+        "B03"
+      ],
+      "occurrence": {
+        "index": 1,
+        "kind": "primary",
+        "reason": "主版线性呈现"
+      },
+      "purpose": "一次移交与一次邀请共处一镜",
+      "estimated_duration_sec": 10,
+      "planned_range_sec": [
+        25,
+        35
+      ],
+      "actual_duration_sec": null,
+      "story_layer": "present",
+      "start": "P01在C01右手",
+      "action": "交给C02左手；说搬完东西；父亲邀请",
+      "end": "P01由C02保管，门内通路让开",
+      "visible_characters": [
+        "C01",
+        "C02"
+      ],
+      "dialogue_refs": [
+        "D03",
+        "D04"
+      ],
+      "audio_owner": "character_dialogue",
+      "asset_refs": [
+        "A01",
+        "A02",
+        "A03",
+        "A05",
+        "A06",
+        "A07",
+        "A08",
+        "T-SH04-V01",
+        "AUD-D03",
+        "CAP-D03",
+        "AUD-D04",
+        "CAP-D04"
+      ],
+      "media_form": "有限动态候选方案；动作能否以真实素材清楚完成待B2评审",
+      "location_id": "L01",
+      "end_location_id": "L01",
+      "reference_note": "asset_refs为制作需求/上下文，不是实际媒体消费；可见角色看visible_characters；真实采用必须另有读回证据"
+    },
+    {
+      "shot_id": "SH05",
+      "scene_id": "SC01",
+      "beat_refs": [
+        "B03"
+      ],
+      "occurrence": {
+        "index": 1,
+        "kind": "primary",
+        "reason": "主版线性呈现"
+      },
+      "purpose": "保留走路与空间关系",
+      "estimated_duration_sec": 10,
+      "planned_range_sec": [
+        35,
+        45
+      ],
+      "actual_duration_sec": null,
+      "story_layer": "present",
+      "start": "两人位于门槛",
+      "action": "连续进入厨房，父亲拿钥匙在前",
+      "end": "两人L02，P01在C02左手",
+      "visible_characters": [
+        "C01",
+        "C02"
+      ],
+      "dialogue_refs": [],
+      "audio_owner": "ambience",
+      "asset_refs": [
+        "A01",
+        "A02",
+        "A03",
+        "A04",
+        "A05",
+        "A08",
+        "A09",
+        "A10",
+        "T-SH05-V01"
+      ],
+      "media_form": "有限动态候选方案；动作能否以真实素材清楚完成待B2评审",
+      "location_id": "L01",
+      "end_location_id": "L02",
+      "reference_note": "asset_refs为制作需求/上下文，不是实际媒体消费；可见角色看visible_characters；真实采用必须另有读回证据"
+    },
+    {
+      "shot_id": "SH06",
+      "scene_id": "SC02",
+      "beat_refs": [
+        "B04"
+      ],
+      "occurrence": {
+        "index": 1,
+        "kind": "primary",
+        "reason": "主版线性呈现"
+      },
+      "purpose": "交代修整动作，不引入归属跳变",
+      "estimated_duration_sec": 10,
+      "planned_range_sec": [
+        45,
+        55
+      ],
+      "actual_duration_sec": null,
+      "story_layer": "present",
+      "start": "C02左手持P01",
+      "action": "把P01短暂放自己侧台面，取小锉，再以左手拿起",
+      "end": "P01仍由C02保管，右手工具就位",
+      "visible_characters": [
+        "C02"
+      ],
+      "dialogue_refs": [],
+      "audio_owner": "action_sound",
+      "asset_refs": [
+        "A02",
+        "A04",
+        "A05",
+        "A09",
+        "A11",
+        "T-SH06-V01"
+      ],
+      "media_form": "有限动态候选方案；动作能否以真实素材清楚完成待B2评审",
+      "location_id": "L02",
+      "end_location_id": "L02",
+      "reference_note": "asset_refs为制作需求/上下文，不是实际媒体消费；可见角色看visible_characters；真实采用必须另有读回证据"
+    },
+    {
+      "shot_id": "SH07",
+      "scene_id": "SC02",
+      "beat_refs": [
+        "B04"
+      ],
+      "occurrence": {
+        "index": 1,
+        "kind": "primary",
+        "reason": "主版线性呈现"
+      },
+      "purpose": "动作与误信对白并置",
+      "estimated_duration_sec": 12,
+      "planned_range_sec": [
+        55,
+        67
+      ],
+      "actual_duration_sec": null,
+      "story_layer": "present",
+      "start": "C02左手钥匙右手锉",
+      "action": "轻修局部毛刺；C01画外说以后按铃；C02回答卡顿",
+      "end": "修整继续，身份特征不变",
+      "visible_characters": [
+        "C02"
+      ],
+      "dialogue_refs": [
+        "D05",
+        "D06"
+      ],
+      "audio_owner": "character_dialogue",
+      "asset_refs": [
+        "A01",
+        "A02",
+        "A04",
+        "A05",
+        "A06",
+        "A07",
+        "A09",
+        "A11",
+        "T-SH07-V01",
+        "AUD-D05",
+        "CAP-D05",
+        "AUD-D06",
+        "CAP-D06"
+      ],
+      "media_form": "有限动态候选方案；动作能否以真实素材清楚完成待B2评审",
+      "location_id": "L02",
+      "end_location_id": "L02",
+      "reference_note": "asset_refs为制作需求/上下文，不是实际媒体消费；可见角色看visible_characters；真实采用必须另有读回证据"
+    },
+    {
+      "shot_id": "SH08",
+      "scene_id": "SC02",
+      "beat_refs": [
+        "B04"
+      ],
+      "occurrence": {
+        "index": 1,
+        "kind": "primary",
+        "reason": "主版线性呈现"
+      },
+      "purpose": "让人物反应完成信息转向",
+      "estimated_duration_sec": 10,
+      "planned_range_sec": [
+        67,
+        77
+      ],
+      "actual_duration_sec": null,
+      "story_layer": "present",
+      "start": "C01看父亲的手",
+      "action": "父亲画外说上回提过；留反应，不强行泪目",
+      "end": "C01开始重新理解，但钥匙尚未归还",
+      "visible_characters": [
+        "C01"
+      ],
+      "dialogue_refs": [
+        "D07"
+      ],
+      "audio_owner": "character_dialogue",
+      "asset_refs": [
+        "A01",
+        "A04",
+        "A07",
+        "A09",
+        "A11",
+        "T-SH08-V01",
+        "AUD-D07",
+        "CAP-D07"
+      ],
+      "media_form": "有限动态候选方案；动作能否以真实素材清楚完成待B2评审",
+      "location_id": "L02",
+      "end_location_id": "L02",
+      "reference_note": "asset_refs为制作需求/上下文，不是实际媒体消费；可见角色看visible_characters；真实采用必须另有读回证据"
+    },
+    {
+      "shot_id": "SH09",
+      "scene_id": "SC02",
+      "beat_refs": [
+        "B05"
+      ],
+      "occurrence": {
+        "index": 1,
+        "kind": "primary",
+        "reason": "主版线性呈现"
+      },
+      "purpose": "给出物理归还，不替父亲说内心宣言",
+      "estimated_duration_sec": 14,
+      "planned_range_sec": [
+        77,
+        91
+      ],
+      "actual_duration_sec": null,
+      "story_layer": "present",
+      "start": "P01在C02左手",
+      "action": "C01说出误会；C02左手交到C01右手并提示推门",
+      "end": "P01由C01保管，尚未试开",
+      "visible_characters": [
+        "C01",
+        "C02"
+      ],
+      "dialogue_refs": [
+        "D08",
+        "D09"
+      ],
+      "audio_owner": "character_dialogue",
+      "asset_refs": [
+        "A01",
+        "A02",
+        "A04",
+        "A05",
+        "A06",
+        "A07",
+        "A09",
+        "A11",
+        "T-SH09-V01",
+        "AUD-D08",
+        "CAP-D08",
+        "AUD-D09",
+        "CAP-D09"
+      ],
+      "media_form": "有限动态候选方案；动作能否以真实素材清楚完成待B2评审",
+      "location_id": "L02",
+      "end_location_id": "L02",
+      "reference_note": "asset_refs为制作需求/上下文，不是实际媒体消费；可见角色看visible_characters；真实采用必须另有读回证据"
+    },
+    {
+      "shot_id": "SH10",
+      "scene_id": "SC02",
+      "beat_refs": [
+        "B06"
+      ],
+      "occurrence": {
+        "index": 1,
+        "kind": "primary",
+        "reason": "主版线性呈现"
+      },
+      "purpose": "让修复接受一次可见检验",
+      "estimated_duration_sec": 14,
+      "planned_range_sec": [
+        91,
+        105
+      ],
+      "actual_duration_sec": null,
+      "story_layer": "present",
+      "start": "P01在C01右手",
+      "action": "父亲说试试；女儿转向门",
+      "end": "C01与C02来到门内联系空间；P01仍C01右手，尚未试开",
+      "visible_characters": [
+        "C01",
+        "C02"
+      ],
+      "dialogue_refs": [
+        "D10"
+      ],
+      "audio_owner": "character_dialogue",
+      "asset_refs": [
+        "A01",
+        "A02",
+        "A03",
+        "A04",
+        "A05",
+        "A07",
+        "A09",
+        "T-SH10-V01",
+        "AUD-D10",
+        "CAP-D10"
+      ],
+      "media_form": "有限动态候选方案；动作能否以真实素材清楚完成待B2评审",
+      "location_id": "L02",
+      "end_location_id": "L01",
+      "reference_note": "asset_refs为制作需求/上下文，不是实际媒体消费；可见角色看visible_characters；真实采用必须另有读回证据"
+    },
+    {
+      "shot_id": "SH11",
+      "scene_id": "SC03",
+      "beat_refs": [
+        "B07"
+      ],
+      "occurrence": {
+        "index": 1,
+        "kind": "primary",
+        "reason": "主版线性呈现"
+      },
+      "purpose": "复现开头条件，避免凭剪辑说门已修好",
+      "estimated_duration_sec": 8,
+      "planned_range_sec": [
+        105,
+        113
+      ],
+      "actual_duration_sec": null,
+      "story_layer": "present",
+      "start": "C01屋内握P01",
+      "action": "走到门外、带上门，钥匙仍右手",
+      "end": "门闭，C01在L01",
+      "visible_characters": [
+        "C01",
+        "C02"
+      ],
+      "dialogue_refs": [],
+      "audio_owner": "action_sound",
+      "asset_refs": [
+        "A01",
+        "A02",
+        "A03",
+        "A05",
+        "A08",
+        "A09",
+        "A10",
+        "T-SH11-V01"
+      ],
+      "media_form": "有限动态候选方案；动作能否以真实素材清楚完成待B2评审",
+      "location_id": "L01",
+      "end_location_id": "L01",
+      "reference_note": "asset_refs为制作需求/上下文，不是实际媒体消费；可见角色看visible_characters；真实采用必须另有读回证据"
+    },
+    {
+      "shot_id": "SH12",
+      "scene_id": "SC03",
+      "beat_refs": [
+        "B08"
+      ],
+      "occurrence": {
+        "index": 1,
+        "kind": "primary",
+        "reason": "主版线性呈现"
+      },
+      "purpose": "动作完整，不依靠字幕说明成功",
+      "estimated_duration_sec": 10,
+      "planned_range_sec": [
+        113,
+        123
+      ],
+      "actual_duration_sec": null,
+      "story_layer": "present",
+      "start": "门闭，P01右手",
+      "action": "左手轻推门，右手转钥匙",
+      "end": "锁转动，门开始打开",
+      "visible_characters": [
+        "C01"
+      ],
+      "dialogue_refs": [],
+      "audio_owner": "action_sound",
+      "asset_refs": [
+        "A01",
+        "A03",
+        "A05",
+        "A08",
+        "A10",
+        "T-SH12-V01"
+      ],
+      "media_form": "有限动态候选方案；动作能否以真实素材清楚完成待B2评审",
+      "location_id": "L01",
+      "end_location_id": "L01",
+      "reference_note": "asset_refs为制作需求/上下文，不是实际媒体消费；可见角色看visible_characters；真实采用必须另有读回证据"
+    },
+    {
+      "shot_id": "SH13",
+      "scene_id": "SC03",
+      "beat_refs": [
+        "B08",
+        "B09"
+      ],
+      "occurrence": {
+        "index": 1,
+        "kind": "primary",
+        "reason": "主版线性呈现"
+      },
+      "purpose": "检验结果引出主动回来",
+      "estimated_duration_sec": 10,
+      "planned_range_sec": [
+        123,
+        133
+      ],
+      "actual_duration_sec": null,
+      "story_layer": "present",
+      "start": "门已开始打开",
+      "action": "女儿看见父亲，门打开后说D11",
+      "end": "Q03可见、Q04被宣告",
+      "visible_characters": [
+        "C01",
+        "C02"
+      ],
+      "dialogue_refs": [
+        "D11"
+      ],
+      "audio_owner": "character_dialogue",
+      "asset_refs": [
+        "A01",
+        "A02",
+        "A03",
+        "A05",
+        "A06",
+        "A08",
+        "A09",
+        "A10",
+        "T-SH13-V01",
+        "AUD-D11",
+        "CAP-D11"
+      ],
+      "media_form": "有限动态候选方案；动作能否以真实素材清楚完成待B2评审",
+      "location_id": "L01",
+      "end_location_id": "L01",
+      "reference_note": "asset_refs为制作需求/上下文，不是实际媒体消费；可见角色看visible_characters；真实采用必须另有读回证据"
+    },
+    {
+      "shot_id": "SH14",
+      "scene_id": "SC03",
+      "beat_refs": [
+        "B09"
+      ],
+      "occurrence": {
+        "index": 1,
+        "kind": "primary",
+        "reason": "主版线性呈现"
+      },
+      "purpose": "以行动回应，不加拥抱或煽情配乐",
+      "estimated_duration_sec": 9,
+      "planned_range_sec": [
+        133,
+        142
+      ],
+      "actual_duration_sec": null,
+      "story_layer": "present",
+      "start": "两人门槛两侧",
+      "action": "父亲回应D12并侧身让路",
+      "end": "门内通路开放，P01仍C01右手",
+      "visible_characters": [
+        "C01",
+        "C02"
+      ],
+      "dialogue_refs": [
+        "D12"
+      ],
+      "audio_owner": "character_dialogue",
+      "asset_refs": [
+        "A01",
+        "A02",
+        "A03",
+        "A07",
+        "A08",
+        "A09",
+        "T-SH14-V01",
+        "AUD-D12",
+        "CAP-D12"
+      ],
+      "media_form": "有限动态候选方案；动作能否以真实素材清楚完成待B2评审",
+      "location_id": "L01",
+      "end_location_id": "L01",
+      "reference_note": "asset_refs为制作需求/上下文，不是实际媒体消费；可见角色看visible_characters；真实采用必须另有读回证据"
+    },
+    {
+      "shot_id": "SH15",
+      "scene_id": "SC03",
+      "beat_refs": [
+        "B09"
+      ],
+      "occurrence": {
+        "index": 1,
+        "kind": "primary",
+        "reason": "主版线性呈现"
+      },
+      "purpose": "同一道门的含义改变，安静结束",
+      "estimated_duration_sec": 8,
+      "planned_range_sec": [
+        142,
+        150
+      ],
+      "actual_duration_sec": null,
+      "story_layer": "present",
+      "start": "C01在门槛握P01",
+      "action": "保持右手握钥匙跨入，门自然带上",
+      "end": "两人在门内联系空间向厨房去，C01仍保管P01；不声明镜头已到厨房",
+      "visible_characters": [
+        "C01",
+        "C02"
+      ],
+      "dialogue_refs": [],
+      "audio_owner": "ambience",
+      "asset_refs": [
+        "A01",
+        "A02",
+        "A03",
+        "A05",
+        "A08",
+        "A09",
+        "A10",
+        "T-SH15-V01"
+      ],
+      "media_form": "有限动态候选方案；动作能否以真实素材清楚完成待B2评审",
+      "location_id": "L01",
+      "end_location_id": "L01",
+      "reference_note": "asset_refs为制作需求/上下文，不是实际媒体消费；可见角色看visible_characters；真实采用必须另有读回证据"
+    }
+  ],
+  "dialogues": [
+    {
+      "dialogue_id": "D01",
+      "speaker_id": "C02",
+      "text": "带来了？",
+      "shot_refs": [
+        "SH02"
+      ],
+      "estimated_speech_sec": 1.2,
+      "measured_speech_sec": null,
+      "estimate_basis": "按文字长度与拟议停顿的编写时粗估，非真实语音或真人实测",
+      "performance": "问物件，不带审问感"
+    },
+    {
+      "dialogue_id": "D02",
+      "speaker_id": "C01",
+      "text": "你不是说，走之前把钥匙给你。",
+      "shot_refs": [
+        "SH03"
+      ],
+      "estimated_speech_sec": 4,
+      "measured_speech_sec": null,
+      "estimate_basis": "按文字长度与拟议停顿的编写时粗估，非真实语音或真人实测",
+      "performance": "平静复述，句尾收住"
+    },
+    {
+      "dialogue_id": "D03",
+      "speaker_id": "C01",
+      "text": "东西都搬完了。",
+      "shot_refs": [
+        "SH04"
+      ],
+      "estimated_speech_sec": 2.2,
+      "measured_speech_sec": null,
+      "estimate_basis": "按文字长度与拟议停顿的编写时粗估，非真实语音或真人实测",
+      "performance": "把话说成办事；不加哭腔"
+    },
+    {
+      "dialogue_id": "D04",
+      "speaker_id": "C02",
+      "text": "先进来。",
+      "shot_refs": [
+        "SH04"
+      ],
+      "estimated_speech_sec": 1.2,
+      "measured_speech_sec": null,
+      "estimate_basis": "按文字长度与拟议停顿的编写时粗估，非真实语音或真人实测",
+      "performance": "侧身让路再说"
+    },
+    {
+      "dialogue_id": "D05",
+      "speaker_id": "C01",
+      "text": "以后我按门铃。",
+      "shot_refs": [
+        "SH07"
+      ],
+      "estimated_speech_sec": 2.3,
+      "measured_speech_sec": null,
+      "estimate_basis": "按文字长度与拟议停顿的编写时粗估，非真实语音或真人实测",
+      "performance": "画外；像接受一项安排"
+    },
+    {
+      "dialogue_id": "D06",
+      "speaker_id": "C02",
+      "text": "你这把总卡。",
+      "shot_refs": [
+        "SH07"
+      ],
+      "estimated_speech_sec": 2,
+      "measured_speech_sec": null,
+      "estimate_basis": "按文字长度与拟议停顿的编写时粗估，非真实语音或真人实测",
+      "performance": "注意力仍在手上"
+    },
+    {
+      "dialogue_id": "D07",
+      "speaker_id": "C02",
+      "text": "上回你说过。",
+      "shot_refs": [
+        "SH08"
+      ],
+      "estimated_speech_sec": 2,
+      "measured_speech_sec": null,
+      "estimate_basis": "按文字长度与拟议停顿的编写时粗估，非真实语音或真人实测",
+      "performance": "画外补一句，不作说明性演讲"
+    },
+    {
+      "dialogue_id": "D08",
+      "speaker_id": "C01",
+      "text": "我以为你要收回去。",
+      "shot_refs": [
+        "SH09"
+      ],
+      "estimated_speech_sec": 3,
+      "measured_speech_sec": null,
+      "estimate_basis": "按文字长度与拟议停顿的编写时粗估，非真实语音或真人实测",
+      "performance": "先看钥匙，再抬眼"
+    },
+    {
+      "dialogue_id": "D09",
+      "speaker_id": "C02",
+      "text": "往里推一点。别硬拧。",
+      "shot_refs": [
+        "SH09"
+      ],
+      "estimated_speech_sec": 3.3,
+      "measured_speech_sec": null,
+      "estimate_basis": "按文字长度与拟议停顿的编写时粗估，非真实语音或真人实测",
+      "performance": "交回后给具体操作提示"
+    },
+    {
+      "dialogue_id": "D10",
+      "speaker_id": "C02",
+      "text": "试试。",
+      "shot_refs": [
+        "SH10"
+      ],
+      "estimated_speech_sec": 0.8,
+      "measured_speech_sec": null,
+      "estimate_basis": "按文字长度与拟议停顿的编写时粗估，非真实语音或真人实测",
+      "performance": "不给情绪结论"
+    },
+    {
+      "dialogue_id": "D11",
+      "speaker_id": "C01",
+      "text": "明天我买菜。",
+      "shot_refs": [
+        "SH13"
+      ],
+      "estimated_speech_sec": 2,
+      "measured_speech_sec": null,
+      "estimate_basis": "按文字长度与拟议停顿的编写时粗估，非真实语音或真人实测",
+      "performance": "门开后才说；这是新决定"
+    },
+    {
+      "dialogue_id": "D12",
+      "speaker_id": "C02",
+      "text": "那我不买了。",
+      "shot_refs": [
+        "SH14"
+      ],
+      "estimated_speech_sec": 2,
+      "measured_speech_sec": null,
+      "estimate_basis": "按文字长度与拟议停顿的编写时粗估，非真实语音或真人实测",
+      "performance": "接住邀请，给出空间"
+    }
+  ],
+  "assets": [
+    {
+      "asset_id": "A01",
+      "kind": "character_reference",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "C01"
+      ],
+      "control_scope": [
+        "identity",
+        "costume"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "A02",
+      "kind": "character_reference",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "C02"
+      ],
+      "control_scope": [
+        "identity",
+        "costume"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "A03",
+      "kind": "location_reference",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "L01"
+      ],
+      "control_scope": [
+        "space",
+        "light"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "A04",
+      "kind": "location_reference",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "L02"
+      ],
+      "control_scope": [
+        "space",
+        "light"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "A05",
+      "kind": "prop_reference",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "P01"
+      ],
+      "control_scope": [
+        "prop_identity",
+        "prop_shape"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "A06",
+      "kind": "voice_profile",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "C01"
+      ],
+      "control_scope": [
+        "voice_identity",
+        "language"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "A07",
+      "kind": "voice_profile",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "C02"
+      ],
+      "control_scope": [
+        "voice_identity",
+        "language"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "AUD-D01",
+      "kind": "dialogue_audio",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "C02",
+        "D01",
+        "SH02"
+      ],
+      "control_scope": [
+        "dialogue",
+        "performance"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "CAP-D01",
+      "kind": "caption",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "D01",
+        "SH02"
+      ],
+      "control_scope": [
+        "text",
+        "readability"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null,
+      "requirement": "optional",
+      "selection_status": "undecided"
+    },
+    {
+      "asset_id": "AUD-D02",
+      "kind": "dialogue_audio",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "C01",
+        "D02",
+        "SH03"
+      ],
+      "control_scope": [
+        "dialogue",
+        "performance"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "CAP-D02",
+      "kind": "caption",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "D02",
+        "SH03"
+      ],
+      "control_scope": [
+        "text",
+        "readability"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null,
+      "requirement": "optional",
+      "selection_status": "undecided"
+    },
+    {
+      "asset_id": "AUD-D03",
+      "kind": "dialogue_audio",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "C01",
+        "D03",
+        "SH04"
+      ],
+      "control_scope": [
+        "dialogue",
+        "performance"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "CAP-D03",
+      "kind": "caption",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "D03",
+        "SH04"
+      ],
+      "control_scope": [
+        "text",
+        "readability"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null,
+      "requirement": "optional",
+      "selection_status": "undecided"
+    },
+    {
+      "asset_id": "AUD-D04",
+      "kind": "dialogue_audio",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "C02",
+        "D04",
+        "SH04"
+      ],
+      "control_scope": [
+        "dialogue",
+        "performance"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "CAP-D04",
+      "kind": "caption",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "D04",
+        "SH04"
+      ],
+      "control_scope": [
+        "text",
+        "readability"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null,
+      "requirement": "optional",
+      "selection_status": "undecided"
+    },
+    {
+      "asset_id": "AUD-D05",
+      "kind": "dialogue_audio",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "C01",
+        "D05",
+        "SH07"
+      ],
+      "control_scope": [
+        "dialogue",
+        "performance"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "CAP-D05",
+      "kind": "caption",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "D05",
+        "SH07"
+      ],
+      "control_scope": [
+        "text",
+        "readability"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null,
+      "requirement": "optional",
+      "selection_status": "undecided"
+    },
+    {
+      "asset_id": "AUD-D06",
+      "kind": "dialogue_audio",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "C02",
+        "D06",
+        "SH07"
+      ],
+      "control_scope": [
+        "dialogue",
+        "performance"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "CAP-D06",
+      "kind": "caption",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "D06",
+        "SH07"
+      ],
+      "control_scope": [
+        "text",
+        "readability"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null,
+      "requirement": "optional",
+      "selection_status": "undecided"
+    },
+    {
+      "asset_id": "AUD-D07",
+      "kind": "dialogue_audio",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "C02",
+        "D07",
+        "SH08"
+      ],
+      "control_scope": [
+        "dialogue",
+        "performance"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "CAP-D07",
+      "kind": "caption",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "D07",
+        "SH08"
+      ],
+      "control_scope": [
+        "text",
+        "readability"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null,
+      "requirement": "optional",
+      "selection_status": "undecided"
+    },
+    {
+      "asset_id": "AUD-D08",
+      "kind": "dialogue_audio",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "C01",
+        "D08",
+        "SH09"
+      ],
+      "control_scope": [
+        "dialogue",
+        "performance"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "CAP-D08",
+      "kind": "caption",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "D08",
+        "SH09"
+      ],
+      "control_scope": [
+        "text",
+        "readability"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null,
+      "requirement": "optional",
+      "selection_status": "undecided"
+    },
+    {
+      "asset_id": "AUD-D09",
+      "kind": "dialogue_audio",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "C02",
+        "D09",
+        "SH09"
+      ],
+      "control_scope": [
+        "dialogue",
+        "performance"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "CAP-D09",
+      "kind": "caption",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "D09",
+        "SH09"
+      ],
+      "control_scope": [
+        "text",
+        "readability"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null,
+      "requirement": "optional",
+      "selection_status": "undecided"
+    },
+    {
+      "asset_id": "AUD-D10",
+      "kind": "dialogue_audio",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "C02",
+        "D10",
+        "SH10"
+      ],
+      "control_scope": [
+        "dialogue",
+        "performance"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "CAP-D10",
+      "kind": "caption",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "D10",
+        "SH10"
+      ],
+      "control_scope": [
+        "text",
+        "readability"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null,
+      "requirement": "optional",
+      "selection_status": "undecided"
+    },
+    {
+      "asset_id": "AUD-D11",
+      "kind": "dialogue_audio",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "C01",
+        "D11",
+        "SH13"
+      ],
+      "control_scope": [
+        "dialogue",
+        "performance"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "CAP-D11",
+      "kind": "caption",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "D11",
+        "SH13"
+      ],
+      "control_scope": [
+        "text",
+        "readability"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null,
+      "requirement": "optional",
+      "selection_status": "undecided"
+    },
+    {
+      "asset_id": "AUD-D12",
+      "kind": "dialogue_audio",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "C02",
+        "D12",
+        "SH14"
+      ],
+      "control_scope": [
+        "dialogue",
+        "performance"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "CAP-D12",
+      "kind": "caption",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "D12",
+        "SH14"
+      ],
+      "control_scope": [
+        "text",
+        "readability"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null,
+      "requirement": "optional",
+      "selection_status": "undecided"
+    },
+    {
+      "asset_id": "T-SH01-V01",
+      "kind": "shot_take",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "SH01",
+        "C01"
+      ],
+      "control_scope": [
+        "shot_action",
+        "continuity"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "T-SH02-V01",
+      "kind": "shot_take",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "SH02",
+        "C01",
+        "C02"
+      ],
+      "control_scope": [
+        "shot_action",
+        "continuity"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "T-SH03-V01",
+      "kind": "shot_take",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "SH03",
+        "C01"
+      ],
+      "control_scope": [
+        "shot_action",
+        "continuity"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "T-SH04-V01",
+      "kind": "shot_take",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "SH04",
+        "C01",
+        "C02"
+      ],
+      "control_scope": [
+        "shot_action",
+        "continuity"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "T-SH05-V01",
+      "kind": "shot_take",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "SH05",
+        "C01",
+        "C02"
+      ],
+      "control_scope": [
+        "shot_action",
+        "continuity"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "T-SH06-V01",
+      "kind": "shot_take",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "SH06",
+        "C02"
+      ],
+      "control_scope": [
+        "shot_action",
+        "continuity"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "T-SH07-V01",
+      "kind": "shot_take",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "SH07",
+        "C02"
+      ],
+      "control_scope": [
+        "shot_action",
+        "continuity"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "T-SH08-V01",
+      "kind": "shot_take",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "SH08",
+        "C01"
+      ],
+      "control_scope": [
+        "shot_action",
+        "continuity"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "T-SH09-V01",
+      "kind": "shot_take",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "SH09",
+        "C01",
+        "C02"
+      ],
+      "control_scope": [
+        "shot_action",
+        "continuity"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "T-SH10-V01",
+      "kind": "shot_take",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "SH10",
+        "C01",
+        "C02"
+      ],
+      "control_scope": [
+        "shot_action",
+        "continuity"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "T-SH11-V01",
+      "kind": "shot_take",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "SH11",
+        "C01",
+        "C02"
+      ],
+      "control_scope": [
+        "shot_action",
+        "continuity"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "T-SH12-V01",
+      "kind": "shot_take",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "SH12",
+        "C01"
+      ],
+      "control_scope": [
+        "shot_action",
+        "continuity"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "T-SH13-V01",
+      "kind": "shot_take",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "SH13",
+        "C01",
+        "C02"
+      ],
+      "control_scope": [
+        "shot_action",
+        "continuity"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "T-SH14-V01",
+      "kind": "shot_take",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "SH14",
+        "C01",
+        "C02"
+      ],
+      "control_scope": [
+        "shot_action",
+        "continuity"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "T-SH15-V01",
+      "kind": "shot_take",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "SH15",
+        "C01",
+        "C02"
+      ],
+      "control_scope": [
+        "shot_action",
+        "continuity"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "A08",
+      "kind": "ambience",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "L01"
+      ],
+      "control_scope": [
+        "space_sound"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "A09",
+      "kind": "ambience",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "L02"
+      ],
+      "control_scope": [
+        "space_sound"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "A10",
+      "kind": "action_sound",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "P01",
+        "L01"
+      ],
+      "control_scope": [
+        "key_lock_door_bell"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    },
+    {
+      "asset_id": "A11",
+      "kind": "action_sound",
+      "status": "planned",
+      "entity_or_shot_refs": [
+        "L02"
+      ],
+      "control_scope": [
+        "file_tool_contact"
+      ],
+      "version": "plan-v1",
+      "actual_binding": null
+    }
+  ],
+  "style_ref": {
+    "profile_id": "return-key-style-v0.1",
+    "version": "0.1-design",
+    "path": "02-风格与资产规格.md",
+    "authority": "design_candidate"
+  },
+  "document_views": {
+    "screenplay": "01-完整剧本.md",
+    "style_assets": "02-风格与资产规格.md",
+    "shot_state": "03-分镜与状态轨迹.md",
+    "conflict_policy": "MD与JSON的同ID事实或时长冲突属于设计错误，须修订后一并冻结；不得自动选择一方伪称通过"
+  },
+  "review_scope": {
+    "document_consistency": "见review/03-设计复核记录.md；不代签领域验证器",
+    "domain_validator": "NOT_RUN",
+    "host_adoption": "NOT_RUN",
+    "media_generation": "NOT_RUN",
+    "visual_review": "NOT_RUN",
+    "audio_review": "NOT_RUN",
+    "user_acceptance": "PENDING"
+  }
+}

@@ -1,0 +1,210 @@
+{
+  "schema": "drama-variant/0.1-design",
+  "variant_id": "V-FB01",
+  "status": "design_candidate",
+  "base_content_revision": "return-key-candidate-01",
+  "adoption_receipt": null,
+  "request": "SH08内部加入4秒回忆，保留主版总时长150秒",
+  "target": {
+    "scene_id": "SC02",
+    "shot_id": "SH08",
+    "estimated_duration_sec": 10
+  },
+  "new_assets": [
+    {
+      "asset_id": "A12-FB01",
+      "kind": "recalled_message_graphic",
+      "status": "planned",
+      "control_scope": [
+        "exact_text",
+        "temporal_layer"
+      ],
+      "text": "走之前，把钥匙给我。",
+      "actual_binding": null,
+      "note": "新计划的文字/手机图形；不是现实消息截图，不证明父亲内心",
+      "requirement": "required_for_variant",
+      "selection_status": "candidate_only"
+    }
+  ],
+  "invariants": [
+    "不写回present层P01归属",
+    "不删除SH09/E05的现实归还",
+    "不将Q01变成确定事实",
+    "D07不能被回忆覆盖或偷移为C01声音",
+    "SH08仍10秒，SC02仍60秒，主片仍150秒规划"
+  ],
+  "golden": {
+    "present_custodian_before_and_after": "C02",
+    "current_handoff_event": "E05",
+    "estimated_total_sec": 150,
+    "actual_total_sec": null,
+    "required_media_review": "NOT_RUN",
+    "reason": "主版无需此变体已因果完整；变体仅供非线性表达评审"
+  },
+  "edit": {
+    "replaces_shot_ref": "SH08",
+    "composition": "replace_with_leaf_shots",
+    "source_group_id": "SH08",
+    "count_source_group_duration": false,
+    "active_leaf_count": 17
+  },
+  "leaf_shots": [
+    {
+      "shot_id": "SH08-A",
+      "scene_id": "SC02",
+      "location_id": "L02",
+      "story_layer": "present",
+      "story_position": "E04_before_E05",
+      "reveal_range_sec": [
+        67,
+        70
+      ],
+      "estimated_duration_sec": 3,
+      "actual_duration_sec": null,
+      "occurrence": "primary-before-recall",
+      "description": "C01看父亲手；D07由父亲画外完整说出，2秒估计另留反应余量",
+      "beat_refs": [
+        "B04"
+      ],
+      "boundary_state_ref": "ST-SH08-PRESENT",
+      "dialogue_refs": [
+        "D07"
+      ],
+      "asset_refs": [
+        "A01",
+        "A04",
+        "A07",
+        "A09",
+        "A11"
+      ],
+      "actual_binding": null
+    },
+    {
+      "shot_id": "SH08-FB01",
+      "scene_id": "SC02",
+      "location_id": "L01",
+      "story_layer": "past-recall",
+      "story_position": "BG01_before_E01",
+      "reveal_range_sec": [
+        70,
+        74
+      ],
+      "estimated_duration_sec": 4,
+      "actual_duration_sec": null,
+      "occurrence": "FB01",
+      "description": "C01回想父亲发来的文字：走之前，把钥匙给我。",
+      "beat_refs": [
+        "B-FB01"
+      ],
+      "boundary_state_ref": "ST-FB01-PAST",
+      "dialogue_refs": [],
+      "asset_refs": [
+        "A12-FB01"
+      ],
+      "actual_binding": null
+    },
+    {
+      "shot_id": "SH08-B",
+      "scene_id": "SC02",
+      "location_id": "L02",
+      "story_layer": "present",
+      "story_position": "E04_before_E05",
+      "reveal_range_sec": [
+        74,
+        77
+      ],
+      "estimated_duration_sec": 3,
+      "actual_duration_sec": null,
+      "occurrence": "primary-after-recall",
+      "description": "回到C01反应；父亲继续持P01，E05尚未发生",
+      "beat_refs": [
+        "B04"
+      ],
+      "boundary_state_ref": "ST-SH08-PRESENT",
+      "dialogue_refs": [],
+      "asset_refs": [
+        "A01",
+        "A04",
+        "A07",
+        "A09",
+        "A11"
+      ],
+      "actual_binding": null
+    }
+  ],
+  "boundary_states": [
+    {
+      "snapshot_id": "ST-SH08-PRESENT",
+      "authority": "fixture_assumed",
+      "state_scope": "partial",
+      "story_position": "E04_before_E05",
+      "story_layer": "present",
+      "entity_state": {
+        "P01": {
+          "custodian": "C02",
+          "hand": "left",
+          "condition": "adjusting_untried"
+        }
+      },
+      "note": "只声明本次隔离需要的属性；当前外观处于修整过程，不从历史快照回填修前状态"
+    },
+    {
+      "snapshot_id": "ST-FB01-PAST",
+      "authority": "fixture_assumed",
+      "state_scope": "partial",
+      "story_position": "BG01_before_E01",
+      "story_layer": "past-recall",
+      "entity_state": {
+        "P01": {
+          "custodian": "C01",
+          "hand": "right",
+          "variant_id": "P01-V01"
+        }
+      },
+      "note": "来自片前创作背景，不是现实层移交；图形镜头未必展示钥匙"
+    }
+  ],
+  "new_beats": [
+    {
+      "beat_id": "B-FB01",
+      "scene_id": "SC02",
+      "required": true,
+      "scope": "this_variant_only",
+      "change": "重现误读的文字依据，不能证明父亲动机",
+      "event_refs": [
+        "E-FB01"
+      ]
+    }
+  ],
+  "new_events": [
+    {
+      "event_id": "E-FB01",
+      "scene_id": "SC02",
+      "story_layer": "past-recall",
+      "description": "重新呈现BG01的消息事实",
+      "basis": {
+        "kind": "authored",
+        "reference": "BG01"
+      },
+      "current_physical_delta": []
+    }
+  ],
+  "dialogue_rebindings": [
+    {
+      "dialogue_id": "D07",
+      "from_shot_refs": [
+        "SH08"
+      ],
+      "to_shot_refs": [
+        "SH08-A"
+      ],
+      "text_unchanged": true,
+      "speaker_id": "C02",
+      "planned_local_window_sec": [
+        0,
+        3
+      ],
+      "measured_speech_sec": null
+    }
+  ]
+}
