@@ -25,12 +25,15 @@
 |---|---|---|
 | 剪口播、知识分享 | 去掉口误与重复，保留观点、语义和自然停顿 | [口播剪辑](workflows/raven-speech-edit/SKILL.md) |
 | 做电影或剧集解说 | 人物与因果、揭示顺序、名场面，以及旁白与原声的分工 | [影视解说](workflows/raven-film-recap/SKILL.md) |
+| 创作或修订原创短剧、漫剧 | 人物目标、跨场状态、风格、分镜与局部返修；实验性文本和剧情合同能力 | [剧情创作与制作交接](workflows/raven-drama-production/SKILL.md) |
 | 制作软件教程、课程片段 | 操作步骤、画面焦点、字幕可读性和讲解节奏 | [软件教程](workflows/raven-software-tutorial/SKILL.md) · [课程与会议](workflows/raven-course-meeting/SKILL.md) |
 | 整理访谈与多机位内容 | 问答关系、说话者、机位同步和反应镜头 | [访谈与多机位](workflows/raven-interview-multicam/SKILL.md) |
 | 剪 Vlog、活动或纪录内容 | 从散素材中组织事件、人物经历和情绪变化 | [Vlog](workflows/raven-vlog-journey/SKILL.md) · [活动高光](workflows/raven-event-highlights/SKILL.md) · [纪录叙事](workflows/raven-documentary-story/SKILL.md) |
 | 修改成片、制作不同版本 | 限定字幕、声音和画面的修改范围，处理节奏或画幅变化 | [局部修改](workflows/raven-local-revision/SKILL.md) · [节奏调整](workflows/raven-pacing-restructure/SKILL.md) · [多平台版本](workflows/raven-multiplatform-batch/SKILL.md) |
 
 另有[商品叙事](workflows/raven-commerce-story/SKILL.md)、[音乐混剪](workflows/raven-music-montage/SKILL.md)、[参考风格](workflows/raven-reference-style/SKILL.md)、[脚本驱动制作](workflows/raven-script-generation/SKILL.md)与[本地化](workflows/raven-localization/SKILL.md)工作流。可以按任务读取所需部分，也可以将它们融入自己的剪辑 Agent。
+
+剧情入口新增状态/引用检查、上下文装配和修改影响分析，真实采用沿用现有作品版本。实际媒体效果、完整听检、连续动画和目标编辑器兼容仍需分别验收；本地预演的发现与未完成项见[媒体质量与局部返修](workflows/raven-drama-production/references/media-quality-and-revision.md)。
 
 ## 为什么使用它
 

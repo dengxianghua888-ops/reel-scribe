@@ -195,6 +195,11 @@ def revision_diff(base,candidate,scope,tools):
         # An exported evidence map binds the entire document, even if only an
         # unrelated note/caption changed; current validation does not refresh it.
         result['invalidated'].append('evidence-map')
+    if base['notes'].get('drama_domain_ref') != candidate['notes'].get('drama_domain_ref'):
+        # Domain review binds the attachment identity; unchanged media remains reusable.
+        for check in ('content-review', 'drama-domain-review'):
+            if check not in result['invalidated']:
+                result['invalidated'].append(check)
     return result
 
 
@@ -303,13 +308,40 @@ def work_version(request,directory,tools):
             'restore':['store','expected_version','target_sequence','message','author'],
             'relink-style-resources':['store','expected_version','relocations','message','author']}
     require(action in fields,'WORK_ACTION_UNSUPPORTED')
-    optional=['style_resource_relocations'] if action=='restore' else []
+    optional=(['style_resource_relocations'] if action=='restore' else
+              ['drama_inheritance'] if action=='init' else [])
     exact_keys(request,['operation','action']+fields[action]+optional,['operation','action']+fields[action])
     p=Path(request['store']);require(p.is_absolute(),'ABSOLUTE_STORE_PATH_REQUIRED')
+    from drama_binding import (validate_work_attachment, recheck as drama_recheck,
+                               public_report, DramaBindingError)
+    def check_drama(document, previous=None, expected_base=None):
+        try:
+            report=validate_work_attachment(document, previous=previous, expected_base=expected_base)
+            if report is not None:
+                drama_recheck(report)
+            return public_report(report) if report is not None else None
+        except (DramaBindingError, OSError) as exc:
+            raise ContractError(str(exc)) from exc
     if action=='init':
         require(isinstance(request['message'],str) and request['message'].strip(),'REVISION_MESSAGE_REQUIRED')
         require(request['author'] in ['agent','human'],'AUTHOR_REQUIRED')
         validate_document(request['document'],tools)
+        drama_report=None
+        if 'drama_domain_ref' in request['document']['notes']:
+            # A variant may inherit a checked domain from a real parent revision.
+            inheritance=request.get('drama_inheritance')
+            exact_keys(inheritance,['store','expected_version'],['store','expected_version'])
+            parent_path=Path(inheritance['store'])
+            require(parent_path.is_absolute() and parent_path.resolve()!=p.resolve(),
+                    'DRAMA_PARENT_STORE_INVALID')
+            parent_db=connect(parent_path)
+            try:
+                parent=load(parent_db)
+                require(parent['version']==inheritance['expected_version'],'DRAMA_PARENT_VERSION_CONFLICT')
+            finally:parent_db.close()
+            drama_report=check_drama(request['document'],parent['document'],parent['version'])
+        else:
+            require('drama_inheritance' not in request,'DRAMA_INHERITANCE_WITHOUT_REF')
         require(isinstance(request['work_id'],str) and bool(re.fullmatch('[A-Za-z0-9][A-Za-z0-9_-]{0,79}',request['work_id'])),'WORK_ID_INVALID')
         require(p.parent.is_dir(),'STORE_PARENT_NOT_FOUND')
         fd=os.open(p,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600);os.close(fd)
@@ -320,9 +352,12 @@ def work_version(request,directory,tools):
                 db.execute('CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL)')
                 db.execute('CREATE TABLE revisions(sequence INTEGER PRIMARY KEY,parent INTEGER NOT NULL,version TEXT NOT NULL,digest TEXT NOT NULL,document TEXT NOT NULL,action TEXT NOT NULL,message TEXT NOT NULL,author TEXT NOT NULL,extra TEXT NOT NULL,reserved TEXT)')
                 db.executemany('INSERT INTO metadata VALUES(?,?)',[('work_id',request['work_id']),('head','0')])
-                state=append(db,{'sequence':0,'work_id':request['work_id']},request['document'],'init',request['message'],request['author'],{})
+                extra=({'drama_attachment_validation':drama_report,'drama_inheritance':request['drama_inheritance']}
+                       if drama_report else {})
+                state=append(db,{'sequence':0,'work_id':request['work_id']},request['document'],'init',request['message'],request['author'],extra)
         finally:db.close()
         result={**state,'action':'init'}
+        if drama_report:result['drama_attachment_validation']=drama_report
     else:
         db=connect(p)
         try:
@@ -331,6 +366,13 @@ def work_version(request,directory,tools):
             if action=='read':
                 history=[dict(row) for row in db.execute('SELECT sequence,parent,version,digest,action,message,author,extra FROM revisions ORDER BY sequence')]
                 result={**current,'action':'read','history':history,'external_media_validation':'NOT_RUN'}
+                try:
+                    drama_report=check_drama(current['document'])
+                    if drama_report:result['drama_attachment_validation']=drama_report
+                except ContractError as exc:
+                    # Keep the authoritative snapshot readable for repair; do not certify its attachment.
+                    result['drama_attachment_validation']={'status':'FAIL','error':str(exc),
+                        'semantic_review':'NOT_RUN','media_review':'NOT_RUN'}
             else:
                 require(request['expected_version']==current['version'],'WORK_VERSION_CONFLICT')
                 if action=='commit':
@@ -340,8 +382,12 @@ def work_version(request,directory,tools):
                     require(bundle['base_version']==current['version'] and bundle['base_document_sha256']==current['document_sha256'],'CANDIDATE_BASE_CONFLICT')
                     diff=revision_diff(current['document'],bundle['document'],bundle['scope'],tools)
                     require(diff['document_sha256']!=current['document_sha256'],'NO_CHANGE_TO_COMMIT')
-                    state=append(db,current,bundle['document'],'commit',request['message'],request['author'],{'diff':diff,'candidate':candidate_ref})
+                    drama_report=check_drama(bundle['document'],current['document'],current['version'])
+                    state=append(db,current,bundle['document'],'commit',request['message'],request['author'],
+                        {'diff':diff,'candidate':candidate_ref,**({'drama_attachment_validation':drama_report} if drama_report else {})})
                     result={**state,'action':'commit','diff':diff}
+                    if drama_report:
+                        result['drama_attachment_validation']=drama_report
                 elif action=='set-protection':
                     require(isinstance(request['change_basis'],str) and request['change_basis'].strip(),'PROTECTION_CHANGE_BASIS_REQUIRED')
                     document=copy.deepcopy(current['document'])
@@ -357,6 +403,8 @@ def work_version(request,directory,tools):
                         'previous_protection_sha256':fingerprint(old_protection) if old_protection is not None else None,
                         'protection_sha256':fingerprint(new_protection) if new_protection is not None else None,
                         'authorization':'Explicit operation declaration only; author field is not proof of human approval.'}
+                    drama_report=check_drama(document)
+                    if drama_report:extra['drama_attachment_validation']=drama_report
                     state=append(db,current,document,'set-protection',request['message'],request['author'],extra)
                     result={**state,'action':'set-protection',**extra,
                         'invalidated':['evidence-map','content-review','listening-review'],
@@ -371,6 +419,8 @@ def work_version(request,directory,tools):
                             'mode':'NOT_RUN','validated_this_operation':False,'stored_mapping_unchanged':True,
                             'declared_coverage':'NOT_REVALIDATED'}}
                     recheck_style_resources(records)
+                    drama_report=check_drama(document)
+                    if drama_report:extra['drama_attachment_validation']=drama_report
                     state=append(db,current,document,action,request['message'],request['author'],extra)
                     result={**state,'action':action,**extra,'history_preserved':True,
                         'invalidated':['candidate','host-snapshot','render','technical-qc','content-review',
@@ -390,6 +440,8 @@ def work_version(request,directory,tools):
                         extra.update(style_resource_relocations=records,
                             target_document_sha256=target['document_sha256'],document_sha256=expected_document,
                             scope='historical content plus same-byte style-card paths; full document validated')
+                    drama_report=check_drama(document)
+                    if drama_report:extra['drama_attachment_validation']=drama_report
                     state=append(db,current,document,'restore',request['message'],request['author'],extra)
                     result={**state,'action':'restore',**extra,'history_preserved':True,
                             'invalidated':['render','technical-qc','content-review','visual-review','listening-review','evidence-map']}

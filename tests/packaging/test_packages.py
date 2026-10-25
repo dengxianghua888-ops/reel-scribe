@@ -98,7 +98,7 @@ def test_default_build_navigation_and_reproducibility(source, tmp_path, builder)
             assert not (output / name).exists()
         structure = json.loads(run(sys.executable, output / 'scripts/verify_library.py', 'structure', cwd=tmp_path).stdout)
         assert structure['status'] == 'PASSED'
-        assert structure['skills'] == 51
+        assert structure['skills'] == 52
     name = MANIFESTS[BUILDERS.index(builder)]
     first, second = [json.loads((out / name).read_text()) for out in outputs]
     assert first['files'] == second['files']
@@ -337,7 +337,7 @@ def test_relocated_output_doctor_stdio_and_real_render(source, tmp_path, builder
     responses = [json.loads(line) for line in result.stdout.splitlines()]
     assert responses[0]['result']['protocolVersion'] == '2025-03-26'
     assert len(responses[1]['result']['tools']) == 3
-    assert len(json.loads(responses[2]['result']['content'][0]['text'])['entries']) == 51
+    assert len(json.loads(responses[2]['result']['content'][0]['text'])['entries']) == 52
     assert not responses[3]['result'].get('isError'), responses[3]
     result = json.loads(responses[3]['result']['content'][0]['text'])
     assert result['status'] == 'SUCCEEDED', result

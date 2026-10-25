@@ -618,6 +618,30 @@
       "entry": "atomic/visual-layer-render/SKILL.md",
       "description": "按明确源帧、输出帧、矩形、透明度和层级叠加视频，保留底片音轨；不选择内容或构图。",
       "status": "local-synthetic-tested"
+    },
+    {
+      "id": "raven-drama-production",
+      "layer": "complex",
+      "entry": "workflows/raven-drama-production/SKILL.md",
+      "description": "组织原创或授权改编剧情的逐场创作、人物知识与状态、风格资产和镜头计划；复用现有制作与局部修订能力，纯剧本任务不启动媒体制作。",
+      "status": "experimental-content-unvalidated",
+      "work_package": "W17",
+      "atomic_dependencies": [
+        "media-inspect",
+        "frame-extract",
+        "still-image-render",
+        "audio-envelope",
+        "caption-coverage-check",
+        "work-version",
+        "timeline-revise",
+        "work-render",
+        "media-qc"
+      ],
+      "capability_limits": [
+        "domain checks validate declared data, not semantic quality, visual identity, performance or sound",
+        "generation and actual editing tools are supplied by the running Agent; no provider is required for PLAN",
+        "full viewing/listening, independent content outcomes and native host compatibility remain unvalidated"
+      ]
     }
   ]
 }
