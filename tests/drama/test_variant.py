@@ -125,5 +125,32 @@ class VariantTests(unittest.TestCase):
         self.variant['new_events'][0]['basis']['reference']='BG99'
         self.assert_rule('DANGLING_REFERENCE')
 
+    def test_new_event_causes_must_resolve_in_combined_event_table(self):
+        self.variant['new_events'][0]['causes']=['DOES-NOT-EXIST']
+        self.assert_rule('DANGLING_REFERENCE')
+
+    def test_new_event_self_and_multi_event_cycles_are_rejected(self):
+        self.variant['new_events'][0]['causes']=['E-FB01']
+        self.assert_rule('CAUSAL_CYCLE')
+        other=copy.deepcopy(self.variant['new_events'][0])
+        other['event_id']='E-FB02'
+        self.variant['new_events'][0]['causes']=['E-FB02']
+        self.variant['new_events'].append(other)
+        self.assert_rule('CAUSAL_CYCLE')
+
+    def test_new_event_cause_shape_is_checked_without_traceback(self):
+        for value in (None,'E01',[{}],['E01',1]):
+            with self.subTest(value=value):
+                self.variant['new_events'][0]['causes']=value
+                self.assert_rule('VARIANT_EXTENSION_SHAPE')
+
+    def test_new_event_can_depend_on_original_or_new_prior_event(self):
+        other=copy.deepcopy(self.variant['new_events'][0])
+        other.update(event_id='E-FB02',causes=['E-FB01'])
+        self.variant['new_events'][0]['causes']=['E01']
+        self.variant['new_events'].append(other)
+        report=validate_variant(self.doc,self.variant)
+        self.assertEqual('PASS',report['status'],report['findings'])
+
 
 if __name__=='__main__': unittest.main()

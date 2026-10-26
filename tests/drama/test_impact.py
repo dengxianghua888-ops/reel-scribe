@@ -30,6 +30,46 @@ class ImpactTests(unittest.TestCase):
         self.assertEqual([], report['media_actions'])
         self.assertEqual([], report['scope_candidates']['domain_note_keys'])
 
+    def test_indirect_background_change_refreshes_every_changed_context(self):
+        from drama_domain import assemble_context, validate_content
+        for content in (self.before,self.after):
+            content['background'].extend([
+                {'background_id':'BG99','text':'source','basis':{'kind':'authored','reference':'BG98'}},
+                {'background_id':'BG98','text':'original','basis':{'kind':'authored'}}])
+            content['propositions'][0]['basis']['reference']='BG99'
+        self.after['background'][-1]['text']='changed'
+        resources={self.before['style_ref']['path']:'style'}
+        changed=set()
+        for content in (self.before,self.after):
+            self.assertEqual('PASS',validate_content(content)['status'])
+        for scene in self.before['scenes']:
+            sid=scene['scene_id']
+            old=assemble_context(self.before,sid,100000,resources=resources)
+            new=assemble_context(self.after,sid,100000,resources=resources)
+            if old['payload']!=new['payload']:
+                changed.add(sid)
+        self.assertTrue(changed)
+        report=analyze_impact(self.before,self.after)
+        self.assertTrue(changed <= set(report['scope_candidates']['context_scene_ids']))
+        self.assertFalse(changed & set(report['unaffected']['objects']['scenes']))
+
+    def test_shot_and_dialogue_only_entity_changes_refresh_context(self):
+        for field in ('visible_characters','speaker_id'):
+            with self.subTest(field=field):
+                before=copy.deepcopy(self.before)
+                entity=copy.deepcopy(before['entities'][0])
+                entity['entity_id']='C03'
+                entity['variants'][0]['variant_id']='C03-V01'
+                before['entities'].append(entity)
+                if field=='visible_characters':
+                    before['shots'][0][field].append('C03')
+                else:
+                    before['dialogues'][0][field]='C03'
+                after=copy.deepcopy(before)
+                after['entities'][-1]['name']='new name'
+                report=analyze_impact(before,after)
+                self.assertIn('SC01',report['scope_candidates']['context_scene_ids'])
+
     def test_d21_caption_style_preserves_story_voice_and_character_requirements(self):
         self.after['style_ref']['caption_style'] = {'font_size': 42, 'safe_bottom_ratio': .13}
         report = analyze_impact(self.before, self.after)

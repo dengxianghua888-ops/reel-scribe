@@ -7,6 +7,8 @@ Work, or invalidate media. Story IDs in a report are not editor object IDs.
 import hashlib
 import json
 
+from drama_domain import _scene_context_inputs
+
 
 COLLECTIONS = {
     'background': 'background_id', 'entities': 'entity_id',
@@ -194,44 +196,18 @@ class _Report:
         if scenes:
             self.add('SCENE_CONTEXT_INPUT_CHANGED', scenes, 'scenes.context', reason)
 
-    def entity_context_consumers(self, entity_id):
-        """Mirror declared entity selection; context refs are not media use."""
+    def context_consumers(self, object_id):
+        """Use the assembler's exact prerequisite closure in both revisions."""
         consumers = set()
-        for tables in (self.old, self.new):
-            for sid, scene in tables['scenes'].items():
-                pre = tables['snapshots'].get(scene.get('pre_state'), {})
-                refs = set(scene.get('context_refs', [])) | set(pre.get('entity_state', {}))
-                refs.add(scene.get('location_id'))
-                refs.update(state.get('location_id') for state in pre.get('entity_state', {}).values())
-                asset_ids = {aid for shot in tables['shots'].values()
-                             if shot.get('scene_id') == sid for aid in shot.get('asset_refs', [])}
-                refs.update(ref for aid in asset_ids if aid in tables['assets']
-                            for ref in tables['assets'][aid].get('entity_or_shot_refs', []))
-                refs.update(k.get('proposition_id') for k in pre.get('knowledge', []))
-                refs.update(e for k in pre.get('knowledge', []) for e in k.get('basis_event_refs', []))
-                refs.update(e for f in pre.get('foreshadow', []) for e in f.get('event_refs', []))
-                refs.update(eid for eid, event in tables['events'].items() if event.get('scene_id') == sid)
-                # Match the assembler's supported prerequisite closure. A
-                # proposition's authored basis may itself reference an entity;
-                # its specification is then embedded despite no visible pixels.
-                nodes = {**tables['background'], **tables['propositions'], **tables['events']}
-                pending = list(refs)
-                visited = set()
-                while pending:
-                    ref = pending.pop()
-                    if ref in visited:
-                        continue
-                    visited.add(ref)
-                    node = nodes.get(ref, {})
-                    basis = node.get('basis', {})
-                    extra = set(node.get('causes', [])) | set(node.get('background_refs', []))
-                    if isinstance(basis, dict) and isinstance(basis.get('reference'), str):
-                        extra.add(basis['reference'])
-                    pending.extend(extra - refs)
-                    refs.update(extra)
-                if entity_id in refs:
+        for content in (self.before,self.after):
+            for scene in content['scenes']:
+                sid=scene['scene_id']
+                if object_id in _scene_context_inputs(content,sid)['refs']:
                     consumers.add(sid)
         return consumers
+
+    def entity_context_consumers(self, entity_id):
+        return self.context_consumers(entity_id)
 
     def asset_context_consumers(self, asset_id):
         return {shot['scene_id'] for tables in (self.old, self.new)
@@ -385,6 +361,8 @@ def _story_change(report, field, oid, old, new):
     if field == 'scenes':
         scenes.add(oid)
     else:
+        if field in {'background','propositions','events'}:
+            scenes.update(report.context_consumers(oid))
         scenes.update(obj.get('scene_id') for obj in [old, new] if obj.get('scene_id'))
         all_scenes = list(report.old['scenes'].items()) + list(report.new['scenes'].items())
         for sid, scene in all_scenes:
