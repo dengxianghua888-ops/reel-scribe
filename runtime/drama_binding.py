@@ -3,6 +3,7 @@
 Checks consume the bytes whose digest was checked. A final boundary recheck is
 not a filesystem/SQLite atomic transaction or protection against A-B-A writes.
 """
+import errno
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
@@ -194,8 +195,11 @@ def prepare_attachment(manifest_path, store, base_version):
             verify_package(temp / 'PACKAGE-MANIFEST.json', report['manifest'])
             try:
                 temp.rename(target)
-            except FileExistsError:
-                pass  # Another preparation won; verify its exact bytes below.
+            except OSError as exc:
+                if exc.errno not in (errno.EEXIST,errno.ENOTEMPTY):
+                    raise
+                # Another preparation may have won. Never trust the error alone;
+                # verify its exact manifest and member bytes below.
     installed = verify_package(target_manifest, report['manifest'])
     reference = {'schema': 'drama-domain-ref/0.1',
                  'package_id': report['package_id'], 'package_revision': report['package_revision'],

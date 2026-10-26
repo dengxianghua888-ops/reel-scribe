@@ -5,6 +5,7 @@ do not adopt it, mutate it, load a model, inspect media or certify prose meaning
 Unknown semantics remain review work. Character names are never identity keys.
 """
 import copy
+from graphlib import CycleError, TopologicalSorter
 import hashlib
 import json
 import math
@@ -148,6 +149,15 @@ def _binding_shape(binding):
             and type(binding.get('size_bytes')) is int and binding['size_bytes'] >= 0)
 
 
+def _causal_cycle(events):
+    """Return a declared causal cycle without recursive traversal limits."""
+    try:
+        tuple(TopologicalSorter({eid:event.get('causes',[]) for eid,event in events.items()}).static_order())
+    except CycleError as exc:
+        return exc.args[1]
+    return []
+
+
 def validate_content(content):
     """Check declared identity, references, state, chronology and planning budgets.
 
@@ -213,14 +223,8 @@ def validate_content(content):
         for bg in event.get('background_refs', []): ref(bg, tables['background'], eid, 'background_refs')
     # Cycles cannot be resolved by a forward-only context closure. Narrative
     # nonlinear presentation is expressed by reveal_position, not causal loops.
-    def visit_event(eid, path, complete):
-        if eid in path:
-            add('CAUSAL_CYCLE', path+[eid], 'events.causes', 'Causal dependency cycle'); return
-        if eid in complete or eid not in events: return
-        for cause in events[eid]['causes']: visit_event(cause,path+[eid],complete)
-        complete.add(eid)
-    complete=set()
-    for eid in events: visit_event(eid,[],complete)
+    cycle=_causal_cycle(events)
+    if cycle: add('CAUSAL_CYCLE', cycle, 'events.causes', 'Causal dependency cycle')
     for bid, beat in beats.items():
         ref(beat['scene_id'], scenes, bid, 'scene_id')
         for event in beat['event_refs']: ref(event, events, bid, 'event_refs')
@@ -388,6 +392,56 @@ def validate_content(content):
                                 'No media bytes verified; no adoption performed'])
 
 
+def _scene_context_inputs(content, scene_id):
+    """Select declared scene inputs once for assembly and impact analysis.
+
+    Internal helper: container/reference validation remains the caller's job.
+    Referenced entities are context, never proof of actual media consumption.
+    """
+    scene={s['scene_id']:s for s in content['scenes']}[scene_id]
+    pre={s['snapshot_id']:s for s in content['snapshots']}[scene['pre_state']]
+    selected_shots=[s for s in content['shots'] if s['scene_id']==scene_id]
+    shot_ids={s['shot_id'] for s in selected_shots}
+    selected_dialogues=[d for d in content['dialogues'] if shot_ids.intersection(d['shot_refs'])]
+    asset_ids={aid for s in selected_shots for aid in s['asset_refs']}
+    selected_assets=[a for a in content['assets'] if a['asset_id'] in asset_ids]
+    objects={r[TABLES[table]]:r for table in ('background','entities','propositions','events') for r in content[table]}
+    supported=set(objects) | {f['foreshadow_id'] for f in pre['foreshadow']}
+    unsupported=[(scene_id,ref) for ref in scene['context_refs'] if ref not in supported]
+    refs=set(scene['context_refs']) | set(pre['entity_state']) | {scene['location_id']}
+    refs.update(c for s in selected_shots for c in s['visible_characters'])
+    refs.update(d['speaker_id'] for d in selected_dialogues)
+    refs.update(r for a in selected_assets for r in a['entity_or_shot_refs'])
+    refs.update(v['location_id'] for v in pre['entity_state'].values() if 'location_id' in v)
+    refs.update(k['proposition_id'] for k in pre['knowledge'])
+    required_events={e for k in pre['knowledge'] for e in k['basis_event_refs']}
+    required_events.update(e for f in pre['foreshadow'] for e in f['event_refs'])
+    required_events.update(e['event_id'] for e in content['events'] if e['scene_id']==scene_id)
+    events={e['event_id']:e for e in content['events']}
+    pending=list(refs | required_events)
+    visited=set()
+    while pending:
+        ident=pending.pop()
+        if ident in visited: continue
+        visited.add(ident)
+        obj=objects.get(ident)
+        if obj is None: continue
+        refs.add(ident)
+        if ident in events: required_events.add(ident)
+        required=[]
+        if isinstance(obj.get('basis'),dict) and obj['basis'].get('reference') is not None:
+            required.append(obj['basis']['reference'])
+        if ident in events:
+            required.extend(obj['causes']);required.extend(obj.get('background_refs',[]))
+        for target in required:
+            if target not in supported:
+                unsupported.append((ident,target))
+            elif target not in visited:
+                pending.append(target)
+    return {'refs':refs,'required_events':required_events,'unsupported':unsupported,
+            'shots':selected_shots,'dialogues':selected_dialogues,'assets':selected_assets}
+
+
 def assemble_context(content, scene_id, budget_chars, source_sha256=None, resources=None):
     """Assemble one scene with complete hard context; never silently trim it.
 
@@ -407,54 +461,17 @@ def assemble_context(content, scene_id, budget_chars, source_sha256=None, resour
         return _report([_finding('SOURCE_SHA256', [], 'source_sha256', 'FAIL', 'Expected SHA256 hex')], sendable=False, payload=None)
     scene=scenes[scene_id]; snapshots={s['snapshot_id']:s for s in content['snapshots']}
     pre=snapshots[scene['pre_state']]
-    # The first assembler deliberately supports a bounded set of cross-scene
-    # dependencies. Other declared context objects are rejected, never silently
-    # treated as optional/excluded. Callers may split the task or extend this
-    # contract explicitly rather than hiding an unsupported required reference.
-    supported_context={r[TABLES[table]] for table in ('background','entities','propositions','events') for r in content[table]}
-    supported_context.update(f['foreshadow_id'] for f in pre['foreshadow'])
-    unsupported=set(scene['context_refs'])-supported_context
-    if unsupported:
-        findings.append(_finding('CONTEXT_REFERENCE_UNSUPPORTED',[scene_id]+sorted(unsupported),'context_refs','FAIL',
-                                 'Required cross-scene shot/scene/asset/dialogue/snapshot context is not supported by this assembler; no context was emitted.'))
-        return _report(findings,scene_id=scene_id,sendable=False,ready_for_generation=False,payload=None,
-                       unsupported_required_refs=sorted(unsupported),excluded=[])
-    refs=set(scene['context_refs']) | set(pre['entity_state']) | {scene['location_id']}
-    selected_shots=[s for s in content['shots'] if s['scene_id']==scene_id]
-    asset_ids={aid for s in selected_shots for aid in s['asset_refs']}
-    selected_assets=[a for a in content['assets'] if a['asset_id'] in asset_ids]
-    refs.update(r for a in selected_assets for r in a['entity_or_shot_refs'])
-    refs.update(v['location_id'] for v in pre['entity_state'].values() if 'location_id' in v)
-    refs.update(k['proposition_id'] for k in pre['knowledge'])
-    required_events={e for k in pre['knowledge'] for e in k['basis_event_refs']}
-    required_events.update(e['event_id'] for e in content['events'] if e['event_id'] in scene['context_refs'])
-    required_events.update(e for f in pre['foreshadow'] for e in f['event_refs'])
-    required_events.update(e['event_id'] for e in content['events'] if e['scene_id']==scene_id)
+    inputs=_scene_context_inputs(content,scene_id)
+    refs=inputs['refs'];required_events=inputs['required_events']
+    selected_shots=inputs['shots'];selected_assets=inputs['assets']
     events={e['event_id']:e for e in content['events']}
-    supported_objects={r[TABLES[table]]:r for table in ('background','entities','propositions','events') for r in content[table]}
-    pending=list(refs | required_events)
-    visited=set()
-    while pending:
-        ident=pending.pop()
-        if ident in visited: continue
-        visited.add(ident)
-        obj=supported_objects.get(ident)
-        if obj is None: continue
-        refs.add(ident)
-        if ident in events: required_events.add(ident)
-        required=[]
-        if isinstance(obj.get('basis'),dict) and obj['basis'].get('reference') is not None:
-            required.append(obj['basis']['reference'])
-        if ident in events:
-            required.extend(obj['causes']);required.extend(obj.get('background_refs',[]))
-        for target in required:
-            if target not in supported_context:
-                findings.append(_finding('CONTEXT_REFERENCE_UNSUPPORTED',[scene_id,ident,str(target)],'basis.reference','FAIL',
-                                         'A required source reference is unsupported; no partially assembled context was emitted.'))
-            elif target not in visited:
-                pending.append(target)
+    for ident,target in inputs['unsupported']:
+        findings.append(_finding('CONTEXT_REFERENCE_UNSUPPORTED',[scene_id,ident,target],
+                                 'context_refs' if ident==scene_id else 'basis.reference','FAIL',
+                                 'Required context reference is unsupported; no partially assembled context was emitted.'))
     if any(f['result']=='FAIL' for f in findings):
-        return _report(findings,scene_id=scene_id,sendable=False,ready_for_generation=False,payload=None,excluded=[])
+        return _report(findings,scene_id=scene_id,sendable=False,ready_for_generation=False,payload=None,
+                       unsupported_required_refs=sorted({target for _,target in inputs['unsupported']}),excluded=[])
     prior=[scenes[x] for x in scene['candidate_dependencies']]
     payload={'task':content['task'], 'work_binding':content['work_binding'], 'scene':scene,
              'pre_state':pre, 'planned_post_state':snapshots[scene['post_state']],
@@ -471,7 +488,7 @@ def assemble_context(content, scene_id, budget_chars, source_sha256=None, resour
                                     'declared_story_context_not_verified_media'} for eid in sorted(required_events)],
              'beats':[x for x in content['beats'] if x['scene_id']==scene_id],
              'shots':selected_shots,
-             'dialogues':[x for x in content['dialogues'] if set(x['shot_refs']) & {s['shot_id'] for s in selected_shots}],
+             'dialogues':inputs['dialogues'],
              'assets':selected_assets, 'style_ref':content['style_ref']}
     style_path=content['style_ref'].get('path')
     resources=resources if isinstance(resources,dict) else {}
@@ -573,6 +590,9 @@ def validate_variant(content, variant):
             add('VARIANT_SCENE',[beat['beat_id'],str(beat.get('scene_id'))],'new_beats.scene_id','New local-insert beat must belong to the source scene')
     for event in new_events:
         eid=event['event_id']
+        causes=event.get('causes',[])
+        if not isinstance(causes,list) or not all(isinstance(x,str) for x in causes):
+            add('VARIANT_EXTENSION_SHAPE',[eid],'new_events.causes','Expected event ID list'); return _report(findings)
         if event.get('scene_id')!=source['scene_id']:
             add('VARIANT_SCENE',[eid,str(event.get('scene_id'))],'new_events.scene_id','New local-insert event must belong to the source scene')
         basis=event.get('basis')
@@ -584,6 +604,13 @@ def validate_variant(content, variant):
                 add('DANGLING_REFERENCE',[eid,str(value)],'new_events.basis.reference','Unresolved new event source')
         if not isinstance(event.get('story_layer'),str) or not event['story_layer']:
             add('VARIANT_EXTENSION_SHAPE',[eid],'new_events.story_layer','New event must declare its narrative layer')
+    combined_events={e['event_id']:e for e in content['events']+new_events}
+    for event in new_events:
+        for cause in event.get('causes',[]):
+            if cause not in combined_events:
+                add('DANGLING_REFERENCE',[event['event_id'],cause],'new_events.causes','Unresolved causal event')
+    cycle=_causal_cycle(combined_events)
+    if cycle: add('CAUSAL_CYCLE',cycle,'new_events.causes','Causal dependency cycle')
     for asset in new_assets:
         status=asset.get('status');binding=asset.get('actual_binding')
         if status not in ('planned','reference_available','take_candidate','selected') or (status!='planned' and not _binding_shape(binding)):

@@ -104,6 +104,20 @@ class ContextTests(unittest.TestCase):
         self.assertIsNone(result['payload'])
         self.assertFalse(result['sendable'])
 
+    def test_shot_visibility_and_dialogue_speaker_load_entity_specs(self):
+        for ident in ('C03','C04'):
+            entity=copy.deepcopy(self.doc['entities'][0])
+            entity['entity_id']=ident
+            entity['variants'][0]['variant_id']=ident+'-V01'
+            self.doc['entities'].append(entity)
+        self.doc['shots'][0]['visible_characters'].append('C03')
+        self.doc['dialogues'][0]['speaker_id']='C04'
+        result=assemble_context(self.doc,'SC01',100000,resources=self.resources)
+        self.assertEqual(result['status'],'PASS',result['findings'])
+        self.assertTrue(result['sendable'])
+        self.assertTrue({'C03','C04'} <= {e['entity_id'] for e in result['payload']['entities']})
+        self.assertTrue({'C03','C04'} <= set(result['required_refs']))
+
     def test_missing_scene_or_bad_budget_or_hash(self):
         for scene,budget,sha in [('unknown',100,None),('SC02',-1,None),('SC02',True,None),('SC02',32000,'bad')]:
             with self.subTest(scene=scene,budget=budget,sha=sha):
