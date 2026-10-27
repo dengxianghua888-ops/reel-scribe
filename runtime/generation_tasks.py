@@ -890,7 +890,8 @@ class GenerationStore:
             _hash(target["document_sha256"], "WORK_DOCUMENT_SHA256")
             for key in fields - {"intent", "review_path"}:
                 _hash(reuse[key], "REUSE_" + key.upper())
-            if not isinstance(reuse["review_path"], str) or not Path(reuse["review_path"]).is_absolute():
+            if (not isinstance(reuse["review_path"], str) or "\x00" in reuse["review_path"] or
+                    not Path(reuse["review_path"]).is_absolute()):
                 raise GenerationError("REUSE_REVIEW_PATH_INVALID")
             _hash(candidate_sha256, "CANDIDATE_SHA256")
         except (GenerationError, TypeError, ValueError) as exc:

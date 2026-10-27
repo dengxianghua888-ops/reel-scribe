@@ -491,6 +491,8 @@ class GenerationIntentContracts(unittest.TestCase):
         fixture = self.reuse_fixture()
         cases = [(None, 'REUSE_INTENT_INVALID'),
                  ({**fixture['reuse'], 'extra': True}, 'REUSE_INTENT_INVALID'),
+                 ({**fixture['reuse'], 'review_path': '/invalid' + chr(0) + '/review.json'},
+                  'REUSE_INTENT_INVALID'),
                  ({**fixture['reuse'], 'result_sha256': 'f' * 64}, 'REUSE_RESULT_PIN_MISMATCH'),
                  ({**fixture['reuse'], 'result_receipt_sha256': 'f' * 64}, 'REUSE_RESULT_PIN_MISMATCH'),
                  ({**fixture['reuse'], 'origin_review_sha256': 'f' * 64}, 'ORIGIN_ACCEPTED_REVIEW_REQUIRED')]
