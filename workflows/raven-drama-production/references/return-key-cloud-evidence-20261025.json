@@ -1,0 +1,381 @@
+{
+  "schema": "drama-cloud-review-evidence/1",
+  "case": "return-key",
+  "date": "2026-10-25",
+  "source_commit": "8d7ba877a0eea2efe0fee387770183b85942816e",
+  "scope": "Independent cloud technical verification and unadopted style samples; not complete listening, final media acceptance, or long-form validation.",
+  "handoff": {
+    "archive_bytes": 303339115,
+    "archive_sha256": "eb2b2f858cc81f936274cef4826e4926cc2989ea3bc9397fc7b3f0ab4b8d7f46",
+    "received_files": 20,
+    "parts": 17,
+    "included_files_verified": 490,
+    "status": "PASS_INCLUDED_BYTES"
+  },
+  "audio": {
+    "perception": {
+      "status": "BLOCKED_AUDIO_INPUT_UNSUPPORTED",
+      "channel_tested": "functions.exec audio({audio_url:data:audio/wav;base64,...})",
+      "runtime_output_exact": "audio content omitted because you do not support audio input",
+      "listened_seconds": 0,
+      "transcription_attempted": false,
+      "reference_transcripts_read": false,
+      "calibration_pass": false
+    },
+    "sample_rate": 48000,
+    "channels": 2,
+    "frames_per_track": 7200768,
+    "seconds_per_track": 150.016,
+    "native_technical_tracks": 5,
+    "tool_versions": {
+      "ffmpeg": "ffmpeg version 7.1.5-0+deb13u1 Copyright (c) 2000-2026 the FFmpeg developers",
+      "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+      "numpy": "2.3.5"
+    },
+    "inputs": {
+      "aac_baseline": {
+        "bundle_path": "files/b2-return-key/iterations/r3-audio/canonical-baseline.mp4",
+        "sha256": "2dbc33b2c0c9d83739768d456c3177996ecb1a61c3160c5c1115feee0bf6fb07",
+        "size_bytes": 21657689
+      },
+      "aac_revised": {
+        "bundle_path": "files/b2-return-key/iterations/r3-audio/canonical-revised.mp4",
+        "sha256": "b156def395dca689860f065577ddae872406a6f09e9c5dbacc2c9594ad436851",
+        "size_bytes": 21657642
+      },
+      "v1": {
+        "bundle_path": "files/b2-return-key/versions/v1/return-key.mp4",
+        "sha256": "32083d1929de09b9a314fe46c61c7b53e347d996c1ddb239a0412084796f9702",
+        "size_bytes": 21712376
+      },
+      "v3": {
+        "bundle_path": "files/b2-return-key/versions/v3/return-key.mp4",
+        "sha256": "d17d226ddd76dd7209dff6923c12d95d7890ad0e10fc294adfedbf777484ab27",
+        "size_bytes": 21657845
+      },
+      "f32_master": {
+        "bundle_path": "files/b2-return-key/iterations/r3-audio/strict-f32-original-aac/run-001/return-key-strict-f32.mov",
+        "sha256": "628b8c0d90ef57ce132880930a7eab70402951d76cbeddc417d151351bee4436",
+        "size_bytes": 75634593
+      }
+    },
+    "decoded_pcm": {
+      "aac_baseline": {
+        "sha256": "2a515297c2203ca639a009fe20a5780a23d00eb81a8f8ef231a3fd96b6ddd3b8",
+        "frames": 7200768
+      },
+      "aac_revised": {
+        "sha256": "a55649a9565e02cca62a3cf598784cdde9056a28e315e3a19f7f430075673881",
+        "frames": 7200768
+      },
+      "v1": {
+        "sha256": "40574bce66af6dcce31dd8ef1ed6a3b43eb557517d53f244b9546871485d41f0",
+        "frames": 7200768
+      },
+      "v3": {
+        "sha256": "a69d6054af15fafae9a4e56b38a7437f0f0ee185c75aa9cf9d51c48e1acdb52c",
+        "frames": 7200768
+      },
+      "f32_master": {
+        "sha256": "b2a2fdf4a3c911a6178dfb113f7d8a5e130c393ff5137577679d1402bc56ee79",
+        "frames": 7200768
+      }
+    },
+    "codec_envelope_audio_frames": [
+      3756032,
+      3947520
+    ],
+    "literal_D08_audio_frames": [
+      3758400,
+      3942390
+    ],
+    "aac_outside_codec_envelope": "PASS_BITS_EQUAL_TO_EXPLICIT_NEW_NO_PNS_BASELINE",
+    "aac_outside_literal_D08": {
+      "status": "FAIL",
+      "different_stereo_frames": 5450,
+      "earliest_changed_second": 78.272,
+      "latest_changed_second": 82.21864583333333
+    },
+    "f32_master_matches_historical_pcm_sha": true,
+    "f32_vs_current_v1_outside_D08": {
+      "status": "NOT_BIT_EQUAL",
+      "max_absolute_difference": 5.960464477539063e-08,
+      "interpretation": "Historical frozen bytes retained; current AAC decoding does not reproduce historical bit pattern. Specific unique cause not isolated."
+    },
+    "decoder_controls": {
+      "bitexact": "Same SHA as current default decode; still differs from historical frozen PCM",
+      "simd_disabled": "Different SHA from current default and historical frozen PCM"
+    },
+    "seam_inspection": {
+      "aac_seconds": [
+        78.25066666666666,
+        78.3,
+        82.133125,
+        82.19733333333333,
+        82.21866666666666,
+        82.24
+      ],
+      "f32_seconds": [
+        78.3,
+        82.133125
+      ],
+      "measurements": [
+        "two-channel sample derivative",
+        "local derivative distribution and p99",
+        "second derivative",
+        "20ms RMS and DC",
+        "spectral centroid",
+        "energy above 8kHz",
+        "residual spectrum"
+      ],
+      "decision": "No demonstrated splice defect sufficient to justify editing; audibility not verified."
+    },
+    "new_media_revision": false,
+    "adopted": [
+      "New scoped technical evidence and cross-decoder limitation"
+    ],
+    "not_adopted": [
+      "Unsubstantiated seam smoothing",
+      "Listening PASS",
+      "Literal-D08 AAC strict PASS",
+      "Generic work-render integration claim"
+    ]
+  },
+  "style": {
+    "status": "THREE_ACTUAL_CALIBRATION_SAMPLES_REVIEWED_NOT_ADOPTED",
+    "target": "低饱和写实插画",
+    "candidate_count": 3,
+    "adopted": false,
+    "original_media_unchanged": true,
+    "source_review_scope": "3 actual adopted source frames, not all20 and not continuous3750frame pass",
+    "candidate_review_scope": "3 generated actual full images independently viewed; no rendered sequence",
+    "candidates": [
+      {
+        "id": "candidate-01",
+        "sha256": "41e12e1b3449c3ae6e3b04d542c9a8d6e3e07f05dfd40330ce180b9a75fcab0f",
+        "size_bytes": 2864708,
+        "dimensions": [
+          1672,
+          941
+        ],
+        "source_sha256": "54b2df68f74b4beda0c45538c6ee939b230be8cc55b363f425a63335df39d5c3",
+        "source_frame": "frame-03.png",
+        "actually_viewed_full_image": true,
+        "status": "CALIBRATION_CANDIDATE_NOT_ADOPTED",
+        "findings": {
+          "medium": "明显手绘写实插画，不再是摄影剧照；尚非用户审美接受。",
+          "identity": "两人脸型、年龄感、灰黑头发/低马尾及衣物与源帧接近；无自动人脸身份认证。",
+          "prop_custody": "女儿仍右手持一把黄铜钥匙与蓝绳，父亲握门把；保管关系可读，未见第二把钥匙。",
+          "space": "女左走廊/父右门内，门框、门锁与右墙门铃大关系保持；不认证精确建筑几何。",
+          "style_caveat": "肌理较厚，呈明显厚涂/油画倾向；整体更亮更暖。实际首轮提示允许 restrained gouache/oil brushwork，因此油画感本身不构成违反首轮提示或用户原目标；后两轮减厚涂是校准取舍。",
+          "key_limit": "蓝绳可见，钥匙头/齿细节经转绘简化，不认证精确钥匙齿形与小凹痕。"
+        }
+      },
+      {
+        "id": "candidate-02",
+        "sha256": "a340903bffc0009e891243cbfe96f90ed42a7a33d3a7def3844dc81ffd500281",
+        "size_bytes": 2809140,
+        "dimensions": [
+          1672,
+          941
+        ],
+        "source_sha256": "525627c24b71a096e9989113acf9c05ac0a56f19d463fb72d387a7ed2a9515a0",
+        "source_frame": "frame-09.png",
+        "actually_viewed_full_image": true,
+        "status": "CALIBRATION_CANDIDATE_NOT_ADOPTED",
+        "findings": {
+          "medium": "明确写实插画，笔触和块面取代摄影微纹理。",
+          "hands_prop": "保持父亲解剖学左手在画面右握单把黄铜钥匙、右手在画面左持锉，蓝绳垂下；未见第二钥匙或手位镜像。",
+          "space": "旧木台面、瓷筒、锅和背景厨房大关系保持。",
+          "limits": "只有手部，不能借此认证不可见人脸；精确齿形、钥匙头凹痕、锉接触物理精度不认证。",
+          "style_caveat": "相比首样笔触略平整，但针织和台面仍有浓厚油画/拼块肌理；未完全实现父提示的减厚涂意图。"
+        }
+      },
+      {
+        "id": "candidate-03",
+        "sha256": "759085d2678a65a89ce0e30dd776a0d3c543f066880d83ece245d4ab62167814",
+        "size_bytes": 2638500,
+        "dimensions": [
+          1672,
+          941
+        ],
+        "source_sha256": "25e1912c2c7436fa0714bc86a1fcc9bdc3f32b07ef8bbc3857f6b4d4a9786e39",
+        "source_frame": "frame-12.png",
+        "actually_viewed_full_image": true,
+        "status": "CALIBRATION_CANDIDATE_NOT_ADOPTED",
+        "findings": {
+          "medium": "明确写实插画，低饱和灰褐/炭灰/米白与冷暖空间关系保留。",
+          "identity": "父女脸型、年龄感、灰黑发/低马尾与固定衣物接近源帧和候选01；无自动身份认证。",
+          "hands_prop": "女儿右掌独持单把黄铜钥匙和蓝绳，父亲左手撤回，两人不共同接触钥匙；台面未见新增钥匙。",
+          "space": "保持父左女右、冰箱在中后方、厨房台面左侧、联系通道与门框后方；未把候选01门槛构图搬入厨房。",
+          "style_caveat": "仍为较明显油画式块面，脸较源帧明亮和暖；不是摄影媒介回退。",
+          "limits": "手掌处钥匙很小，不认证精确齿形/小凹痕；不认证全建筑几何。"
+        }
+      }
+    ],
+    "group_findings": [
+      "三个候选均已明确转向写实插画，原摄影媒介偏差在这3个小样中得到改善；不能由此标整片目标PASS。",
+      "父女身份/年龄感/服装总体接近源图；跨景采用共同灰褐/炭灰/米白与蓝绳色点，未见明显换装、年轻化或煽情表情。",
+      "门槛内外、厨房位置以及单把钥匙保管链保持在对应帧可见范围内。",
+      "厚涂/油画式肌理仍显著，提示要求减轻只部分实现；这是候选方向取舍，不是新增用户标准。",
+      "所有输出1672×941，尚未做1280×720发布适配；未接入Work或重导出片。"
+    ],
+    "not_certified": [
+      "精确钥匙齿形/小凹痕/同一几何模型",
+      "全套建筑三维几何",
+      "全部20状态风格一致性",
+      "连续主体运动/口型/自然表演",
+      "完整150秒视觉节奏或听检",
+      "用户接受或Work已采用"
+    ],
+    "prompt_direction_note": "克制水粉/减厚涂是助手校准提示中的细化方向，不是用户原始强制要求，不能新增为验收硬门槛。"
+  },
+  "dependent_stages": {
+    "paired_text_samples_27": "NOT_RUN; current instruction prioritizes P0/P1; experiment requires frozen tasks/model/prompt/budget/version and complete samples",
+    "three_chapters": "NOT_RUN; requires B2 work and revision closure",
+    "long_form_B3": "NOT_RUN; requires continuous chapters and historical revision validation"
+  },
+  "evidence_artifacts": [
+    {
+      "name": "technical-report.json",
+      "sha256": "750e6a2e77c299cef617300af6a93aa788ee0334e232f4681e5172b563df62e6",
+      "size_bytes": 26036,
+      "distribution": "Independent review bundle; not embedded media or an adopted Work receipt"
+    },
+    {
+      "name": "decoder-controls.json",
+      "sha256": "a9ba8051d2e5eed6db525fa06cd2fa41d23b03441dbec0fcc59798ae0785201a",
+      "size_bytes": 1848,
+      "distribution": "Independent review bundle; not embedded media or an adopted Work receipt"
+    },
+    {
+      "name": "conclusions.json",
+      "sha256": "435cb5f453616bae7c405152144362b7a565f641f76415a66478de15b536c4a8",
+      "size_bytes": 1155,
+      "distribution": "Independent review bundle; not embedded media or an adopted Work receipt"
+    },
+    {
+      "name": "capability-result.json",
+      "sha256": "f84c368ced9db9d3021f00e16c7b87bdb0fe47bfaf955baffed97f262cbaa602",
+      "size_bytes": 1246,
+      "distribution": "Independent review bundle; not embedded media or an adopted Work receipt"
+    },
+    {
+      "name": "input-metadata.json",
+      "sha256": "1e91093d721ca66c258f3fc085cf01e9838a4b513f6607b5ea6ec6b8ca244835",
+      "size_bytes": 1681,
+      "distribution": "Independent review bundle; not embedded media or an adopted Work receipt"
+    },
+    {
+      "name": "three-sample-review.json",
+      "sha256": "85be0c714799c002c0ce5a05f081f9ba9792beb88304057c5de5b58cdfa450e0",
+      "size_bytes": 17917,
+      "distribution": "Independent review bundle; not embedded media or an adopted Work receipt"
+    },
+    {
+      "name": "actual-generation-prompts.json",
+      "sha256": "27c835f9d8917fd262d2abe38139cc94461affbe29df383be0962fac2c2a71d8",
+      "size_bytes": 4198,
+      "distribution": "Independent review bundle; not embedded media or an adopted Work receipt"
+    }
+  ],
+  "human_listening_acceptance": {
+    "status": "PASS_USER_REPORTED_FULL_PROGRAM_LISTENING",
+    "evidence_type": "USER_SELF_REPORTED_OFFLINE_MANUAL_LISTENING",
+    "confirmation_utc": "2026-10-27T05:58:05Z",
+    "performed_at_utc": null,
+    "examiner": "The user, reporting personal offline manual acceptance",
+    "scope": "Complete 150-second program listening of each of the two handed-off AAC and f32 masters; not a system-wide or long-form acceptance.",
+    "confirmation_context": [
+      {
+        "message_id": "Sentinel_b134c3dc50d88191a765093745e508b1",
+        "timestamp_utc": "2026-10-27T05:52:18Z",
+        "speaker": "user",
+        "text": "听检均已通过，合并完整成品验收结论"
+      },
+      {
+        "message_id": "Sentinel_93aeea36bc3c8191b8ee1d54e043f5c0",
+        "timestamp_utc": "2026-10-27T05:53:07Z",
+        "speaker": "user",
+        "text": "线下手动测试验收的"
+      },
+      {
+        "message_id": "Sentinel_d349cb1dfd68819194be605acd08e5c6",
+        "timestamp_utc": "2026-10-27T05:53:18Z",
+        "speaker": "assistant",
+        "text": "明白，是你在线下亲自测试验收通过，我会据此记录人工验收，不要求机器替你重复证明。还差版本对应：是交接包里的AAC和f32两种母版，都完整听完150秒并通过吗？确认后我把你的结论追加到对应版本，保留原机器测试历史。"
+      },
+      {
+        "message_id": "Sentinel_d5ecf7c645e081918406ac030e5f338a",
+        "timestamp_utc": "2026-10-27T05:58:05Z",
+        "speaker": "user",
+        "text": "是的"
+      }
+    ],
+    "historical_identity_source": {
+      "commit": "42971e6d651895469d0e84477675669037495091",
+      "path": "workflows/raven-drama-production/references/return-key-cloud-evidence-20261025.json",
+      "sha256": "6548dd3f3538daac90758bccd0ff95df541c1e43898095d6932ae37c9361334c"
+    },
+    "masters": [
+      {
+        "role": "handed_off_AAC_master",
+        "human_listening_result": "PASS_USER_REPORTED",
+        "complete_program_seconds": 150,
+        "asset_binding": {
+          "status": "BOUND_TO_VERIFIED_HISTORICAL_HANDOFF_ROLE",
+          "input_ref": "audio.inputs.aac_revised",
+          "bundle_path": "files/b2-return-key/iterations/r3-audio/canonical-revised.mp4",
+          "sha256": "b156def395dca689860f065577ddae872406a6f09e9c5dbacc2c9594ad436851",
+          "size_bytes": 21657642,
+          "basis": "Parent-verified historical technical report and adopted-master role note identify this handed-off master; the existing identity is reused, not newly measured."
+        }
+      },
+      {
+        "role": "handed_off_f32_master",
+        "human_listening_result": "PASS_USER_REPORTED",
+        "complete_program_seconds": 150,
+        "asset_binding": {
+          "status": "BOUND_TO_VERIFIED_HISTORICAL_HANDOFF_ROLE",
+          "input_ref": "audio.inputs.f32_master",
+          "bundle_path": "files/b2-return-key/iterations/r3-audio/strict-f32-original-aac/run-001/return-key-strict-f32.mov",
+          "sha256": "628b8c0d90ef57ce132880930a7eab70402951d76cbeddc417d151351bee4436",
+          "size_bytes": 75634593,
+          "basis": "Parent-verified historical technical report and adopted-master role note identify this handed-off master; the existing identity is reused, not newly measured."
+        }
+      }
+    ],
+    "details": {
+      "per_dialogue_log_provided": false,
+      "timecoded_findings": null,
+      "playback_setup": null,
+      "technical_track_padding_separately_described": false,
+      "assistant_listened_seconds_in_this_update": 0,
+      "new_machine_audio_test_performed": false
+    },
+    "historical_results_preserved": [
+      "Original assistant perception BLOCKED with 0 listened seconds and failed calibration remains an historical machine fact.",
+      "Qwen/Whisper hallucination and failure history is not replaced by this human acceptance.",
+      "AAC literal-D08 strict sampling FAIL and all f32/cross-decoder results remain unchanged.",
+      "No source media, Work, SQLite, archived receipt or failed output was changed."
+    ],
+    "not_covered_by_this_confirmation": [
+      "New 20-state silent illustration preview",
+      "New state12 A/B alternatives",
+      "Adoption or full-sequence acceptance of the three historical illustration samples",
+      "Continuous subject animation, lip synchronization or complete visual target acceptance",
+      "27 paired text evaluations, three chapters or B3 long-form validation",
+      "Whole-system capability acceptance"
+    ],
+    "role_mapping_source": {
+      "verification_authority": "Parent thread, from its actually restored and verified historical report archive; no media revalidation in this publisher",
+      "archive_library_file_id": "libfile_a1a37b3b74148191b1bade97dfea744f",
+      "archive_sha256": "f97327d9dd0bd0d1a4356f19ba85c3cd8c916b172febd46d9442014dd24a4f47",
+      "technical_report_path": "audio/technical-report.json",
+      "technical_report_sha256": "750e6a2e77c299cef617300af6a93aa788ee0334e232f4681e5172b563df62e6",
+      "role_note_path": "audio/RESULTS-声音接点复核.md",
+      "role_note_quote": "两种采用母版分别核验，不能代签",
+      "AAC_role_evidence": "Final revised AAC uses the explicit new no-PNS baseline and codec envelope [78.2506667,82.24); this identifies aac_revised, not the baseline/v1/v3 comparison inputs."
+    }
+  }
+}
