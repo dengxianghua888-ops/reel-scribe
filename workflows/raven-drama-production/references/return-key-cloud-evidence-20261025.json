@@ -278,5 +278,104 @@
       "size_bytes": 4198,
       "distribution": "Independent review bundle; not embedded media or an adopted Work receipt"
     }
-  ]
+  ],
+  "human_listening_acceptance": {
+    "status": "PASS_USER_REPORTED_FULL_PROGRAM_LISTENING",
+    "evidence_type": "USER_SELF_REPORTED_OFFLINE_MANUAL_LISTENING",
+    "confirmation_utc": "2026-10-27T05:58:05Z",
+    "performed_at_utc": null,
+    "examiner": "The user, reporting personal offline manual acceptance",
+    "scope": "Complete 150-second program listening of each of the two handed-off AAC and f32 masters; not a system-wide or long-form acceptance.",
+    "confirmation_context": [
+      {
+        "message_id": "Sentinel_b134c3dc50d88191a765093745e508b1",
+        "timestamp_utc": "2026-10-27T05:52:18Z",
+        "speaker": "user",
+        "text": "听检均已通过，合并完整成品验收结论"
+      },
+      {
+        "message_id": "Sentinel_93aeea36bc3c8191b8ee1d54e043f5c0",
+        "timestamp_utc": "2026-10-27T05:53:07Z",
+        "speaker": "user",
+        "text": "线下手动测试验收的"
+      },
+      {
+        "message_id": "Sentinel_d349cb1dfd68819194be605acd08e5c6",
+        "timestamp_utc": "2026-10-27T05:53:18Z",
+        "speaker": "assistant",
+        "text": "明白，是你在线下亲自测试验收通过，我会据此记录人工验收，不要求机器替你重复证明。还差版本对应：是交接包里的AAC和f32两种母版，都完整听完150秒并通过吗？确认后我把你的结论追加到对应版本，保留原机器测试历史。"
+      },
+      {
+        "message_id": "Sentinel_d5ecf7c645e081918406ac030e5f338a",
+        "timestamp_utc": "2026-10-27T05:58:05Z",
+        "speaker": "user",
+        "text": "是的"
+      }
+    ],
+    "historical_identity_source": {
+      "commit": "42971e6d651895469d0e84477675669037495091",
+      "path": "workflows/raven-drama-production/references/return-key-cloud-evidence-20261025.json",
+      "sha256": "6548dd3f3538daac90758bccd0ff95df541c1e43898095d6932ae37c9361334c"
+    },
+    "masters": [
+      {
+        "role": "handed_off_AAC_master",
+        "human_listening_result": "PASS_USER_REPORTED",
+        "complete_program_seconds": 150,
+        "asset_binding": {
+          "status": "BOUND_TO_VERIFIED_HISTORICAL_HANDOFF_ROLE",
+          "input_ref": "audio.inputs.aac_revised",
+          "bundle_path": "files/b2-return-key/iterations/r3-audio/canonical-revised.mp4",
+          "sha256": "b156def395dca689860f065577ddae872406a6f09e9c5dbacc2c9594ad436851",
+          "size_bytes": 21657642,
+          "basis": "Parent-verified historical technical report and adopted-master role note identify this handed-off master; the existing identity is reused, not newly measured."
+        }
+      },
+      {
+        "role": "handed_off_f32_master",
+        "human_listening_result": "PASS_USER_REPORTED",
+        "complete_program_seconds": 150,
+        "asset_binding": {
+          "status": "BOUND_TO_VERIFIED_HISTORICAL_HANDOFF_ROLE",
+          "input_ref": "audio.inputs.f32_master",
+          "bundle_path": "files/b2-return-key/iterations/r3-audio/strict-f32-original-aac/run-001/return-key-strict-f32.mov",
+          "sha256": "628b8c0d90ef57ce132880930a7eab70402951d76cbeddc417d151351bee4436",
+          "size_bytes": 75634593,
+          "basis": "Parent-verified historical technical report and adopted-master role note identify this handed-off master; the existing identity is reused, not newly measured."
+        }
+      }
+    ],
+    "details": {
+      "per_dialogue_log_provided": false,
+      "timecoded_findings": null,
+      "playback_setup": null,
+      "technical_track_padding_separately_described": false,
+      "assistant_listened_seconds_in_this_update": 0,
+      "new_machine_audio_test_performed": false
+    },
+    "historical_results_preserved": [
+      "Original assistant perception BLOCKED with 0 listened seconds and failed calibration remains an historical machine fact.",
+      "Qwen/Whisper hallucination and failure history is not replaced by this human acceptance.",
+      "AAC literal-D08 strict sampling FAIL and all f32/cross-decoder results remain unchanged.",
+      "No source media, Work, SQLite, archived receipt or failed output was changed."
+    ],
+    "not_covered_by_this_confirmation": [
+      "New 20-state silent illustration preview",
+      "New state12 A/B alternatives",
+      "Adoption or full-sequence acceptance of the three historical illustration samples",
+      "Continuous subject animation, lip synchronization or complete visual target acceptance",
+      "27 paired text evaluations, three chapters or B3 long-form validation",
+      "Whole-system capability acceptance"
+    ],
+    "role_mapping_source": {
+      "verification_authority": "Parent thread, from its actually restored and verified historical report archive; no media revalidation in this publisher",
+      "archive_library_file_id": "libfile_a1a37b3b74148191b1bade97dfea744f",
+      "archive_sha256": "f97327d9dd0bd0d1a4356f19ba85c3cd8c916b172febd46d9442014dd24a4f47",
+      "technical_report_path": "audio/technical-report.json",
+      "technical_report_sha256": "750e6a2e77c299cef617300af6a93aa788ee0334e232f4681e5172b563df62e6",
+      "role_note_path": "audio/RESULTS-声音接点复核.md",
+      "role_note_quote": "两种采用母版分别核验，不能代签",
+      "AAC_role_evidence": "Final revised AAC uses the explicit new no-PNS baseline and codec envelope [78.2506667,82.24); this identifies aac_revised, not the baseline/v1/v3 comparison inputs."
+    }
+  }
 }
