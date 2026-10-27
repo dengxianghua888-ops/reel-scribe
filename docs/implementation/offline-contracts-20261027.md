@@ -8,7 +8,7 @@
 2. **R0 没有执行已配置的 writer 字节上限。** 合法配置12个普通槽位、1100字节上限时，原 R0 实际序列化片段为9239字节。共享已有尾部裁剪规则后，该反例 R0 为993、R1 为622字节，R1不超同一 R0 envelope；默认无显式上限的 R0 选择不变。选中高光独自超预算时两路径均拒绝，不悄悄删高光。这里测量的是实际 JSON `visual_pool` writer片段字节，不是整个提示、provider token、费用或总计算量相等。
 3. **同字节重取也必须核本次回执。** 生成账本的 VERIFIED 快路径曾接受 task/provider/job/output/response/checksum 身份错误的新回执并完成新 attempt，尽管原 canonical 链没有改变。共同身份检查先于快路径；验证原链后再次核本次回执及结果SHA，拒绝读取期间发生的已观测变更，任务、attempt、事件保持。这不承诺隔离任意非协作并发。复用原有账本与来源链，不新增生成状态机或缓存。
 4. **恢复与 OTIO 大部分已有保障。** 补充边界负例和跨入口字节恢复回归，不改变工作区/OTIO格式、安全与冲突语义或 `render_cache` 的 COMPLETE 原子发布。
-5. **包清单漏掉了现有模块。** 固定基线包在源码目录外以 `python -I` 导入 retrieval/OTIO readback 均报模块不存在。显式补齐13个既有film模块及本轮文档/直接引用测试，不修改这些模块实现；新增包迁移后的隔离导入回归，断言模块全部来自包目录。没有改格式、检查器或自动包含任意磁盘文件。
+5. **包清单漏掉了现有模块。** 固定基线包在源码目录外以 `python -I` 导入 retrieval/OTIO readback 均报模块不存在。显式补齐13个既有film模块及本轮文档/直接引用测试；其中retrieval的修改见前述，其余12个模块实现字节与基线一致。新增包迁移后的隔离导入回归，断言模块全部来自包目录。没有改格式、检查器或自动包含任意磁盘文件。
 
 ## 13组合同映射
 
@@ -36,7 +36,7 @@
 PYTHONPATH=tests/runtime python -m unittest test_generation_intents test_generation_budget_overflow -v
 ```
 
-上述测试需源码checkout和相应开发依赖；随包只保留本页直接引用的部分回归，不声明包含完整开发测试树。`tests/packaging/test_film_import_closure.py`另外验证两包迁移后的独立导入。全量 pytest、官方 OTIO 0.18.1 parser与静态检查以 PR 的精确提交 CI 结果为准，不用基线绿灯代签。结构、portable/plugin构建和隔离导入只证明包和链接/模块合同，不证明安装、真实编辑器或成片效果。
+上述测试需源码checkout和相应开发依赖；随包只保留本页直接引用的部分回归，不声明包含完整开发测试树。film子包的 `tests/test_package_import_closure.py` 另外验证两包迁移后的独立导入，需该子包已有的正式依赖，不能放在仅安装通用runtime依赖的测试环境。全量 pytest、官方 OTIO 0.18.1 parser与静态检查以 PR 的精确提交 CI 结果为准，不用基线绿灯代签。结构、portable/plugin构建和隔离导入只证明包和链接/模块合同，不证明安装、真实编辑器或成片效果。
 
 ## 仍未认证的内容
 
