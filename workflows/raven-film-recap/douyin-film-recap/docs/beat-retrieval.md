@@ -45,6 +45,43 @@ alternative supporting sets. It separates full-ranked candidate recall, writer
 pool recall and actual render-consumed support (UNKNOWN unless supplied).
 Empty gold is NOT_RUN. These diagnostics do not claim accuracy or quality gains.
 
-14 synthetic unittest cases cover 160+highlights accounting, real text envelopes,
+### Locate a missing supporting conjunction
+
+Use the existing benchmark's optional `indexed_unit_ids` for the current analyzed
+index and `planned_unit_ids={beat_id: set(unit_ids)}` for actual Storyboard choices.
+The optional consumption argument also accepts `{beat_id: set(unit_ids)}` from
+the actual EDL, joined to the current Storyboard's segment-to-Beat mapping. An
+observed empty set means no support was selected/consumed; an omitted argument
+or missing Beat key means UNKNOWN. Do not fill a missing trace from the plan.
+
+Each Beat now reports separate `layers` for `L1_ANALYSIS_INDEX`, `L2_RETRIEVAL`
+(the writer pool), `L3_PLANNING`, and `L4_CONSUMPTION`, with PRESENT / MISSING /
+UNKNOWN. `first_missing_layer` identifies the first missing layer only if all
+earlier layers are known present; otherwise it remains UNKNOWN. With a complete
+index but an incomplete writer pool, `retrieval_gap` distinguishes candidate
+filter/ranking omissions from writer-pool selection/budget omissions. It does
+not blame retrieval when the index itself is absent or unmeasured.
+
+The legacy global consumed-ID set retains `render_consumed_support`, but records
+`render_consumption_scope=global_unit_ids` and leaves the Beat's L4 UNKNOWN:
+another Beat using the same unit does not certify this Beat's consumption.
+Inputs must be derived from the current hash-bound artifacts. This helper only
+compares caller-provided unit-ID membership; it does not authenticate the traces,
+prove complete source-range consumption, or judge whether the pictures tell the
+story correctly. It does not change retrieval, generation or rendering.
+
+An explicit `visual_pool_text_budget` now trims the same ordinary tail in the
+actual R0 path as in R1's R0 reference. Unconfigured R0 is unchanged. Selected
+highlights remain appended, and highlights alone exceeding the cap still reject
+both paths. This cap measures the serialized `visual_pool` writer fragment,
+not the whole prompt or provider tokens.
+
+The original 14 synthetic unittest cases cover 160+highlights accounting, real text envelopes,
 instrumented token limits, Beat starvation, knowledge/source exclusions, wrong
 span exploration, conjunctive gold, negation and actual storyboard integration.
+Another 13 synthetic cases cover four-layer fault injection using a 120-minute,
+240-unit metadata fixture with early lexical lures, a late action and a reaction
+in the next shot. Action and reaction are one conjunctive gold set; lures are
+negative examples. Tests use valid configuration (at least 12 ordinary slots),
+the actual R0/R1 pool-building paths, and explicit writer-byte caps to inject
+retrieval omissions. No film/model/quality or same-token acceptance is claimed.

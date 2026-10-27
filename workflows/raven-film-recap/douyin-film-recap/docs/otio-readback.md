@@ -123,3 +123,21 @@ media-root paths before creating any directory. It rejects symlink components
 before canonical containment checks. A snapshot cannot be created inside the
 frozen export package, including its media directory; rejected capture leaves
 the package's original member set and checksums intact.
+
+### Offline media relocation checks
+
+The saved-branch tests explicitly distinguish a safe relative relocation with
+the same SHA from a replacement with the same name and different bytes. Missing
+media and old absolute media references return blocking findings even when the
+old absolute file still exists; capture does not guess a replacement path. A
+symlink inside an otherwise valid media root cannot supply a resource either.
+These negative captures preserve the exact saved OTIO bytes, capture no unsafe
+resource, and produce a conflict with no proposed adoption. They do not repair
+the host project or prove a particular NLE can relink the media.
+
+If the original saved file later becomes unavailable, `live_origin=UNKNOWN`
+describes only that observation gap. The verified snapshot may still yield a
+historical proposal for review; `adoption_performed=false`, `active_host_write=false`
+and `host_cas=false` remain in force. This is neither proof that a live edit was
+applied nor proof that the host project stayed unchanged. Existing same-field,
+timing-dependency and unknown-effect conflicts remain blocking.

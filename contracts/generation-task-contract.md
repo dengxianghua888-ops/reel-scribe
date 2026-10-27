@@ -2,6 +2,20 @@
 
 `generation-task` 使用本地 SQLite 保存预算、任务、费用预留、提交边界和事件。请求均含 `operation`, `action`, `store`；`store` 必须为绝对路径。动作及额外字段以 [派发代码](../runtime/generation_dispatch.py)的 `FIELDS` 为准。`task-create` 固定 `idempotency_key`、provider/model、kind、payload、预算上限和 Work 版本绑定；同键不同意图拒绝。
 
+## 恢复、复用与重新创作是不同意图
+
+| 用户意图 | 使用现有合同的动作 | 必须保持的边界 |
+|---|---|---|
+| 恢复同一任务 | 读取原 task/key，按提供商已声明的能力查询；下载失败只为同一 output 建新 output attempt | 不重新 submit，不把 `UNKNOWN` / `NOT_FOUND` 当作未受理，也不通过换 key 绕过未知提交。相同 key 和冻结参数返回同一 task；改参数不再是恢复 |
+| 指定已验收 SHA 的已有素材复用 | 重新读取并核对那份素材的实际 SHA，保留原 task/job/output、原响应、原 receipt 及原评审来源；由当前作品按既有[能力交接](capability-handoff.md)与 Work 修订合同接入该源 | 不发新的生成请求，不伪造新任务的 provider receipt。原 Work 的接受意见和 adoption gate 仅属于其原候选/版本；当前 Work 仍须自己的内容评审、读回与 CAS，不能继承旧作品的采用或交付结论 |
+| 相同提示词重新创作 | 记录明确的新创作意图，使用新 idempotency key 和新 task；新服务输出、回执与评审分别绑定新 task | 不是未知提交的恢复路径。提示词相同、甚至素材字节和候选文件 SHA 相同，也可能是两个真实的生成调用；以 task/job/output 和回执链区分，不能强求“新候选必须字节不同”或沿用旧 task 的评审代签 |
+
+本账本不根据相同 payload 全局去重，也不能从自然语言自行判定操作者新建 key 是重新创作还是错误重试；运行 Agent 必须在提交前根据用户意图与未闭合任务记录作上述区分。未知原任务仍保留原身份、预留和查证缺口，不能被新任务的成功覆盖。相同字节的再次取回也必须核验此次 receipt 自身的 task/provider/job/output/原响应身份；既有 canonical receipt 核验通过不能替代新重取 receipt 的身份检查。该检查不会重写原已验证结果链。
+
+同文件重取的快路径在核验旧 canonical 链后，再检查本次 receipt 与结果文件的 SHA，变化则返回 `RESULT_HASH_CHANGED`，不写入新的 COMPLETE attempt 或事件。它是记录边界的读回检查，不是持续文件锁或媒体内容认证。
+
+下述 gate 只核调用方传入的当前 Work token，返回 `READY_FOR_WORK_VERSION_CAS_ONLY`；它本身不读取当前 WorkStore，也不代表已完成当前作品采用。执行者须读真实当前作品、复核候选并进行 Work-version CAS 与采用后读回。`tests/runtime/test_generation_intents.py` 的 G1–G4 使用本地 synthetic adapter、真实 SQLite 与普通合成字节，验证上述提交/身份/拒绝合同；其中 Work token 断言不冒充真实媒体、当前工程提交、模型质量或真人验收。
+
 `submit` 在调用提供商前持久化 `SUBMISSION_UNKNOWN`。响应丢失、超时和崩溃后不能自动再次提交；`poll` 只在提供商支持同键或已知任务 ID 查询时使用，单纯 `NOT_FOUND` 不解除不确定状态。无查询能力则停在待人工核对；取消先记意图，有取消能力才调用适配器，之后仍需查询终态。服务端硬费用封顶、同键查询、任务 ID 查询和取消均为独立能力分支；缺少硬封顶时最大费用只是本地预留，实际费用可未知并保留预留。当前未注册真实媒体 ProviderAdapter，付费 `submit/poll/cancel` 返回 `PROVIDER_ADAPTER_NOT_CONFIGURED`。
 
 成功结果须通过 `result-record` 核服务输出身份、回执和本地文件哈希；随后用 `review-record` 绑定包含 `generation-candidate-review/1`、`ACCEPT` 或 `REJECT`、理由、候选哈希、输出 ID、结果及回执哈希的明确评审记录。`adoption-gate` 再核当前 Work 版本、候选、完整输出链和评审哈希，只返回 `READY_FOR_WORK_VERSION_CAS_ONLY`；真正采用须由现有 `timeline-revise` 校验并以 `work-version commit` 的 CAS 提交。任务成功、文件存在与评审记录都不表示已交付。

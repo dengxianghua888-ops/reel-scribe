@@ -715,13 +715,26 @@ class GenerationStore:
                     attempt["source_kind"] != receipt["source_kind"] or
                     attempt["source_ref"] != receipt["source_ref"]):
                 raise Conflict("RESULT_RECEIPT_ATTEMPT_MISMATCH")
-            if (task["state"] == "VERIFIED" and task["result_receipt_path"] == str(receipt_file)
-                    and task["result_receipt_sha256"] == receipt_sha256):
+            # Re-importing the same bytes still requires this receipt's own
+            # output identity; checking only the earlier canonical chain is insufficient.
+            if (receipt.get("task_id") != task_id or
+                    receipt.get("provider_id") != task["provider_id"] or
+                    receipt.get("provider_task_id") != task["provider_task_id"] or
+                    receipt.get("provider_output_id") != task["provider_output_id"] or
+                    receipt.get("provider_response_sha256") != task["provider_response_sha256"] or
+                    receipt.get("provider_output_checksum_sha256") != task["provider_output_checksum_sha256"] or
+                    str(Path(receipt.get("result_path", "")).resolve(strict=True)) != str(result_file)):
+                raise Conflict("RESULT_RECEIPT_OUTPUT_IDENTITY_MISMATCH")
+            same_receipt = (task["result_receipt_path"] == str(receipt_file)
+                            and task["result_receipt_sha256"] == receipt_sha256)
+            same_result = (task["result_path"] == str(result_file)
+                           and task["result_sha256"] == receipt["result_sha256"])
+            if task["state"] == "VERIFIED" and (same_receipt or same_result):
                 self._verify_result_chain(task,db)
-                return self._public(task)
-            if (task["state"] == "VERIFIED" and task["result_path"] == str(result_file)
-                    and task["result_sha256"] == receipt["result_sha256"]):
-                self._verify_result_chain(task,db)
+                if _sha_file(receipt_file) != receipt_sha256 or _sha_file(result_file) != receipt["result_sha256"]:
+                    raise Conflict("RESULT_HASH_CHANGED")
+                if same_receipt:
+                    return self._public(task)
                 if attempt["state"] != "STARTED":
                     raise Conflict("OUTPUT_ATTEMPT_ALREADY_TERMINAL")
                 db.execute("""UPDATE output_attempts SET state='COMPLETE',receipt_sha256=?,
@@ -737,14 +750,6 @@ class GenerationStore:
                 raise Conflict("PROVIDER_OUTPUT_IDENTITY_REQUIRED")
             if attempt["state"] != "STARTED":
                 raise Conflict("OUTPUT_ATTEMPT_ALREADY_TERMINAL")
-            if (receipt.get("task_id") != task_id or
-                    receipt.get("provider_id") != task["provider_id"] or
-                    receipt.get("provider_task_id") != task["provider_task_id"] or
-                    receipt.get("provider_output_id") != task["provider_output_id"] or
-                    receipt.get("provider_response_sha256") != task["provider_response_sha256"] or
-                    receipt.get("provider_output_checksum_sha256") != task["provider_output_checksum_sha256"] or
-                    str(Path(receipt.get("result_path", "")).resolve(strict=True)) != str(result_file)):
-                raise Conflict("RESULT_RECEIPT_OUTPUT_IDENTITY_MISMATCH")
             if _sha_file(task["provider_response_path"]) != task["provider_response_sha256"]:
                 raise Conflict("PROVIDER_RESPONSE_HASH_CHANGED")
             if _sha_file(receipt_file) != receipt_sha256 or _sha_file(result_file) != receipt["result_sha256"]:

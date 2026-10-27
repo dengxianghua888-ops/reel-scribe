@@ -333,8 +333,9 @@ def _build_visual_pool(
                                      scene_index, scene_analysis)
     method = config.format.visual_retrieval
     if method == "r0":
+        from .retrieval import _cap_writer_pool, writer_input_bytes
+        baseline = _cap_writer_pool(baseline, config.format.visual_pool_text_budget)
         if retrieval_report is not None:
-            from .retrieval import writer_input_bytes
             retrieval_report.update(method="r0-beat-stratified/1",
                 ordinary_count=sum(row["evidence_type"] != "highlight" for row in baseline),
                 highlight_append_count=sum(row["evidence_type"] == "highlight" for row in baseline),
