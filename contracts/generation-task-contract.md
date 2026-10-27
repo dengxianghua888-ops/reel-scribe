@@ -12,6 +12,8 @@
 
 媒体任务终态费用未知时保留预留。`billing-events` 读取该任务的账单事件；`billing-record` 另需 `task_id`、不可复用的 `event_key`、绝对 `evidence_path` 和 `evidence_sha256`。证据 JSON 使用 `generation-billing-evidence/1`，绑定 task ID、意图哈希、provider、model、币种、实际微单位费用及非空来源引用。首次结算释放预留并登记实际费用，后续修正只记差额，同键重复调用幂等；改写旧证据或同键换内容拒绝。凭证真实性须独立核实，哈希只绑定本地文件。服务端硬封顶违约会阻断 Work 采用，不能被本地账本更正静默放行。
 
+费用以非负有符号 64 位整数微单位保存。`poll` 的终态费用累计若超出 `2**63-1`，返回 `BUDGET_ACCOUNTING_OVERFLOW` 并回滚本次任务状态、事件和预留释放；此前其他任务已成功登记的费用不回滚。后续可查询修正后的有效观察，不重新提交生成任务。本规则防止 SQLite 把溢出整数运算转为浮点数，不自动修复历史损坏账本。
+
 `model-text-deepseek` 是独立的通用文本/function 接口。它支持 `budget-create`、`prepare`、`read`、`result`、`settle-cost` 和显式 `send-once`。`prepare` 通过绝对 `body_path` 与 `body_sha256` 读请求，避免将原文写入 operation request；内容写入权限受限的本地账本，并冻结提供商、端点、模型和请求。模型名由请求体指定，function tool call 只作为未信任数据返回，不执行工具。`send-once` 仅用官方 DeepSeek 端点和 `DEEPSEEK_API_KEY` 发起一次 Chat Completions 请求；调用前账本先记未知提交，之后不自动重试。自定义端点须由上层单独注入显式密钥和 `TextModelRegistry` 客户端，不继承官方环境密钥。`settle-cost` 用账单证据文件哈希、调用身份和幂等事件键进行显式结算或更正；证据真实性由调用方另行核实。其费用预留只有本地记账作用，不构成服务端硬上限，也不属于 W14 图像/视频生成 Provider。发送是付费动作，需单独明确授权和预算；本库未发起任何实网调用。
 
 `model-text` 是配置式文本/function Provider 入口，旧 `model-text-deepseek` 继续可用，但两套账本不自动迁移。默认 `deepseek-default` profile 使用官方 `https://api.deepseek.com`、`deepseek-flash` 与 `DEEPSEEK_API_KEY`；宿主可用 `EDITING_TEXT_PROVIDER_PROFILES_PATH` 指向绝对 JSON 文件，格式为 `{"schema":"model-text-profiles/1","profiles":[{"profile_id":"team-provider","provider_id":"team-provider","endpoint":"https://provider.example/v1","model":"configured-model","credential_env":"EDITING_TEXT_PROVIDER_API_KEY","allow_custom_endpoint":true}]}`。文件只含环境变量名；密钥值由宿主单独配置。自定义 HTTPS 端点必须显式允许，且不得接收 `DEEPSEEK_API_KEY`。profile 的提供商、端点、模型、密钥变量名与许可标记共同绑定哈希。

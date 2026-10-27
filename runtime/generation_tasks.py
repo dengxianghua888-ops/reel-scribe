@@ -510,6 +510,10 @@ class GenerationStore:
                        "COMPLETED_EMPTY" if observation.state == "SUCCEEDED" and observation.result_available is False else
                        "AWAITING_RESULT" if observation.state == "SUCCEEDED" else observation.state)
                 if actual is not None:
+                    budget = db.execute("SELECT spent_micros FROM budgets WHERE budget_key=?",
+                                        (task["budget_key"],)).fetchone()
+                    if not 0 <= budget["spent_micros"] + actual <= 2**63 - 1:
+                        raise GenerationError("BUDGET_ACCOUNTING_OVERFLOW")
                     db.execute("UPDATE budgets SET reserved_micros=reserved_micros-?,spent_micros=spent_micros+? WHERE budget_key=?",
                                (reserve,actual,task["budget_key"]))
                 db.execute("""UPDATE tasks SET state=?,provider_task_id=?,reserved_micros=?,
