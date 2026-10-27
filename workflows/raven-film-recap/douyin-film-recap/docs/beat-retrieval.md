@@ -79,9 +79,35 @@ not the whole prompt or provider tokens.
 The original 14 synthetic unittest cases cover 160+highlights accounting, real text envelopes,
 instrumented token limits, Beat starvation, knowledge/source exclusions, wrong
 span exploration, conjunctive gold, negation and actual storyboard integration.
-Another 13 synthetic cases cover four-layer fault injection using a 120-minute,
+Another 17 synthetic tests cover four-layer fault injection using a 120-minute,
 240-unit metadata fixture with early lexical lures, a late action and a reaction
 in the next shot. Action and reaction are one conjunctive gold set; lures are
 negative examples. Tests use valid configuration (at least 12 ordinary slots),
 the actual R0/R1 pool-building paths, and explicit writer-byte caps to inject
 retrieval omissions. No film/model/quality or same-token acceptance is claimed.
+
+### Optimization-plan case groups
+
+The optimization plan's cases L1–L4 are **case groups**, not the four diagnostic
+layer names above. The additional `test_retrieval_plan_cases.py` and frozen
+`tests/fixtures/retrieval-plan-v0.json` make that distinction explicit:
+
+- Case L1 compares the actual index/rank/pool/planned/consumed membership for
+  the late action A and next-shot reaction B under a budget which can hold both.
+- Case L2 places positive lexical-score lures at the start, middle and end.
+  Late C is a staged retelling, not evidence of the real action/reaction.
+  Selecting only distributed positions or only late C fails the unchanged AB
+  conjunctive gold even when C appears in the writer pool. Temporal spread and
+  lexical score are not semantic oracles.
+- Case L3 uses identical index, Beats, selected highlight and ordinary limit
+  for R0/R1, with a long summary, future-knowledge and other-source candidates.
+  The actual byte envelope cannot grow; exclusions and uncovered UNKNOWN remain
+  explicit. Duplicate scene/candidate IDs reject, rather than buying capacity;
+  ordinary, unique-pool and separately appended highlight counts are checked.
+- Case L4 uses the existing four-layer fault-injection tests: remove B from
+  analysis, pool, plan or consumption separately; empty gold is NOT_RUN and
+  absent consumption is UNKNOWN.
+
+The frozen summaries and gold are metadata-only contract inputs. The planned
+and consumed sets in these tests are synthetic traces, not evidence of a real
+writer or rendered film. Real-media/semantic acceptance remains NOT_RUN.

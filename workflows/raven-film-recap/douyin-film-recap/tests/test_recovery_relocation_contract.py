@@ -1,6 +1,7 @@
 """Byte-only cross-interface recovery: names do not replace member identity."""
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -74,6 +75,29 @@ class RecoveryRelocationContractTests(unittest.TestCase):
             self.assertEqual(w.read(restored / "09_storyboard.json")["sources"][0]["path"], str(source))
             with self.assertRaisesRegex(w.WorkspaceError, "LEGACY_MIGRATION_REQUIRED"):
                 w.preflight(restored)
+            for mutation in ("same-name-new-bytes", "missing-member"):
+                with self.subTest(mutation=mutation):
+                    damaged = base / mutation
+                    shutil.copytree(archive, damaged)
+                    member = damaged / "files" / rows[0]["path"]
+                    if mutation == "missing-member":
+                        member.unlink()
+                    else:
+                        raw = member.read_bytes()
+                        member.write_bytes(bytes([raw[0] ^ 1]) + raw[1:])
+                        self.assertEqual(member.stat().st_size, rows[0]["bytes"])
+                        self.assertNotEqual(w.sha(member), rows[0]["sha256"])
+                    target = base / (mutation + "-must-not-exist")
+                    rejected = subprocess.run([sys.executable, str(bundle / "recover.py"),
+                        "recover", "--archive", str(damaged), "--out", str(target)],
+                        capture_output=True, text=True, timeout=30)
+                    self.assertEqual(rejected.returncode, 2, rejected.stderr + rejected.stdout)
+                    rejection = json.loads(rejected.stdout)
+                    self.assertEqual(rejection["status"], "REJECTED")
+                    self.assertEqual(rejection["error"], "RECOVERY_MEMBER_MISMATCH")
+                    self.assertFalse(target.exists())
+            self.assertEqual(w.verify_archive(archive), manifest)
+            self.assertEqual({path: path.read_bytes() for path in originals}, originals)
 
 
 if __name__ == "__main__":

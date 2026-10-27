@@ -1,6 +1,6 @@
 # 生成任务与通用文本模型接口
 
-`generation-task` 使用本地 SQLite 保存预算、任务、费用预留、提交边界和事件。请求均含 `operation`, `action`, `store`；`store` 必须为绝对路径。动作及额外字段以 [派发代码](../runtime/generation_dispatch.py)的 `FIELDS` 为准。`task-create` 固定 `idempotency_key`、provider/model、kind、payload、预算上限和 Work 版本绑定；同键不同意图拒绝。
+`generation-task` 使用本地 SQLite 保存预算、任务、费用预留、提交边界和事件。请求均含 `operation`, `action`, `store`；`store` 必须为绝对路径。动作及额外字段以 [派发代码](../runtime/generation_dispatch.py)的必填 `FIELDS` 与显式可选字段校验为准。`task-create` 固定 `idempotency_key`、provider/model、kind、payload、预算上限和 Work 版本绑定；同键不同意图拒绝。
 
 ## 恢复、复用与重新创作是不同意图
 
@@ -14,7 +14,52 @@
 
 同文件重取的快路径在核验旧 canonical 链后，再检查本次 receipt 与结果文件的 SHA，变化则返回 `RESULT_HASH_CHANGED`，不写入新的 COMPLETE attempt 或事件。它是记录边界的读回检查，不是持续文件锁或媒体内容认证。
 
-下述 gate 只核调用方传入的当前 Work token，返回 `READY_FOR_WORK_VERSION_CAS_ONLY`；它本身不读取当前 WorkStore，也不代表已完成当前作品采用。执行者须读真实当前作品、复核候选并进行 Work-version CAS 与采用后读回。`tests/runtime/test_generation_intents.py` 的 G1–G4 使用本地 synthetic adapter、真实 SQLite 与普通合成字节，验证上述提交/身份/拒绝合同；其中 Work token 断言不冒充真实媒体、当前工程提交、模型质量或真人验收。
+下述 gate 只核调用方传入的当前 Work token，返回 `READY_FOR_WORK_VERSION_CAS_ONLY`；它本身不读取当前 WorkStore，也不代表已完成当前作品采用。执行者须读真实当前作品、复核候选并进行 Work-version CAS 与采用后读回。`tests/runtime/test_generation_intents.py` 的 G1–G4 使用本地 synthetic adapter、真实 SQLite 与普通合成字节；token-only断言不作真实当前工程提交证据，另列Work SQLite/CAS/readback案例使用明确声明的synthetic媒体元数据，不认证真实探测、模型质量、宿主或真人验收。
+
+## 指定结果 SHA 的显式复用 gate
+
+旧 `adoption-gate` 的任务 Work binding 完全保留。省略 `reuse` 时仍要求当前 Work 与原生成任务的 work_id/version/document_sha256 一致；不能把原任务挪到新Work或较新版本后冒称通过。需要把已验收源用于当前另一版本/Work时，仍使用**同一个** `adoption-gate`，额外显式传 `reuse`；不新建生成任务，不制造新的 provider receipt，不绕过gate走普通source提交。
+
+请求原必填 `task_id,current_work,candidate_path,candidate_sha256` 不变。仅此action允许可选 `reuse`，精确字段为：
+
+以下是字段示意，实际请求及review文件须为UTF-8 JSON对象，不能将示意中的中文说明或YAML写法直接当JSON提交。
+
+```text
+reuse: {
+  intent: "reuse-verified-result",
+  result_sha256: 明确选定的原结果SHA,
+  result_receipt_sha256: 原canonical结果回执SHA,
+  origin_candidate_sha256: 原ACCEPT记录的候选SHA,
+  origin_review_sha256: 原ACCEPT记录及其实际评审文件SHA,
+  review_path: 当前目标用途评审的绝对文件路径,
+  review_sha256: 当前目标用途评审文件SHA
+}
+```
+
+显式 `reuse:null`、多余/缺失字段、非法SHA或非法target Work三元组均拒绝，不能默默退回旧分支。`current_work` 是已从当前作品读到的target `{work_id,version,document_sha256}`；work_id及两个SHA均严格校验。当前候选继续使用原 `work-candidate/1` 五字段 `schema,base_version,base_document_sha256,document,scope`，不增加新Work格式。候选base须匹配target，document必须实际引用原已验证结果path/SHA；scope和当前真实Work冲突仍由既有Work提交端再核。
+
+当前用途评审是独立只读文件，格式为 `generation-reuse-review/1`，精确字段：
+
+```text
+schema: generation-reuse-review/1
+task_id: 原source任务ID
+result_sha256: 同一明确结果pin
+result_receipt_sha256: 同一原结果回执SHA
+origin_candidate_sha256: 同一原候选SHA
+origin_review_sha256: 同一原ACCEPT评审SHA
+target_work: 本次current_work三元组
+candidate_sha256: 当前目标候选SHA
+decision: ACCEPT 或 REJECT
+rationale: 非空、针对当前用途的理由
+```
+
+该新文件不能用旧 `generation-candidate-review/1` 代替，也不经 `review-record` 覆写原来源评审。原candidate_reviews唯一性不放宽；即使素材/候选字节相同，当前用途的不同review仍有自己的文件SHA。它记录复杂层的明确声明，不认证真人身份、真实看听或用途语义正确。
+
+显式分支在现有SQLite写事务中重验原task/job/output/原响应/结果receipt/attempt/result全链，固定结果与回执pin，并从原candidate_reviews查原ACCEPT、核实际原review文件的task/candidate/result/receipt/output关系。新review再绑定这些原pins、target token与当前候选SHA。返回前重核来源链及原review、新review、当前候选字节；可观察漂移即拒绝，失败不改变task、预算、原reviews、events或Work头。错误区分 `REUSE_RESULT_PIN_MISMATCH`、`ORIGIN_ACCEPTED_REVIEW_REQUIRED`、`ORIGIN_REVIEW_HASH_CHANGED`、`REUSE_REVIEW_HASH_CHANGED`、`REUSE_REVIEW_BINDING_MISMATCH`、`EXPLICIT_REUSE_ACCEPTED_REVIEW_REQUIRED` 与原候选/base/来源冲突，不把失败当新生成机会。
+
+成功只在原task_events追加 `reuse_gate_checked`，绑定原来源pins、target、当前candidate与新review SHA，保持task、预算、原结果/评审不变。相同绑定在 `BEGIN IMMEDIATE` 内按确定性key去重；重复调用/重开先完整重核，再返回同一检查身份，不重复audit或submit。同SHA的candidate/review安全迁址不改变该身份；新的合法review SHA属于新绑定。已有audit不能跳过源/证据/target复核，检查后的可写文件仍须由实际采用环节按合同读回，不能把边界SHA检查称为持续文件锁。
+
+返回仍为 `generation-adoption-gate/1`、`READY_FOR_WORK_VERSION_CAS_ONLY`、`publishable:false`；显式结果另给原 `source_work_binding`、origin review/candidate pins和 `reuse_audit_key`，`expected_work`绑定当前target。调用方必须真实read当前Work → 形成受限candidate并评审 → gate → 原work-version commit的expected_version CAS → 采用后readback。gate不自动读当前WorkStore或移动其头；若准备后当前Work变化，原CAS仍以 `WORK_VERSION_CONFLICT` 拒绝。
 
 `submit` 在调用提供商前持久化 `SUBMISSION_UNKNOWN`。响应丢失、超时和崩溃后不能自动再次提交；`poll` 只在提供商支持同键或已知任务 ID 查询时使用，单纯 `NOT_FOUND` 不解除不确定状态。无查询能力则停在待人工核对；取消先记意图，有取消能力才调用适配器，之后仍需查询终态。服务端硬费用封顶、同键查询、任务 ID 查询和取消均为独立能力分支；缺少硬封顶时最大费用只是本地预留，实际费用可未知并保留预留。当前未注册真实媒体 ProviderAdapter，付费 `submit/poll/cancel` 返回 `PROVIDER_ADAPTER_NOT_CONFIGURED`。
 
