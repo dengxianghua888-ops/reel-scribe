@@ -67,11 +67,15 @@ rationale: 非空、针对当前用途的理由
 
 提供商成功且有输出时，必须先保存原始服务响应文件及 SHA-256，并记录 provider task ID、output ID 和可选服务端输出 SHA-256；缺身份时保留 `OUTPUT_UNKNOWN`，不能凭任意本地文件进入 `AWAITING_RESULT`。`output-attempt-begin` 接受 `task_id`、`attempt_key`、`source_kind`（`provider-download` 或 `explicit-import`）与非空 `source_ref`，只对已冻结的同一 output 记一次 `STARTED`；`output-attempt-fail` 以 `error_code` 记录失败，`output-attempts` 读取历史。重取输出建立新 attempt，绝不再次 `submit`。
 
+ProviderObservation 的 `result_available` 只接受布尔 `true`、`false` 或未知 `null`，不转换字符串、数字或容器。非法类型返回 `PROVIDER_RESULT_AVAILABILITY_INVALID`，在改变状态、费用预留、账单与事件之前拒绝；可在重开账本后继续查询原任务，不重新提交。`null` 与成功但缺输出身份仍保持 `OUTPUT_UNKNOWN`，明确 `false` 的成功结果才是 `COMPLETED_EMPTY`。
+
 `result-record` 接收 `receipt_path`、`receipt_sha256` 而非任意文件路径。`generation-output-receipt/1` 必须绑定 attempt key、task/provider/job/output ID、响应哈希、可选服务摘要、来源类型/引用、结果绝对路径与文件哈希；任务核当前尝试及全链才转 `VERIFIED`。无服务摘要时标 `LOCAL_FIRST_BASELINE`，有服务摘要且一致时标 `PROVIDER_SHA256`。`generation-candidate-review/1` 还须绑定结果回执 SHA 和 output ID，采用前重核响应、尝试、回执与媒体文件。真正 HTTP 下载和服务响应解析需由选定媒体 Provider 适配器实现；显式导入仅是操作者对来源的声明，不是服务认证。
 
 媒体任务终态费用未知时保留预留。`billing-events` 读取该任务的账单事件；`billing-record` 另需 `task_id`、不可复用的 `event_key`、绝对 `evidence_path` 和 `evidence_sha256`。证据 JSON 使用 `generation-billing-evidence/1`，绑定 task ID、意图哈希、provider、model、币种、实际微单位费用及非空来源引用。首次结算释放预留并登记实际费用，后续修正只记差额，同键重复调用幂等；改写旧证据或同键换内容拒绝。凭证真实性须独立核实，哈希只绑定本地文件。服务端硬封顶违约会阻断 Work 采用，不能被本地账本更正静默放行。
 
 费用以非负有符号 64 位整数微单位保存。`poll` 的终态费用累计若超出 `2**63-1`，返回 `BUDGET_ACCOUNTING_OVERFLOW` 并回滚本次任务状态、事件和预留释放；此前其他任务已成功登记的费用不回滚。后续可查询修正后的有效观察，不重新提交生成任务。本规则防止 SQLite 把溢出整数运算转为浮点数，不自动修复历史损坏账本。
+
+媒体、配置式文本及旧 DeepSeek 三个账本的费用结算，均从同一次读取的 UTF-8 字节校验调用方 SHA 并解析金额；不能校验一份字节后另读文件消费另一金额。幂等返回与写入前再次观察文件摘要，已变化则以 `BILLING_EVIDENCE_HASH_MISMATCH` 拒绝且保持本次账本不变。既有凭证真实性、历史证据、差额修正、未知提交与费用溢出规则保持；边界读回不是持续文件锁或对恶意同 UID 进程的隔离保证。
 
 `model-text-deepseek` 是独立的通用文本/function 接口。它支持 `budget-create`、`prepare`、`read`、`result`、`settle-cost` 和显式 `send-once`。`prepare` 通过绝对 `body_path` 与 `body_sha256` 读请求，避免将原文写入 operation request；内容写入权限受限的本地账本，并冻结提供商、端点、模型和请求。模型名由请求体指定，function tool call 只作为未信任数据返回，不执行工具。`send-once` 仅用官方 DeepSeek 端点和 `DEEPSEEK_API_KEY` 发起一次 Chat Completions 请求；调用前账本先记未知提交，之后不自动重试。自定义端点须由上层单独注入显式密钥和 `TextModelRegistry` 客户端，不继承官方环境密钥。`settle-cost` 用账单证据文件哈希、调用身份和幂等事件键进行显式结算或更正；证据真实性由调用方另行核实。其费用预留只有本地记账作用，不构成服务端硬上限，也不属于 W14 图像/视频生成 Provider。发送是付费动作，需单独明确授权和预算；本库未发起任何实网调用。
 

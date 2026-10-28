@@ -336,9 +336,12 @@ class TextCallStore:
         if not isinstance(event_key,str) or not event_key:
             raise ModelTextError("BILLING_EVENT_KEY_REQUIRED")
         path=Path(evidence_path).resolve(strict=True)
-        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=evidence_sha256:
+        if not path.is_file():
             raise ModelTextError("BILLING_EVIDENCE_HASH_MISMATCH")
-        evidence=json.loads(path.read_text(encoding="utf-8"))
+        evidence_bytes=path.read_bytes()
+        if hashlib.sha256(evidence_bytes).hexdigest()!=evidence_sha256:
+            raise ModelTextError("BILLING_EVIDENCE_HASH_MISMATCH")
+        evidence=json.loads(evidence_bytes.decode("utf-8"))
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
             row=db.execute("SELECT * FROM calls WHERE call_id=?",(call_id,)).fetchone()
@@ -359,6 +362,8 @@ class TextCallStore:
             if old:
                 if (old["call_id"],old["evidence_sha256"],old["actual_cost_micros"]) != (call_id,evidence_sha256,amount):
                     raise ModelTextError("BILLING_EVENT_KEY_CONFLICT")
+                if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=evidence_sha256:
+                    raise ModelTextError("BILLING_EVIDENCE_HASH_MISMATCH")
                 return {"call_id":call_id,"event_key":event_key,"idempotent":True,"actual_cost_micros":amount}
             for prior in db.execute("SELECT evidence_path,evidence_sha256 FROM billing_events WHERE call_id=?",(call_id,)):
                 previous_file=Path(prior["evidence_path"])
@@ -368,6 +373,8 @@ class TextCallStore:
             delta=amount-(previous["actual_cost_micros"] if previous else 0)
             if not 0<=budget["spent_micros"]+delta<=2**63-1:
                 raise ModelTextError("BUDGET_ACCOUNTING_OVERFLOW")
+            if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=evidence_sha256:
+                raise ModelTextError("BILLING_EVIDENCE_HASH_MISMATCH")
             db.execute("UPDATE budgets SET reserved_micros=reserved_micros-?,spent_micros=spent_micros+? WHERE budget_key=?",
                        (row["reservation_micros"] if previous is None else 0,delta,row["budget_key"]))
             db.execute("INSERT INTO billing_events(event_key,call_id,evidence_path,evidence_sha256,actual_cost_micros,recorded_at) VALUES(?,?,?,?,?,datetime('now'))",

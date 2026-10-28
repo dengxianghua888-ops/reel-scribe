@@ -793,6 +793,7 @@
     "styles/vlog-journey/voices-of-event.md",
     "styles/vlog-journey/weather-as-character.md",
     "tests/packaging/test_mcp_cancellation.py",
+    "tests/runtime/test_billing_evidence_bytes.py",
     "tests/runtime/test_generation_budget_overflow.py",
     "tests/runtime/test_generation_intents.py",
     "tests/runtime/test_sqlite_failures.py",

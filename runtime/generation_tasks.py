@@ -447,6 +447,8 @@ class GenerationStore:
             return self.get(task_id)
         if observation.state not in ("UNKNOWN","NOT_FOUND","QUEUED","RUNNING","SUCCEEDED","FAILED","CANCELLED"):
             raise GenerationError("PROVIDER_STATE_INVALID")
+        if observation.result_available is not None and type(observation.result_available) is not bool:
+            raise GenerationError("PROVIDER_RESULT_AVAILABILITY_INVALID")
         if observation.provider_task_id is not None:
             _external_id(observation.provider_task_id,"PROVIDER_TASK_ID")
         if observation.output_id is not None:
@@ -633,9 +635,12 @@ class GenerationStore:
         _word(event_key,"BILLING_EVENT_KEY")
         _hash(evidence_sha256,"BILLING_EVIDENCE_SHA256")
         path=Path(evidence_path).resolve(strict=True)
-        if not path.is_file() or _sha_file(path) != evidence_sha256:
+        if not path.is_file():
             raise Conflict("BILLING_EVIDENCE_HASH_MISMATCH")
-        evidence=json.loads(path.read_text(encoding="utf-8"))
+        evidence_bytes=path.read_bytes()
+        if _sha_bytes(evidence_bytes) != evidence_sha256:
+            raise Conflict("BILLING_EVIDENCE_HASH_MISMATCH")
+        evidence=json.loads(evidence_bytes.decode("utf-8"))
         with self._write() as db:
             task=self._task(db,task_id)
             if task["submit_attempts"] != 1 or task["state"] in ACTIVE or task["state"] == "CREATED":
@@ -656,6 +661,8 @@ class GenerationStore:
                 if (existing["task_id"],existing["evidence_sha256"],existing["actual_cost_micros"]) != (
                         task_id,evidence_sha256,amount):
                     raise Conflict("BILLING_EVENT_KEY_CONFLICT")
+                if not path.is_file() or _sha_file(path) != evidence_sha256:
+                    raise Conflict("BILLING_EVIDENCE_HASH_MISMATCH")
                 return {"task_id":task_id,"event_key":event_key,"actual_cost_micros":amount,
                         "idempotent":True}
             for prior in db.execute("SELECT evidence_path,evidence_sha256 FROM billing_events WHERE task_id=?",
@@ -670,6 +677,8 @@ class GenerationStore:
             release=task["reserved_micros"] if previous is None else 0
             if budget["spent_micros"]+delta < 0 or budget["spent_micros"]+delta > 2**63-1:
                 raise GenerationError("BUDGET_ACCOUNTING_OVERFLOW")
+            if not path.is_file() or _sha_file(path) != evidence_sha256:
+                raise Conflict("BILLING_EVIDENCE_HASH_MISMATCH")
             db.execute("UPDATE budgets SET reserved_micros=reserved_micros-?,spent_micros=spent_micros+? WHERE budget_key=?",
                        (release,delta,task["budget_key"]))
             violation=bool(task["hard_cost_cap"] and amount>task["max_cost_micros"])
