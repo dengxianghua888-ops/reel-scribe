@@ -45,6 +45,19 @@ def writer_input_bytes(pool) -> int:
     return len(json.dumps({"visual_pool": pool}, ensure_ascii=False, indent=2).encode("utf-8"))
 
 
+def _cap_writer_pool(pool, text_byte_budget):
+    """Preserve selected highlights; trim ordinary tail only for an explicit cap."""
+    if text_byte_budget is None:
+        return pool
+    highlights = [row for row in pool if row.get("evidence_type") == "highlight"]
+    ordinary = [row for row in pool if row.get("evidence_type") != "highlight"]
+    if writer_input_bytes(highlights) > text_byte_budget:
+        raise ValueError("Selected highlights alone exceed the writer byte budget")
+    while ordinary and writer_input_bytes(ordinary + highlights) > text_byte_budget:
+        ordinary.pop()
+    return ordinary + highlights
+
+
 def _terms(text: str) -> set[str]:
     result = set(re.findall(r"[a-z0-9]+", text.lower()))
     for run in re.findall(r"[\u3400-\u9fff]+", text):
@@ -116,11 +129,8 @@ def rerank_visual_pool(
         raise ValueError("Duplicate retrieval unit or beat ID")
     highlights = [row for row in r0_pool if row.get("evidence_type") == "highlight"]
     baseline = [row for row in r0_pool if row.get("evidence_type") != "highlight"][:ordinary_limit]
-    if text_byte_budget is not None:
-        if writer_input_bytes(highlights) > text_byte_budget:
-            raise ValueError("Selected highlights alone exceed the writer byte budget")
-        while baseline and writer_input_bytes(baseline + highlights) > text_byte_budget:
-            baseline.pop()
+    bounded = _cap_writer_pool(baseline + highlights, text_byte_budget)
+    baseline = [row for row in bounded if row.get("evidence_type") != "highlight"]
     requested_ordinary_limit = ordinary_limit
     ordinary_limit = min(ordinary_limit, len(baseline))
     r0 = baseline + highlights
@@ -229,11 +239,16 @@ def rerank_visual_pool(
 
 
 def benchmark_supporting_spans(r0_pool, r1: RetrievalResult, gold: dict[str, list[list[str]]],
-                               consumed_unit_ids: set[str] | None = None) -> dict:
+                               consumed_unit_ids: set[str] | dict[str, set[str]] | None = None,
+                               *, indexed_unit_ids: set[str] | None = None,
+                               planned_unit_ids: dict[str, set[str]] | None = None) -> dict:
     """Gold alternatives are disjunctions; IDs within each alternative are conjunctive.
 
     Missing gold never turns into zero failures or an apparent quality improvement.
-    Writer selection and actual render consumption remain separate measurements.
+    Index, writer pool, per-Beat plan and consumption are separate measurements.
+    Omitted inputs or missing Beat traces are UNKNOWN, not empty observations.
+    Legacy global consumption retains its metric, but cannot certify Beat L4.
+    IDs are caller-provided observations, not independent semantic verification.
     """
     baseline_ids = {row["unit_id"] for row in r0_pool}
     ranked = r1.provenance["per_beat_rankings"]
@@ -243,11 +258,32 @@ def benchmark_supporting_spans(r0_pool, r1: RetrievalResult, gold: dict[str, lis
         if not alternatives or any(not group for group in alternatives):
             raise ValueError("Gold must contain nonempty supporting conjunctions")
         def hit(ids):
-            return any(set(group) <= ids for group in alternatives)
+            return any(set(group) <= set(ids) for group in alternatives) if ids is not None else None
         retrieved = {row["unit_id"] for row in ranked.get(beat_id, [])}
+        indexed = hit(indexed_unit_ids)
+        writer = hit(chosen)
+        planned = hit(planned_unit_ids.get(beat_id)) if planned_unit_ids is not None else None
+        per_beat_consumption = isinstance(consumed_unit_ids, dict)
+        consumed = hit(consumed_unit_ids.get(beat_id) if per_beat_consumption else consumed_unit_ids)
+        layers = {name: "UNKNOWN" if value is None else "PRESENT" if value else "MISSING"
+                  for name, value in (
+                      ("L1_ANALYSIS_INDEX", indexed), ("L2_RETRIEVAL", writer),
+                      ("L3_PLANNING", planned),
+                      ("L4_CONSUMPTION", consumed if per_beat_consumption else None))}
+        first_missing = "NONE"
+        for layer, status in layers.items():
+            if status != "PRESENT":
+                first_missing = "UNKNOWN" if status == "UNKNOWN" else layer
+                break
         metrics[beat_id] = {"r0_support_recalled":hit(baseline_ids),
-            "r1_candidates_recalled":hit(retrieved), "r1_writer_pool_recalled":hit(chosen),
-            "render_consumed_support":hit(consumed_unit_ids) if consumed_unit_ids is not None else None}
+            "r1_candidates_recalled":hit(retrieved), "r1_writer_pool_recalled":writer,
+            "analyzed_index_support":indexed, "planned_support":planned,
+            "render_consumed_support":consumed,
+            "render_consumption_scope":"per_beat" if per_beat_consumption else
+                "global_unit_ids" if consumed_unit_ids is not None else "unobserved",
+            "layers":layers, "first_missing_layer":first_missing,
+            "retrieval_gap":None if indexed is not True or writer else
+                "writer_pool_selection_or_budget" if hit(retrieved) else "candidate_filter_or_ranking"}
     return {"schema_version":"retrieval-benchmark/1", "gold_beats":len(gold), "per_beat":metrics,
             "quality_status":"synthetic_gold_only" if gold else "NOT_RUN",
             "fairness":{key:r1.provenance[key] for key in (

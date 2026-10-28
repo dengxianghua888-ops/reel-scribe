@@ -36,13 +36,16 @@ def execute(request, directory=None, tools=None, adapter_registry=None):
     if action not in FIELDS:
         raise GenerationError("GENERATION_ACTION_UNSUPPORTED")
     expected = {"operation", "action", "store"} | FIELDS[action]
-    if set(request) != expected:
+    optional = {"reuse"} if action == "adoption-gate" else set()
+    if not expected <= set(request) or not set(request) <= expected | optional:
         raise GenerationError("GENERATION_REQUEST_FIELDS_INVALID")
     store_path = Path(request["store"])
     if not store_path.is_absolute():
         raise GenerationError("ABSOLUTE_GENERATION_STORE_REQUIRED")
     store = GenerationStore(store_path)
     fields = {key: request[key] for key in FIELDS[action]}
+    if "reuse" in request:
+        fields["reuse"] = request["reuse"]
     if action == "budget-create":
         return store.create_budget(**fields)
     if action == "task-create":
@@ -75,6 +78,5 @@ def execute(request, directory=None, tools=None, adapter_registry=None):
         return store.record_review(fields["task_id"], fields["candidate_path"],
                                    fields["candidate_sha256"], fields["review_path"], fields["review_sha256"])
     if action == "adoption-gate":
-        return store.adoption_gate(fields["task_id"], fields["current_work"],
-                                   fields["candidate_path"], fields["candidate_sha256"])
+        return store.adoption_gate(**fields)
     raise AssertionError(action)

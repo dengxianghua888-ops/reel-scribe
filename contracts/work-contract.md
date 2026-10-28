@@ -39,6 +39,8 @@ style_bindings 是创作记录，不是自动生效的滤镜/节奏宏。真正�
 
 author 为 agent 或 human，表示提交来源声明，不能把测试注入写成真实用户操作。版本令牌绑定 work_id、递增sequence与文档哈希；内容恢复相同也不会使旧候选重新有效。锁冲突返回 WORK_BUSY，无盲目自动覆盖或重试。
 
+`commit` 从同一次 UTF-8 候选字节读取核对请求 SHA 并解析文档；范围检查完成后、追加 revision 前再次检查该文件摘要。候选发生可观察变化则拒绝且不移动 Work 头，也不追加采用记录，不能在记录候选 A 的 SHA 时消费候选 B。该读回不替代当前版本 CAS、范围校验或真实媒体评审，也不是持续文件锁。
+
 `relocations` 为非空数组，每项严格为 `{style_key,from:{path,sha256},to:{path,sha256}}`。key 必须已存在且不重复，from 必须逐字段匹配当前文档 card，to 只能是不同的规范绝对路径和同一 SHA 的已备妥普通文件；不允许 symlink、改卡语义/version/parameters 或其它字段。旧 from 文件可已丢失/被替换，不据此更新原 expected SHA。锁内 CAS、目标字节两次核查和路径之外文档完全一致检查通过后，沿同 work_id 追加 seq+1；不改旧行、不 init 新作品。回执 `resource_binding_validation=HASH_MATCHED`、`media_validation=NOT_RUN`、`semantic_review=NOT_RUN`、`protection_validation.validated_this_operation=false`；保护字段字节保持不等于覆盖重验通过。新令牌使旧候选、宿主/媒体绑定和交付选择失效，不删除旧输出或事件。
 
 `restore.style_resource_relocations` 使用同一数组，from 绑定 **目标历史文档** 的 card。只变换目标副本 path，随后照旧完整 validate_document（媒体、字幕、叠层、音轨和保护）；任何失败均不追加版本。没传参数时不自动搜索或替换历史引用。历史内容与旧令牌不因迁移重新生效；不要把受控 validator 的测试成功称为真实恢复通过。

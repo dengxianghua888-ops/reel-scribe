@@ -123,3 +123,59 @@ media-root paths before creating any directory. It rejects symlink components
 before canonical containment checks. A snapshot cannot be created inside the
 frozen export package, including its media directory; rejected capture leaves
 the package's original member set and checksums intact.
+
+### Offline media relocation checks
+
+The saved-branch tests explicitly distinguish a safe relative relocation with
+the same SHA from a replacement with the same name and different bytes. Missing
+media and old absolute media references return blocking findings even when the
+old absolute file still exists; capture does not guess a replacement path. A
+symlink inside an otherwise valid media root cannot supply a resource either.
+These negative captures preserve the exact saved OTIO bytes, capture no unsafe
+resource, and produce a conflict with no proposed adoption. They do not repair
+the host project or prove a particular NLE can relink the media.
+
+If the original saved file later becomes unavailable, `live_origin=UNKNOWN`
+describes only that observation gap. The verified snapshot may still yield a
+historical proposal for review; `adoption_performed=false`, `active_host_write=false`
+and `host_cas=false` remain in force. This is neither proof that a live edit was
+applied nor proof that the host project stayed unchanged. Existing same-field,
+timing-dependency and unknown-effect conflicts remain blocking.
+
+## Host validation record template
+
+Current host acceptance is **NOT_RUN**: no named NLE/version has been selected or
+accessed for these offline contracts. Copy the following record into the existing
+task report when an authorized host is available. Leave actual results and
+evidence blank until observed; an official OTIO parser test or a byte-only
+fixture cannot fill a host result. This is a report template, not a new exchange
+format, automated adoption path, or requirement to install an editor now.
+
+| Record field | Actual value |
+|---|---|
+| Test date and operator | |
+| Host product, exact version and build | |
+| OS/version/architecture; importer/exporter or adapter version | |
+| Repository commit; export ID and export-binding SHA256 | |
+| Base Storyboard SHA256; package checksum manifest SHA256 | |
+| Authorized media resource IDs and SHA256; explicit media root | |
+| Saved project/OTIO identity and SHA256 before and after reopen | |
+| Requested edit, permitted fields/ranges, protected fields | |
+| Re-exported OTIO/snapshot/proposal identities and SHA256 | |
+| Affected audio/video output identities and SHA256 | |
+
+| Check | Actual result / evidence | Status |
+|---|---|---|
+| Import into the named host: tracks, media references, frame/sample rates and gaps | | NOT_RUN |
+| Save to a new host project, close, reopen and verify the saved state | | NOT_RUN |
+| Compare export/track/occurrence/resource IDs across saved reopen, including repeated sources | | NOT_RUN |
+| Exercise one explicitly supported timing edit; record intended and actual source/target ranges | | NOT_RUN |
+| Re-export and capture a new saved branch; compare expected fields and non-target preservation | | NOT_RUN |
+| Check ID-loss, same-field conflict and unknown-effect cases remain unadopted | | NOT_RUN |
+| Inspect the affected rendered picture and audio with exact covered time ranges | | NOT_RUN |
+| Record unresolved losses, conflicts, unsupported fields and any failed/partial step | | NOT_RUN |
+
+A supported timing proposal still needs fresh current-version checks, explicit
+mapping and affected QC before any later adoption. A host reopen does not certify
+rendered audio/video equivalence; a rendered excerpt does not certify the whole
+film. Keep engineering, host interchange and human audiovisual results separate.

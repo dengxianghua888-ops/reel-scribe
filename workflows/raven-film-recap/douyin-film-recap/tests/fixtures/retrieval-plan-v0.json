@@ -1,0 +1,31 @@
+{
+  "source_duration_sec": 7200,
+  "unit_count": 240,
+  "unit_duration_sec": 30,
+  "beat_id": "late_action_then_reaction",
+  "gold": {
+    "late_action_then_reaction": [["u0180", "u0181"]]
+  },
+  "gold_observations": [
+    {"unit_id": "u0180", "start": 5400, "end": 5430, "visible_facts": ["keeper releases brass seal then door unlocks"]},
+    {"unit_id": "u0181", "start": 5430, "end": 5460, "visible_facts": ["witness recoils at unlocked door after seal release"]}
+  ],
+  "time_dispersed_lures": [
+    {"unit_id": "u0000", "start": 0, "end": 30, "visible_facts": ["keeper releases brass seal then witness recoils at unlocked door in a rehearsal; the real seal stays closed"]},
+    {"unit_id": "u0120", "start": 3600, "end": 3630, "visible_facts": ["keeper releases brass seal then witness recoils at unlocked door in another rehearsal; no real unlock occurs"]},
+    {"unit_id": "u0239", "start": 7170, "end": 7200, "visible_facts": ["keeper releases brass seal then witness recoils at unlocked door in a staged retelling; this does not show the real unlock"]}
+  ],
+  "budget_and_knowledge": {
+    "ordinary_limit": 12,
+    "long_unit_id": "u0200",
+    "long_text_fragment": "seal release witness reaction ",
+    "long_text_repetitions": 1000,
+    "future_unit_id": "u0230",
+    "future_event_id": "future_reveal",
+    "future_visible_facts": ["keeper releases brass seal then witness recoils; future identity is revealed"],
+    "foreign_unit_id": "u0231",
+    "foreign_visible_facts": ["keeper releases brass seal then witness recoils in a different source"],
+    "selected_highlight_id": "h-keep"
+  },
+  "scope": "Synthetic metadata contract fixture. Temporal position and lexical score are not semantic gold. No media, model quality, token parity or human acceptance."
+}

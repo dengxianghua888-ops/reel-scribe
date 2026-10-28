@@ -245,6 +245,77 @@ class SavedReadbackTests(unittest.TestCase):
         self.assertEqual(proposal["status"], "CONFLICT")
         self.assertIn("SOURCE_ID_BYTES_DRIFTED", {p["code"] for p in proposal["conflicts"]})
 
+    def test_missing_and_old_absolute_media_refs_are_not_relinked(self):
+        before = {path: path.read_bytes() for path in (
+            self.work / "09_storyboard.json", self.work / "state.json")}
+        package_before = {path.relative_to(self.package): path.read_bytes()
+                          for path in self.package.rglob("*") if path.is_file()}
+        outside = self.root / "outside-media"
+        outside.mkdir()
+        for scenario in ("missing", "old-absolute", "file-url", "parent-escape"):
+            with self.subTest(scenario=scenario):
+                document = deepcopy(self.otio)
+                for reference in r._references(document):
+                    original = self.package / reference["target_url"]
+                    self.assertTrue(original.is_file())
+                    escaped = outside / original.name
+                    escaped.write_bytes(original.read_bytes())
+                    reference["target_url"] = {
+                        "missing": "missing/" + original.name,
+                        "old-absolute": str(original),
+                        "file-url": original.as_uri(),
+                        "parent-escape": "../outside-media/" + escaped.name,
+                    }[scenario]
+                outside_before = {path: path.read_bytes() for path in outside.iterdir()}
+                raw = x.canonical(document)
+                self.host.write_bytes(raw)
+                snapshot = self.root / scenario
+                r.capture_saved_snapshot(self.host, snapshot, export_package=self.package,
+                                         media_root=self.package)
+                manifest = r.verify_saved_snapshot(snapshot)
+                self.assertEqual(manifest["resources"], {})
+                self.assertTrue(manifest["findings"])
+                if scenario != "missing":
+                    self.assertTrue(all(row["detail"]["reason"] == "UNSAFE_PACKAGE_PATH"
+                                        for row in manifest["findings"]))
+                self.assertEqual((snapshot / "saved.otio").read_bytes(), raw)
+                proposal = r.propose_saved_readback(self.package, self.work, snapshot)
+                self.assertEqual(proposal["status"], "CONFLICT")
+                self.assertIn("UNRESOLVED_OR_UNSAFE_MEDIA_REFERENCE",
+                              {p["code"] for p in proposal["conflicts"]})
+                self.assertFalse(proposal["proposed_changes"])
+                self.assertFalse(proposal["adoption_performed"])
+                self.assertFalse(proposal["active_host_write"])
+                self.assertFalse(proposal["host_cas"])
+                self.assertEqual(self.host.read_bytes(), raw)
+                self.assertEqual(before, {path: path.read_bytes() for path in before})
+                x.verify_package(self.package)
+                self.assertEqual(package_before, {path.relative_to(self.package): path.read_bytes()
+                    for path in self.package.rglob("*") if path.is_file()})
+                self.assertEqual(outside_before, {path: path.read_bytes() for path in outside.iterdir()})
+
+    def test_symlinked_media_directory_cannot_supply_snapshot_resources(self):
+        media_root = self.root / "media-root"
+        media_root.mkdir()
+        (media_root / "linked").symlink_to(self.package / "media", target_is_directory=True)
+        for reference in r._references(self.otio):
+            reference["target_url"] = "linked/" + Path(reference["target_url"]).name
+        raw = x.canonical(self.otio)
+        self.capture(media_root=media_root)
+        snapshot = self.root / "snapshot"
+        manifest = r.verify_saved_snapshot(snapshot)
+        self.assertEqual(manifest["resources"], {})
+        self.assertTrue(manifest["findings"])
+        self.assertTrue(all(row["detail"]["reason"] == "SYMLINK_REJECTED"
+                            for row in manifest["findings"]))
+        self.assertFalse((snapshot / "resources").exists())
+        self.assertEqual((snapshot / "saved.otio").read_bytes(), raw)
+        proposal = self.propose()
+        self.assertEqual(proposal["status"], "CONFLICT")
+        self.assertFalse(proposal["proposed_changes"])
+        self.assertFalse(proposal["adoption_performed"])
+        x.verify_package(self.package)
+
     def test_saved_origin_diverges_after_capture(self):
         self.capture()
         self.host.write_bytes(self.host.read_bytes() + b"\n")

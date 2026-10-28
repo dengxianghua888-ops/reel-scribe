@@ -3,6 +3,7 @@
 These operations never select clips, infer intent, or choose editorial treatments.
 """
 import copy
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -376,13 +377,18 @@ def work_version(request,directory,tools):
             else:
                 require(request['expected_version']==current['version'],'WORK_VERSION_CONFLICT')
                 if action=='commit':
-                    candidate_ref=source(request['candidate']);bundle=json.loads(Path(candidate_ref['path']).read_text())
+                    candidate_ref=source(request['candidate'])
+                    candidate_bytes=Path(candidate_ref['path']).read_bytes()
+                    require(hashlib.sha256(candidate_bytes).hexdigest()==candidate_ref['sha256'],
+                            'SOURCE_HASH_MISMATCH: '+candidate_ref['path'])
+                    bundle=json.loads(candidate_bytes.decode('utf-8'))
                     exact_keys(bundle,['schema','base_version','base_document_sha256','document','scope'],['schema','base_version','base_document_sha256','document','scope'])
                     require(bundle['schema']=='work-candidate/1','CANDIDATE_SCHEMA_UNSUPPORTED')
                     require(bundle['base_version']==current['version'] and bundle['base_document_sha256']==current['document_sha256'],'CANDIDATE_BASE_CONFLICT')
                     diff=revision_diff(current['document'],bundle['document'],bundle['scope'],tools)
                     require(diff['document_sha256']!=current['document_sha256'],'NO_CHANGE_TO_COMMIT')
                     drama_report=check_drama(bundle['document'],current['document'],current['version'])
+                    require(source(request['candidate'])==candidate_ref,'CANDIDATE_CHANGED_DURING_VALIDATION')
                     state=append(db,current,bundle['document'],'commit',request['message'],request['author'],
                         {'diff':diff,'candidate':candidate_ref,**({'drama_attachment_validation':drama_report} if drama_report else {})})
                     result={**state,'action':'commit','diff':diff}

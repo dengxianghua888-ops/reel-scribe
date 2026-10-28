@@ -19,6 +19,7 @@ from uuid import uuid4
 SCHEMA_VERSION = 4
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 ACTIVE = frozenset(("SUBMISSION_UNKNOWN", "QUEUED", "RUNNING", "OUTPUT_UNKNOWN"))
+_REUSE_UNSET = object()
 
 
 class GenerationError(ValueError):
@@ -446,6 +447,8 @@ class GenerationStore:
             return self.get(task_id)
         if observation.state not in ("UNKNOWN","NOT_FOUND","QUEUED","RUNNING","SUCCEEDED","FAILED","CANCELLED"):
             raise GenerationError("PROVIDER_STATE_INVALID")
+        if observation.result_available is not None and type(observation.result_available) is not bool:
+            raise GenerationError("PROVIDER_RESULT_AVAILABILITY_INVALID")
         if observation.provider_task_id is not None:
             _external_id(observation.provider_task_id,"PROVIDER_TASK_ID")
         if observation.output_id is not None:
@@ -632,9 +635,12 @@ class GenerationStore:
         _word(event_key,"BILLING_EVENT_KEY")
         _hash(evidence_sha256,"BILLING_EVIDENCE_SHA256")
         path=Path(evidence_path).resolve(strict=True)
-        if not path.is_file() or _sha_file(path) != evidence_sha256:
+        if not path.is_file():
             raise Conflict("BILLING_EVIDENCE_HASH_MISMATCH")
-        evidence=json.loads(path.read_text(encoding="utf-8"))
+        evidence_bytes=path.read_bytes()
+        if _sha_bytes(evidence_bytes) != evidence_sha256:
+            raise Conflict("BILLING_EVIDENCE_HASH_MISMATCH")
+        evidence=json.loads(evidence_bytes.decode("utf-8"))
         with self._write() as db:
             task=self._task(db,task_id)
             if task["submit_attempts"] != 1 or task["state"] in ACTIVE or task["state"] == "CREATED":
@@ -655,6 +661,8 @@ class GenerationStore:
                 if (existing["task_id"],existing["evidence_sha256"],existing["actual_cost_micros"]) != (
                         task_id,evidence_sha256,amount):
                     raise Conflict("BILLING_EVENT_KEY_CONFLICT")
+                if not path.is_file() or _sha_file(path) != evidence_sha256:
+                    raise Conflict("BILLING_EVIDENCE_HASH_MISMATCH")
                 return {"task_id":task_id,"event_key":event_key,"actual_cost_micros":amount,
                         "idempotent":True}
             for prior in db.execute("SELECT evidence_path,evidence_sha256 FROM billing_events WHERE task_id=?",
@@ -669,6 +677,8 @@ class GenerationStore:
             release=task["reserved_micros"] if previous is None else 0
             if budget["spent_micros"]+delta < 0 or budget["spent_micros"]+delta > 2**63-1:
                 raise GenerationError("BUDGET_ACCOUNTING_OVERFLOW")
+            if not path.is_file() or _sha_file(path) != evidence_sha256:
+                raise Conflict("BILLING_EVIDENCE_HASH_MISMATCH")
             db.execute("UPDATE budgets SET reserved_micros=reserved_micros-?,spent_micros=spent_micros+? WHERE budget_key=?",
                        (release,delta,task["budget_key"]))
             violation=bool(task["hard_cost_cap"] and amount>task["max_cost_micros"])
@@ -715,13 +725,26 @@ class GenerationStore:
                     attempt["source_kind"] != receipt["source_kind"] or
                     attempt["source_ref"] != receipt["source_ref"]):
                 raise Conflict("RESULT_RECEIPT_ATTEMPT_MISMATCH")
-            if (task["state"] == "VERIFIED" and task["result_receipt_path"] == str(receipt_file)
-                    and task["result_receipt_sha256"] == receipt_sha256):
+            # Re-importing the same bytes still requires this receipt's own
+            # output identity; checking only the earlier canonical chain is insufficient.
+            if (receipt.get("task_id") != task_id or
+                    receipt.get("provider_id") != task["provider_id"] or
+                    receipt.get("provider_task_id") != task["provider_task_id"] or
+                    receipt.get("provider_output_id") != task["provider_output_id"] or
+                    receipt.get("provider_response_sha256") != task["provider_response_sha256"] or
+                    receipt.get("provider_output_checksum_sha256") != task["provider_output_checksum_sha256"] or
+                    str(Path(receipt.get("result_path", "")).resolve(strict=True)) != str(result_file)):
+                raise Conflict("RESULT_RECEIPT_OUTPUT_IDENTITY_MISMATCH")
+            same_receipt = (task["result_receipt_path"] == str(receipt_file)
+                            and task["result_receipt_sha256"] == receipt_sha256)
+            same_result = (task["result_path"] == str(result_file)
+                           and task["result_sha256"] == receipt["result_sha256"])
+            if task["state"] == "VERIFIED" and (same_receipt or same_result):
                 self._verify_result_chain(task,db)
-                return self._public(task)
-            if (task["state"] == "VERIFIED" and task["result_path"] == str(result_file)
-                    and task["result_sha256"] == receipt["result_sha256"]):
-                self._verify_result_chain(task,db)
+                if _sha_file(receipt_file) != receipt_sha256 or _sha_file(result_file) != receipt["result_sha256"]:
+                    raise Conflict("RESULT_HASH_CHANGED")
+                if same_receipt:
+                    return self._public(task)
                 if attempt["state"] != "STARTED":
                     raise Conflict("OUTPUT_ATTEMPT_ALREADY_TERMINAL")
                 db.execute("""UPDATE output_attempts SET state='COMPLETE',receipt_sha256=?,
@@ -737,14 +760,6 @@ class GenerationStore:
                 raise Conflict("PROVIDER_OUTPUT_IDENTITY_REQUIRED")
             if attempt["state"] != "STARTED":
                 raise Conflict("OUTPUT_ATTEMPT_ALREADY_TERMINAL")
-            if (receipt.get("task_id") != task_id or
-                    receipt.get("provider_id") != task["provider_id"] or
-                    receipt.get("provider_task_id") != task["provider_task_id"] or
-                    receipt.get("provider_output_id") != task["provider_output_id"] or
-                    receipt.get("provider_response_sha256") != task["provider_response_sha256"] or
-                    receipt.get("provider_output_checksum_sha256") != task["provider_output_checksum_sha256"] or
-                    str(Path(receipt.get("result_path", "")).resolve(strict=True)) != str(result_file)):
-                raise Conflict("RESULT_RECEIPT_OUTPUT_IDENTITY_MISMATCH")
             if _sha_file(task["provider_response_path"]) != task["provider_response_sha256"]:
                 raise Conflict("PROVIDER_RESPONSE_HASH_CHANGED")
             if _sha_file(receipt_file) != receipt_sha256 or _sha_file(result_file) != receipt["result_sha256"]:
@@ -812,8 +827,10 @@ class GenerationStore:
             return dict(db.execute("SELECT * FROM candidate_reviews WHERE task_id=? AND candidate_sha256=?",
                                    (task_id,candidate_sha256)).fetchone())
 
-    def adoption_gate(self, task_id, current_work, candidate_path, candidate_sha256):
+    def adoption_gate(self, task_id, current_work, candidate_path, candidate_sha256, *, reuse=_REUSE_UNSET):
         """Validate a Work candidate; does not commit or claim user acceptance."""
+        if reuse is not _REUSE_UNSET:
+            return self._reuse_adoption_gate(task_id, current_work, candidate_path, candidate_sha256, reuse)
         _hash(candidate_sha256,"CANDIDATE_SHA256")
         candidate_file=Path(candidate_path).resolve(strict=True)
         if _sha_file(candidate_file) != candidate_sha256:
@@ -865,3 +882,144 @@ class GenerationStore:
                     "expected_work":expected,
                     "status":"READY_FOR_WORK_VERSION_CAS_ONLY","publishable":False,
                     "note":"Caller must recheck this gate and use work-version commit CAS; no media or human review is implied."}
+
+    def _reuse_adoption_gate(self, task_id, current_work, candidate_path, candidate_sha256, reuse):
+        """Check an explicitly pinned source for a separately reviewed target; never adopt it."""
+        fields = {"intent", "result_sha256", "result_receipt_sha256", "origin_candidate_sha256",
+                  "origin_review_sha256", "review_path", "review_sha256"}
+        if (not isinstance(reuse, dict) or set(reuse) != fields or
+                reuse.get("intent") != "reuse-verified-result" or
+                not isinstance(current_work, dict) or
+                set(current_work) != {"work_id", "version", "document_sha256"}):
+            raise GenerationError("REUSE_INTENT_INVALID")
+        reuse, target = dict(reuse), dict(current_work)
+        try:
+            _word(target["work_id"], "WORK_ID")
+            _hash(target["version"], "WORK_VERSION")
+            _hash(target["document_sha256"], "WORK_DOCUMENT_SHA256")
+            for key in fields - {"intent", "review_path"}:
+                _hash(reuse[key], "REUSE_" + key.upper())
+            if (not isinstance(reuse["review_path"], str) or "\x00" in reuse["review_path"] or
+                    not Path(reuse["review_path"]).is_absolute()):
+                raise GenerationError("REUSE_REVIEW_PATH_INVALID")
+            _hash(candidate_sha256, "CANDIDATE_SHA256")
+        except (GenerationError, TypeError, ValueError) as exc:
+            raise GenerationError("REUSE_INTENT_INVALID") from exc
+
+        def bound_bytes(path, expected, error):
+            try:
+                data = Path(path).read_bytes()
+            except OSError as exc:
+                raise Conflict(error) from exc
+            if _sha_bytes(data) != expected:
+                raise Conflict(error)
+            return data
+
+        def bound_json(path, expected, hash_error, format_error):
+            data = bound_bytes(path, expected, hash_error)
+            try:
+                value = json.loads(data)
+            except (ValueError, UnicodeDecodeError) as exc:
+                raise GenerationError(format_error) from exc
+            if not isinstance(value, dict):
+                raise GenerationError(format_error)
+            return value
+
+        with self._write() as db:
+            candidate = bound_json(candidate_path, candidate_sha256,
+                                   "CANDIDATE_HASH_MISMATCH", "CANDIDATE_INVALID")
+            proof = bound_json(reuse["review_path"], reuse["review_sha256"],
+                               "REUSE_REVIEW_HASH_CHANGED", "REUSE_REVIEW_INVALID")
+            task = self._task(db, task_id)
+            if task["state"] != "VERIFIED" or task["cancel_requested"]:
+                raise NotReady("TASK_RESULT_NOT_ADOPTABLE")
+            if (task["hard_cost_cap"] and task["actual_cost_micros"] is not None and
+                    task["actual_cost_micros"] > task["max_cost_micros"]):
+                raise NotReady("PROVIDER_HARD_COST_CAP_VIOLATION")
+            self._verify_result_chain(task, db)
+            if (reuse["result_sha256"] != task["result_sha256"] or
+                    reuse["result_receipt_sha256"] != task["result_receipt_sha256"]):
+                raise Conflict("REUSE_RESULT_PIN_MISMATCH")
+            origin = db.execute("SELECT * FROM candidate_reviews WHERE task_id=? AND candidate_sha256=?",
+                                (task_id, reuse["origin_candidate_sha256"])).fetchone()
+            if (origin is None or origin["decision"] != "ACCEPT" or
+                    origin["review_sha256"] != reuse["origin_review_sha256"]):
+                raise NotReady("ORIGIN_ACCEPTED_REVIEW_REQUIRED")
+            original = bound_json(origin["review_path"], origin["review_sha256"],
+                                  "ORIGIN_REVIEW_HASH_CHANGED", "ORIGIN_REVIEW_BINDING_MISMATCH")
+            if (original.get("schema") != "generation-candidate-review/1" or
+                    original.get("task_id") != task_id or
+                    original.get("candidate_sha256") != reuse["origin_candidate_sha256"] or
+                    original.get("decision") != "ACCEPT" or
+                    origin["result_sha256"] != task["result_sha256"] or
+                    original.get("result_sha256") != task["result_sha256"] or
+                    original.get("result_receipt_sha256") != task["result_receipt_sha256"] or
+                    original.get("provider_output_id") != task["provider_output_id"] or
+                    not isinstance(original.get("rationale"), str) or not original["rationale"].strip()):
+                raise Conflict("ORIGIN_REVIEW_BINDING_MISMATCH")
+            if (set(candidate) != {"schema", "base_version", "base_document_sha256", "document", "scope"} or
+                    candidate.get("schema") != "work-candidate/1" or
+                    candidate.get("base_version") != target["version"] or
+                    candidate.get("base_document_sha256") != target["document_sha256"]):
+                raise Conflict("CANDIDATE_BASE_CONFLICT")
+
+            def references_result(value):
+                if isinstance(value, dict):
+                    return (value.get("path") == task["result_path"] and
+                            value.get("sha256") == task["result_sha256"] or
+                            any(references_result(item) for item in value.values()))
+                return isinstance(value, list) and any(references_result(item) for item in value)
+
+            if not references_result(candidate["document"]):
+                raise Conflict("CANDIDATE_DOES_NOT_REFERENCE_VERIFIED_RESULT")
+            proof_fields = {"schema", "task_id", "result_sha256", "result_receipt_sha256",
+                            "origin_candidate_sha256", "origin_review_sha256", "target_work",
+                            "candidate_sha256", "decision", "rationale"}
+            if (set(proof) != proof_fields or proof.get("schema") != "generation-reuse-review/1" or
+                    proof.get("decision") not in ("ACCEPT", "REJECT") or
+                    not isinstance(proof.get("rationale"), str) or not proof["rationale"].strip()):
+                raise GenerationError("REUSE_REVIEW_INVALID")
+            expected = {key: reuse[key] for key in ("result_sha256", "result_receipt_sha256",
+                        "origin_candidate_sha256", "origin_review_sha256")}
+            expected.update(task_id=task_id, target_work=target, candidate_sha256=candidate_sha256)
+            if any(proof.get(key) != value for key, value in expected.items()):
+                raise Conflict("REUSE_REVIEW_BINDING_MISMATCH")
+            if proof["decision"] != "ACCEPT":
+                raise NotReady("EXPLICIT_REUSE_ACCEPTED_REVIEW_REQUIRED")
+            # Existing audits never bypass revalidation. Recheck all byte-bound
+            # inputs before the audit boundary; this is not a persistent file lock.
+            self._verify_result_chain(task, db)
+            bound_bytes(origin["review_path"], origin["review_sha256"], "ORIGIN_REVIEW_HASH_CHANGED")
+            bound_bytes(reuse["review_path"], reuse["review_sha256"], "REUSE_REVIEW_HASH_CHANGED")
+            bound_bytes(candidate_path, candidate_sha256, "CANDIDATE_HASH_MISMATCH")
+            audit_binding = {**expected, "review_sha256": reuse["review_sha256"]}
+            audit_key = _sha_bytes(_canonical(audit_binding).encode("utf-8"))
+            # Serialize validation and deduplication in the same existing write transaction.
+            prior = False
+            for row in db.execute("SELECT detail_json FROM task_events WHERE task_id=? AND action=?",
+                                  (task_id, "reuse_gate_checked")):
+                detail = json.loads(row["detail_json"])
+                if detail.get("reuse_audit_key") == audit_key:
+                    if detail.get("binding") != audit_binding:
+                        raise Conflict("REUSE_AUDIT_BINDING_CHANGED")
+                    prior = True
+            if not prior:
+                self._event(db, task_id, "reuse_gate_checked", task["state"], task["state"], {
+                    "reuse_audit_key": audit_key, "binding": audit_binding,
+                    "review_path": str(Path(reuse["review_path"]).resolve()),
+                    "candidate_path": str(Path(candidate_path).resolve()),
+                    "status": "READY_FOR_WORK_VERSION_CAS_ONLY"})
+            source_work = {"work_id": task["work_id"], "version": task["work_version"],
+                           "document_sha256": task["work_document_sha256"]}
+            return {"schema": "generation-adoption-gate/1", "task_id": task_id,
+                    "intent_sha256": task["intent_sha256"], "result_sha256": task["result_sha256"],
+                    "provider_task_id": task["provider_task_id"], "provider_output_id": task["provider_output_id"],
+                    "provider_response_sha256": task["provider_response_sha256"],
+                    "result_receipt_sha256": task["result_receipt_sha256"],
+                    "result_hash_source": task["result_hash_source"], "candidate_sha256": candidate_sha256,
+                    "review_sha256": reuse["review_sha256"], "expected_work": target,
+                    "reuse_intent": reuse["intent"], "source_work_binding": source_work,
+                    "origin_candidate_sha256": reuse["origin_candidate_sha256"],
+                    "origin_review_sha256": reuse["origin_review_sha256"], "reuse_audit_key": audit_key,
+                    "status": "READY_FOR_WORK_VERSION_CAS_ONLY", "publishable": False,
+                    "note": "Caller must read the actual Work and use work-version CAS; no adoption or human/media review is implied."}

@@ -58,6 +58,8 @@ python /fixed/recovery-B/recover.py recover --archive /task/.migrations/INTENT \
 
 恢复先核清单与成员，目标必须全新且在原任务/归档之外；拒绝链接、缺失、重复、漂移成员与已有目标。复制后再次核归档和目标字节、成员集合。回执仅写 stdout，避免覆盖同名恢复成员。状态为 `RECOVERED_BYTES_ONLY`，不重新认证来源、passed 阶段、QC、创作质量或继续生产权限。
 
+同名的外部派生产物仍按各自完整原路径的摘要进入不同 `external/<path-digest>/` 成员，不能因文件名相同混用字节。恢复到新目录保持成员 SHA，也保持旧 JSON 中的原绝对引用；它不是自动重连。源媒体引用不随恢复重新认证，旧 Schema 的 passed 值只是被保全的历史字节，新生产代际仍须按当前身份重算。安全的同 SHA 媒体迁移与错误字节、缺媒体、旧绝对路径、软链和并发冲突的读回边界，另见[OTIO 保存分支合同](../workflows/raven-film-recap/douyin-film-recap/docs/otio-readback.md#offline-media-relocation-checks)；该合同也不执行 NLE 写入或自动采用。
+
 | 入口 | v1 | v2 | 未知 Schema |
 |---|---|---|---|
 | 固定 B | inspect、向全新目标 recover | inspect、按恢复清单 recover | 写入前拒绝 |

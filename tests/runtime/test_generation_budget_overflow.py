@@ -1,4 +1,5 @@
 """Offline billing observations must preserve integer accounting atomically."""
+import hashlib
 from pathlib import Path
 import sys
 import tempfile
@@ -114,6 +115,61 @@ class GenerationBudgetOverflowTests(unittest.TestCase):
             self.assertEqual(store.budget('shared')['reserved_micros'], 2)
             self.assertEqual(store.budget('shared')['spent_micros'], 0)
             self.assertEqual(adapter.submits, 2)
+
+    def test_invalid_result_availability_preserves_ledger_and_original_task_recovery(self):
+        for state in ('RUNNING', 'SUCCEEDED', 'FAILED'):
+            for value in ('false', 'true', 0, 1, 0.0, [], {}, b'false'):
+                with self.subTest(state=state, value=value), tempfile.TemporaryDirectory() as directory:
+                    adapter = BillingAdapter()
+                    store, tasks = self.make_running_tasks(directory, adapter)
+                    queries = []
+
+                    def invalid_query(**kwargs):
+                        queries.append(kwargs['provider_task_id'])
+                        return ProviderObservation(state, provider_task_id=kwargs['provider_task_id'],
+                            result_available=value, actual_cost_micros=1)
+
+                    adapter.query = invalid_query
+                    before = (store.budget('shared'), store.get(tasks[0]), store.events(tasks[0]))
+                    with self.assertRaisesRegex(GenerationError, '^PROVIDER_RESULT_AVAILABILITY_INVALID$'):
+                        store.poll(tasks[0], adapter)
+                    self.assertEqual(before, (store.budget('shared'), store.get(tasks[0]),
+                                              store.events(tasks[0])))
+
+                    reopened = GenerationStore(store.path)
+
+                    def valid_query(**kwargs):
+                        queries.append(kwargs['provider_task_id'])
+                        return ProviderObservation('SUCCEEDED',
+                            provider_task_id=kwargs['provider_task_id'], result_available=False,
+                            actual_cost_micros=1)
+
+                    adapter.query = valid_query
+                    self.assertEqual(reopened.poll(tasks[0], adapter)['state'], 'COMPLETED_EMPTY')
+                    self.assertEqual(queries, ['task/first', 'task/first'])
+                    self.assertEqual(reopened.budget('shared')['reserved_micros'], 1)
+                    self.assertEqual(reopened.budget('shared')['spent_micros'], 1)
+                    reopened.submit_once(tasks[0], adapter)
+                    self.assertEqual(adapter.submits, 2)  # Only the two original fixture tasks.
+
+    def test_boolean_and_unknown_output_observations_keep_existing_semantics(self):
+        for available, complete, expected in ((None, False, 'OUTPUT_UNKNOWN'),
+                (True, False, 'OUTPUT_UNKNOWN'), (False, False, 'COMPLETED_EMPTY'),
+                (True, True, 'AWAITING_RESULT')):
+            with self.subTest(available=available, complete=complete), tempfile.TemporaryDirectory() as directory:
+                adapter = BillingAdapter()
+                store, tasks = self.make_running_tasks(directory, adapter)
+                response = Path(directory) / 'response.json'
+                response.write_bytes(b'{"synthetic":true}')
+                adapter.query = lambda **kwargs: ProviderObservation('SUCCEEDED',
+                    provider_task_id=kwargs['provider_task_id'], result_available=available,
+                    actual_cost_micros=1, output_id='output/one' if complete else None,
+                    response_path=str(response) if complete else None,
+                    response_sha256=hashlib.sha256(response.read_bytes()).hexdigest() if complete else None)
+                self.assertEqual(store.poll(tasks[0], adapter)['state'], expected)
+                unresolved = expected == 'OUTPUT_UNKNOWN'
+                self.assertEqual(store.budget('shared')['reserved_micros'], 2 if unresolved else 1)
+                self.assertEqual(store.budget('shared')['spent_micros'], 0 if unresolved else 1)
 
 
 if __name__ == '__main__':
