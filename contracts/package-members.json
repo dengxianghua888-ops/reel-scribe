@@ -799,6 +799,7 @@
     "tests/runtime/test_sqlite_failures.py",
     "tests/runtime/test_still_deadline.py",
     "tests/runtime/test_video_duration_fields.py",
+    "tests/runtime/test_work_candidate_bytes.py",
     "workflows/raven-commerce-story/SKILL.md",
     "workflows/raven-commerce-story/references/claims-and-truth.md",
     "workflows/raven-commerce-story/references/demonstration-claims.md",
