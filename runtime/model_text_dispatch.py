@@ -55,9 +55,10 @@ def execute(request, directory=None, tools=None):
         body_path=Path(request["body_path"])
         if not body_path.is_absolute() or not body_path.is_file():
             raise ModelTextError("ABSOLUTE_BODY_FILE_REQUIRED")
-        if hashlib.sha256(body_path.read_bytes()).hexdigest()!=request["body_sha256"]:
+        body_bytes = body_path.read_bytes()
+        if hashlib.sha256(body_bytes).hexdigest()!=request["body_sha256"]:
             raise ModelTextError("BODY_HASH_MISMATCH")
-        body=json.loads(body_path.read_text(encoding="utf-8"))
+        body=json.loads(body_bytes.decode("utf-8"))
         return store.prepare(request["intent_key"],body,profile,request["budget_key"],
                              request["reservation_micros"])
     frozen=store.read(request["call_id"])

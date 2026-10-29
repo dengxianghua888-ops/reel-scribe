@@ -4,11 +4,12 @@ Prompt bodies live in caller-owned files and the private call ledger, rather tha
 being copied into the public operation request or receipt. Send is a distinct
 action and is never run by prepare/read/result.
 """
+import hashlib
 import json
 from pathlib import Path
 
 from deepseek_text import DeepSeekCallStore, DeepSeekTextClient, DeepSeekError
-from editing_runtime import exact_keys, sha256
+from editing_runtime import exact_keys
 
 
 def execute(request, directory=None, tools=None):
@@ -40,9 +41,10 @@ def execute(request, directory=None, tools=None):
         body_path = Path(request['body_path'])
         if not body_path.is_absolute() or not body_path.is_file():
             raise DeepSeekError('ABSOLUTE_BODY_FILE_REQUIRED')
-        if sha256(body_path) != request['body_sha256']:
+        body_bytes = body_path.read_bytes()
+        if hashlib.sha256(body_bytes).hexdigest() != request['body_sha256']:
             raise DeepSeekError('BODY_HASH_MISMATCH')
-        body = json.loads(body_path.read_text(encoding='utf-8'))
+        body = json.loads(body_bytes.decode('utf-8'))
         return store.prepare(request['intent_key'], body, request['budget_key'],
                              request['reservation_micros'])
     if action == 'read':
