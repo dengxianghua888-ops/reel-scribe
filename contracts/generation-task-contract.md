@@ -79,7 +79,11 @@ ProviderObservation 的 `result_available` 只接受布尔 `true`、`false` 或�
 
 费用以非负有符号 64 位整数微单位保存。`poll` 的终态费用累计若超出 `2**63-1`，返回 `BUDGET_ACCOUNTING_OVERFLOW` 并回滚本次任务状态、事件和预留释放；此前其他任务已成功登记的费用不回滚。后续可查询修正后的有效观察，不重新提交生成任务。本规则防止 SQLite 把溢出整数运算转为浮点数，不自动修复历史损坏账本。
 
+媒体、配置式文本及旧 DeepSeek 三个账本的费用结算，即使相同 event_key 幂等重放，也会核验该 task/call 历史事件记录的原 evidence_path/SHA。任一原凭证缺失或变化返回 `PRIOR_BILLING_EVIDENCE_CHANGED`，不改已入账金额、预留、事件或提交次数。原凭证完整时，同一凭证字节在另一条重试路径仍可重放；新路径不能隐去原记录的漂移。同键不同身份/内容的 `BILLING_EVENT_KEY_CONFLICT` 优先级保持，不能以重放绕过历史核验，也不会为修复历史而自动重新生成。
+
 媒体、配置式文本及旧 DeepSeek 三个账本的费用结算，均从同一次读取的 UTF-8 字节校验调用方 SHA 并解析金额；不能校验一份字节后另读文件消费另一金额。幂等返回与写入前再次观察文件摘要，已变化则以 `BILLING_EVIDENCE_HASH_MISMATCH` 拒绝且保持本次账本不变。既有凭证真实性、历史证据、差额修正、未知提交与费用溢出规则保持；边界读回不是持续文件锁或对恶意同 UID 进程的隔离保证。
+
+旧 `model-text-deepseek/send-once` 与配置式入口一致，先读取原调用状态；已是 `UNKNOWN_SUBMISSION` 或 `COMPLETE` 时仅返回原账本状态，不构造HTTP客户端、不读取密钥、不增加预留或重发。不存在的调用返回 `CALL_NOT_FOUND`。仍处于 `PREPARED` 的新发送保留原凭据和显式付费授权要求；此返回不是服务端结果查询或恢复未知服务响应。
 
 `model-text-deepseek` 是独立的通用文本/function 接口。它支持 `budget-create`、`prepare`、`read`、`result`、`settle-cost` 和显式 `send-once`。`prepare` 通过绝对 `body_path` 与 `body_sha256` 读请求，避免将原文写入 operation request；内容写入权限受限的本地账本，并冻结提供商、端点、模型和请求。模型名由请求体指定，function tool call 只作为未信任数据返回，不执行工具。`send-once` 仅用官方 DeepSeek 端点和 `DEEPSEEK_API_KEY` 发起一次 Chat Completions 请求；调用前账本先记未知提交，之后不自动重试。自定义端点须由上层单独注入显式密钥和 `TextModelRegistry` 客户端，不继承官方环境密钥。`settle-cost` 用账单证据文件哈希、调用身份和幂等事件键进行显式结算或更正；证据真实性由调用方另行核实。其费用预留只有本地记账作用，不构成服务端硬上限，也不属于 W14 图像/视频生成 Provider。发送是付费动作，需单独明确授权和预算；本库未发起任何实网调用。
 

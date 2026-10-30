@@ -300,20 +300,20 @@ class DeepSeekCallStore:
                     or type(amount) is not int or not 0 <= amount <= 2**63 - 1):
                 raise DeepSeekError("BILLING_EVIDENCE_INVALID")
             existing = db.execute("SELECT * FROM billing_events WHERE event_key=?", (event_key,)).fetchone()
-            if existing:
-                if (existing["call_id"], existing["evidence_sha256"], existing["actual_cost_micros"]) != (
-                        call_id, evidence_sha256, amount):
-                    raise DeepSeekError("BILLING_EVENT_KEY_CONFLICT")
-                if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != evidence_sha256:
-                    raise DeepSeekError("BILLING_EVIDENCE_HASH_MISMATCH")
-                return {"call_id":call_id,"event_key":event_key,"actual_cost_micros":amount,
-                        "idempotent":True}
+            if existing and (existing["call_id"], existing["evidence_sha256"], existing["actual_cost_micros"]) != (
+                    call_id, evidence_sha256, amount):
+                raise DeepSeekError("BILLING_EVENT_KEY_CONFLICT")
             for prior in db.execute("SELECT evidence_path,evidence_sha256 FROM billing_events WHERE call_id=?",
                                     (call_id,)):
                 prior_file = Path(prior["evidence_path"])
                 if (not prior_file.is_file() or
                         hashlib.sha256(prior_file.read_bytes()).hexdigest() != prior["evidence_sha256"]):
                     raise DeepSeekError("PRIOR_BILLING_EVIDENCE_CHANGED")
+            if existing:
+                if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != evidence_sha256:
+                    raise DeepSeekError("BILLING_EVIDENCE_HASH_MISMATCH")
+                return {"call_id":call_id,"event_key":event_key,"actual_cost_micros":amount,
+                        "idempotent":True}
             previous = db.execute("SELECT actual_cost_micros FROM billing_events WHERE call_id=? ORDER BY rowid DESC LIMIT 1",
                                   (call_id,)).fetchone()
             delta = amount - (previous["actual_cost_micros"] if previous else 0)

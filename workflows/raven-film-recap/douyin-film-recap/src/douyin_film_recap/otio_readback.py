@@ -39,9 +39,34 @@ def _seal(root: Path, manifest: dict) -> None:
                                       "files": files})
 
 
-def verify_saved_snapshot(root: str | Path) -> dict:
+def _sealed_member(root: Path, seal: dict, relative: str, error: str) -> bytes:
+    """Consume exactly one buffer bound to an already verified checksum row."""
+    relative = x.safe_relative(relative)
+    row = seal["files"].get(relative)
+    if row is None:
+        raise x.ExchangeError(error)
+    raw, actual = x.read_stable(root / relative)
+    if actual != row["sha256"] or len(raw) != row["bytes"]:
+        raise x.ExchangeError(error)
+    return raw
+
+
+def _verified_package(root: Path, expected_sha: str | None = None) -> tuple[dict, str]:
+    raw, seal_sha = x.read_stable(root / "checksums.json")
+    if expected_sha is not None and seal_sha != expected_sha:
+        raise x.ExchangeError("EXPORT_PACKAGE_CHANGED_DURING_READBACK")
+    seal = x._json(raw)
+    if x.verify_package(root) != seal or workspace.sha(root / "checksums.json") != seal_sha:
+        raise x.ExchangeError("EXPORT_PACKAGE_CHANGED_DURING_READBACK")
+    return seal, seal_sha
+
+
+def _verified_snapshot(root: str | Path, expected_sha: str | None = None) -> tuple[dict, dict, str]:
     root = x._no_links(Path(root))
-    seal = x._json(x.read_stable(root / "checksums.json")[0])
+    raw, seal_sha = x.read_stable(root / "checksums.json")
+    if expected_sha is not None and seal_sha != expected_sha:
+        raise x.ExchangeError("HOST_SNAPSHOT_CHANGED_DURING_READBACK")
+    seal = x._json(raw)
     if seal.get("schema") != SNAPSHOT_SCHEMA or seal.get("completion_state") != "COMPLETE":
         raise x.ExchangeError("INCOMPLETE_HOST_SNAPSHOT")
     actual = set()
@@ -56,7 +81,26 @@ def verify_saved_snapshot(root: str | Path) -> dict:
         path = root / x.safe_relative(relative)
         if workspace.sha(path) != row["sha256"] or path.stat().st_size != row["bytes"]:
             raise x.ExchangeError("HOST_SNAPSHOT_HASH_MISMATCH")
-    return x._json(x.read_stable(root / "snapshot-manifest.json")[0])
+    manifest = x._json(_sealed_member(root, seal, "snapshot-manifest.json", "HOST_SNAPSHOT_HASH_MISMATCH"))
+    if manifest.get("saved_file_sha256") != seal["files"].get("saved.otio", {}).get("sha256"):
+        raise x.ExchangeError("HOST_SNAPSHOT_SAVED_FILE_BINDING_MISMATCH")
+    bindings = [*manifest.get("resources", {}).values(), *manifest.get("companions", {}).values()]
+    if manifest.get("caption_document") is not None:
+        bindings.append(manifest["caption_document"])
+    for binding in bindings:
+        if not isinstance(binding, dict) or "snapshot_path" not in binding:
+            continue  # Opaque legacy metadata is not a new required media field.
+        row = seal["files"].get(x.safe_relative(binding["snapshot_path"]))
+        if (row is None or binding.get("sha256") != row["sha256"] or
+                "bytes" in binding and binding["bytes"] != row["bytes"]):
+            raise x.ExchangeError("HOST_SNAPSHOT_MEMBER_BINDING_MISMATCH")
+    if workspace.sha(root / "checksums.json") != seal_sha:
+        raise x.ExchangeError("HOST_SNAPSHOT_CHANGED_DURING_READBACK")
+    return manifest, seal, seal_sha
+
+
+def verify_saved_snapshot(root: str | Path) -> dict:
+    return _verified_snapshot(root)[0]
 
 
 def _references(value: Any):
@@ -91,8 +135,9 @@ def capture_saved_snapshot(saved_otio: str | Path, destination: str | Path, *,
     Companion files are opaque evidence, not implicitly parsed or adopted.
     """
     package = _capture_path(export_package)
-    x.verify_package(package)
-    binding_bytes, binding_sha = x.read_stable(package / "export-binding.json")
+    package_seal, package_sha = _verified_package(package)
+    binding_bytes = _sealed_member(package, package_seal, "export-binding.json", "PACKAGE_MEMBER_HASH_MISMATCH")
+    binding_sha = hashlib.sha256(binding_bytes).hexdigest()
     binding = x._json(binding_bytes)
     saved = _capture_path(saved_otio)
     raw, saved_sha = x.read_stable(saved)
@@ -147,6 +192,7 @@ def capture_saved_snapshot(saved_otio: str | Path, destination: str | Path, *,
         "host_import_reopen_render": "NOT_RUN"}
     _seal(root, manifest)
     verify_saved_snapshot(root)
+    _verified_package(package, package_sha)
     return {"schema": SNAPSHOT_SCHEMA, "snapshot_dir": str(root), "manifest": manifest}
 
 
@@ -199,11 +245,10 @@ def _entities(projection: dict) -> dict:
             for track in projection["tracks"] for clip in track["clips"]}
 
 
-def _parse_snapshot(snapshot_dir: str | Path, base_projection: dict, binding: dict) -> dict:
-    """Interpret supported fields while retaining all unsupported raw bytes."""
-    root = Path(snapshot_dir)
-    manifest = verify_saved_snapshot(root)
-    document = x._json(x.read_stable(root / "saved.otio")[0])
+def _parse_snapshot(base_projection: dict, binding: dict, manifest: dict,
+                    document_raw: bytes, caption_raw: bytes | None) -> dict:
+    """Interpret verified input buffers while retaining unsupported raw bytes."""
+    document = x._json(document_raw)
     problems = deepcopy(manifest["findings"])
     opaque, entities, track_ends = {}, {}, {}
     base_entities = _entities(base_projection)
@@ -336,7 +381,7 @@ def _parse_snapshot(snapshot_dir: str | Path, base_projection: dict, binding: di
     captions = None
     if manifest["caption_document"]:
         captions = {}
-        cap_doc = x._json(x.read_stable(root / manifest["caption_document"]["snapshot_path"])[0])
+        cap_doc = x._json(caption_raw)
         for cap in cap_doc.get("captions", []) if isinstance(cap_doc, dict) else cap_doc:
             cid = cap.get("caption_id")
             if not cid or cid in captions:
@@ -353,15 +398,24 @@ def _parse_snapshot(snapshot_dir: str | Path, base_projection: dict, binding: di
             "track_ends": track_ends}
 
 
-def parse_snapshot(snapshot_dir: str | Path, base_projection: dict, binding: dict) -> dict:
-    """Malformed host structures remain opaque conflicts, never partial proposals."""
-    verify_saved_snapshot(snapshot_dir)
+def parse_snapshot(snapshot_dir: str | Path, base_projection: dict, binding: dict, *,
+                   expected_seal_sha256: str | None = None) -> dict:
+    """Malformed host structures stay opaque; byte drift is a blocking error."""
+    root = x._no_links(Path(snapshot_dir))
+    manifest, seal, seal_sha = _verified_snapshot(root, expected_seal_sha256)
+    # Identity checks stay outside the structure-compatibility catch. A changed
+    # archive must not become an opaque-but-VERIFIED proposal.
+    document_raw = _sealed_member(root, seal, "saved.otio", "HOST_SNAPSHOT_HASH_MISMATCH")
+    caption_raw = (_sealed_member(root, seal, manifest["caption_document"]["snapshot_path"],
+                                 "HOST_SNAPSHOT_HASH_MISMATCH") if manifest["caption_document"] else None)
     try:
-        return _parse_snapshot(snapshot_dir, base_projection, binding)
+        result = _parse_snapshot(base_projection, binding, manifest, document_raw, caption_raw)
     except (ValueError, TypeError, KeyError, AttributeError, StopIteration) as exc:
-        return {"entities": {}, "captions": None,
-                "opaque": {"timeline": {"preserved_saved_file": "saved.otio"}},
-                "problems": [_problem("HOST_STRUCTURE_UNSUPPORTED", detail=str(exc))]}
+        result = {"entities": {}, "captions": None,
+                  "opaque": {"timeline": {"preserved_saved_file": "saved.otio"}},
+                  "problems": [_problem("HOST_STRUCTURE_UNSUPPORTED", detail=str(exc))]}
+    _verified_snapshot(root, seal_sha)
+    return result
 
 
 def _protected(value: Any) -> bool:
@@ -503,17 +557,18 @@ def propose_saved_readback(export_package: str | Path, current_work_dir: str | P
     from .revision import freeze_revision, assert_revision_base
 
     package = x._no_links(Path(export_package))
-    x.verify_package(package)
-    binding_bytes, binding_sha = x.read_stable(package / "export-binding.json")
+    package_seal, package_sha = _verified_package(package)
+    binding_bytes = _sealed_member(package, package_seal, "export-binding.json", "PACKAGE_MEMBER_HASH_MISMATCH")
+    binding_sha = hashlib.sha256(binding_bytes).hexdigest()
     binding = x._json(binding_bytes)
-    base = x._json(x.read_stable(package / "projection.json")[0])
-    original = x._json(x.read_stable(package / "storyboard.snapshot.json")[0])
-    manifest = verify_saved_snapshot(saved_snapshot)
+    base = x._json(_sealed_member(package, package_seal, "projection.json", "PACKAGE_MEMBER_HASH_MISMATCH"))
+    original = x._json(_sealed_member(package, package_seal, "storyboard.snapshot.json", "PACKAGE_MEMBER_HASH_MISMATCH"))
+    manifest, _, snapshot_sha = _verified_snapshot(saved_snapshot)
     if manifest["export_id"] != binding["export_id"] or manifest["base_binding_sha256"] != binding_sha:
         raise x.ExchangeError("HOST_SNAPSHOT_EXPORT_BINDING_MISMATCH")
     if x.digest(base) != binding["projection_sha256"]:
         raise x.ExchangeError("EXPORT_PROJECTION_BINDING_MISMATCH")
-    host = parse_snapshot(saved_snapshot, base, binding)
+    host = parse_snapshot(saved_snapshot, base, binding, expected_seal_sha256=snapshot_sha)
     root, _ = workspace.preflight(current_work_dir)
     with workspace.work_lock(root):
         token = freeze_revision(current_work_dir)
@@ -550,6 +605,8 @@ def propose_saved_readback(export_package: str | Path, current_work_dir: str | P
                 "conflicts": host["problems"] + [_problem("CURRENT_IDENTITY_OR_SUBSET_UNRESOLVED", detail=exc.code)]}
         assert_revision_base(current_work_dir, token)
     origin = observe_saved_origin(manifest)
+    _verified_package(package, package_sha)
+    _verified_snapshot(saved_snapshot, snapshot_sha)
     if origin["state"] == "DIVERGED":
         comparison["conflicts"].append(_problem("HOST_ORIGIN_DIVERGED"))
         comparison["proposed_changes"] = []

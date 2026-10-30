@@ -54,5 +54,8 @@ def execute(request, directory=None, tools=None):
     if action == 'settle-cost':
         return store.settle_cost(request['call_id'], request['event_key'],
                                  request['evidence_path'], request['evidence_sha256'])
+    frozen = store.read(request['call_id'])
+    if frozen['state'] != 'PREPARED':
+        return frozen
     client = DeepSeekTextClient(timeout_seconds=request.get('timeout_seconds', 120))
     return store.send_once(request['call_id'], client)

@@ -681,18 +681,18 @@ class GenerationStore:
                     or type(amount) is not int or not 0 <= amount <= 2**63 - 1):
                 raise GenerationError("BILLING_EVIDENCE_INVALID")
             existing=db.execute("SELECT * FROM billing_events WHERE event_key=?",(event_key,)).fetchone()
-            if existing:
-                if (existing["task_id"],existing["evidence_sha256"],existing["actual_cost_micros"]) != (
-                        task_id,evidence_sha256,amount):
-                    raise Conflict("BILLING_EVENT_KEY_CONFLICT")
-                if not path.is_file() or _sha_file(path) != evidence_sha256:
-                    raise Conflict("BILLING_EVIDENCE_HASH_MISMATCH")
-                return {"task_id":task_id,"event_key":event_key,"actual_cost_micros":amount,
-                        "idempotent":True}
+            if existing and (existing["task_id"],existing["evidence_sha256"],existing["actual_cost_micros"]) != (
+                    task_id,evidence_sha256,amount):
+                raise Conflict("BILLING_EVENT_KEY_CONFLICT")
             for prior in db.execute("SELECT evidence_path,evidence_sha256 FROM billing_events WHERE task_id=?",
                                     (task_id,)):
                 if not Path(prior["evidence_path"]).is_file() or _sha_file(prior["evidence_path"]) != prior["evidence_sha256"]:
                     raise Conflict("PRIOR_BILLING_EVIDENCE_CHANGED")
+            if existing:
+                if not path.is_file() or _sha_file(path) != evidence_sha256:
+                    raise Conflict("BILLING_EVIDENCE_HASH_MISMATCH")
+                return {"task_id":task_id,"event_key":event_key,"actual_cost_micros":amount,
+                        "idempotent":True}
             previous=db.execute("SELECT actual_cost_micros FROM billing_events WHERE task_id=? ORDER BY rowid DESC LIMIT 1",
                                 (task_id,)).fetchone()
             baseline=(previous["actual_cost_micros"] if previous else

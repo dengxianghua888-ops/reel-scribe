@@ -359,16 +359,16 @@ class TextCallStore:
                     or type(amount) is not int or not 0<=amount<=2**63-1):
                 raise ModelTextError("BILLING_EVIDENCE_INVALID")
             old=db.execute("SELECT * FROM billing_events WHERE event_key=?",(event_key,)).fetchone()
-            if old:
-                if (old["call_id"],old["evidence_sha256"],old["actual_cost_micros"]) != (call_id,evidence_sha256,amount):
-                    raise ModelTextError("BILLING_EVENT_KEY_CONFLICT")
-                if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=evidence_sha256:
-                    raise ModelTextError("BILLING_EVIDENCE_HASH_MISMATCH")
-                return {"call_id":call_id,"event_key":event_key,"idempotent":True,"actual_cost_micros":amount}
+            if old and (old["call_id"],old["evidence_sha256"],old["actual_cost_micros"]) != (call_id,evidence_sha256,amount):
+                raise ModelTextError("BILLING_EVENT_KEY_CONFLICT")
             for prior in db.execute("SELECT evidence_path,evidence_sha256 FROM billing_events WHERE call_id=?",(call_id,)):
                 previous_file=Path(prior["evidence_path"])
                 if not previous_file.is_file() or hashlib.sha256(previous_file.read_bytes()).hexdigest()!=prior["evidence_sha256"]:
                     raise ModelTextError("PRIOR_BILLING_EVIDENCE_CHANGED")
+            if old:
+                if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=evidence_sha256:
+                    raise ModelTextError("BILLING_EVIDENCE_HASH_MISMATCH")
+                return {"call_id":call_id,"event_key":event_key,"idempotent":True,"actual_cost_micros":amount}
             previous=db.execute("SELECT actual_cost_micros FROM billing_events WHERE call_id=? ORDER BY rowid DESC LIMIT 1",(call_id,)).fetchone()
             delta=amount-(previous["actual_cost_micros"] if previous else 0)
             if not 0<=budget["spent_micros"]+delta<=2**63-1:
