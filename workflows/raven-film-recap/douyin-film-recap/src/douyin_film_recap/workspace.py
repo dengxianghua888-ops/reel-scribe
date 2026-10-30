@@ -426,11 +426,16 @@ def checked_copy(source, target, expected):
         raise WorkspaceError("COPY_SOURCE_CHANGED")
 
 
-def verify_archive(directory):
+def verify_archive(directory, *, expected_manifest_sha256=None):
     directory = Path(directory)
     if directory.is_symlink() or (directory / "recovery-manifest.json").is_symlink():
         raise WorkspaceError("RECOVERY_MANIFEST_UNSAFE")
-    manifest = read(directory / "recovery-manifest.json")
+    manifest_path = directory / "recovery-manifest.json"
+    raw = manifest_path.read_bytes()
+    manifest_sha = hashlib.sha256(raw).hexdigest()
+    if expected_manifest_sha256 is not None and manifest_sha != expected_manifest_sha256:
+        raise WorkspaceError("RECOVERY_MANIFEST_DRIFTED")
+    manifest = json.loads(raw.decode("utf-8"))
     if manifest.get("schema") != RECOVERY_SCHEMA:
         raise WorkspaceError("UNSUPPORTED_RECOVERY_SCHEMA")
     rows = manifest.get("files")
@@ -448,6 +453,8 @@ def verify_archive(directory):
     actual = {str(p.relative_to(directory / "files")) for p in (directory / "files").rglob("*") if p.is_file()}
     if actual != {r["path"] for r in rows}:
         raise WorkspaceError("RECOVERY_MEMBER_SET_MISMATCH")
+    if sha(manifest_path) != manifest_sha:
+        raise WorkspaceError("RECOVERY_MANIFEST_DRIFTED")
     return manifest
 
 
@@ -596,7 +603,8 @@ def recover(archive, destination):
         if any(p.is_symlink() for p in (candidate, *candidate.parents)):
             raise WorkspaceError("RECOVERY_PATH_SYMLINK")
     archive = archive.resolve()
-    manifest = verify_archive(archive)
+    manifest_sha = sha(archive / "recovery-manifest.json")
+    manifest = verify_archive(archive, expected_manifest_sha256=manifest_sha)
     if (destination.resolve().is_relative_to(archive)
             or (manifest.get("original_task_root") and
                 destination.resolve().is_relative_to(Path(manifest["original_task_root"]).resolve()))):
@@ -606,7 +614,7 @@ def recover(archive, destination):
     destination.mkdir(parents=True, exist_ok=False)
     for row in manifest["files"]:
         checked_copy(member(archive / "files", row["path"]), member(destination, row["path"]), row)
-    verify_archive(archive)
+    verify_archive(archive, expected_manifest_sha256=manifest_sha)
     expected = {r["path"] for r in manifest["files"]}
     actual = {str(p.relative_to(destination)) for p in destination.rglob("*") if p.is_file()}
     if actual != expected:
@@ -615,8 +623,10 @@ def recover(archive, destination):
         p = member(destination, row["path"])
         if p.stat().st_size != row["bytes"] or sha(p) != row["sha256"]:
             raise WorkspaceError("RECOVERED_MEMBER_MISMATCH")
+    if sha(archive / "recovery-manifest.json") != manifest_sha:
+        raise WorkspaceError("RECOVERY_MANIFEST_DRIFTED")
     return {"schema": "film-recovery-result/1", "status": "RECOVERED_BYTES_ONLY",
-            "manifest_sha256": sha(archive / "recovery-manifest.json"),
+            "manifest_sha256": manifest_sha,
             "production_authorized": False, "files": len(expected), "path": str(destination)}
 
 

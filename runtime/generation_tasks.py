@@ -55,6 +55,20 @@ def _sha_file(path):
     return h.hexdigest()
 
 
+def _bound_json(path, expected_sha256, hash_error, format_error):
+    """Parse exactly the bytes whose digest was checked, never a second read."""
+    data = Path(path).read_bytes()
+    if _sha_bytes(data) != expected_sha256:
+        raise Conflict(hash_error)
+    try:
+        value = json.loads(data.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise GenerationError(format_error) from exc
+    if not isinstance(value, dict):
+        raise GenerationError(format_error)
+    return value
+
+
 def _word(value, label):
     if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", value):
         raise GenerationError(label + "_INVALID")
@@ -263,7 +277,8 @@ class GenerationStore:
             path=Path(task[path_key])
             if not path.is_file() or _sha_file(path) != task[hash_key]:
                 raise Conflict("OUTPUT_IDENTITY_CHAIN_HASH_CHANGED")
-        receipt=json.loads(Path(task["result_receipt_path"]).read_text(encoding="utf-8"))
+        receipt = _bound_json(task["result_receipt_path"], task["result_receipt_sha256"],
+                              "OUTPUT_IDENTITY_CHAIN_HASH_CHANGED", "OUTPUT_IDENTITY_CHAIN_RECEIPT_CHANGED")
         if (not isinstance(receipt,dict) or receipt.get("schema") != "generation-output-receipt/1"
                 or receipt.get("task_id") != task["task_id"]
                 or receipt.get("provider_id") != task["provider_id"]
@@ -367,7 +382,8 @@ class GenerationStore:
         if adapter.provider_id != task["provider_id"]:
             raise Conflict("PROVIDER_MISMATCH")
         caps = adapter.capabilities()
-        if (not isinstance(caps, ProviderCapabilities) or not re.fullmatch(r"[A-Z]{3}", caps.currency)
+        if (not isinstance(caps, ProviderCapabilities) or not isinstance(caps.currency, str)
+                or not re.fullmatch(r"[A-Z]{3}", caps.currency)
                 or any(type(value) is not bool for value in
                        (caps.hard_cost_cap,caps.query_by_idempotency_key,
                         caps.query_by_task_id,caps.cancel_supported))):
@@ -428,6 +444,10 @@ class GenerationStore:
         with self._connection() as db:
             task = self._task(db, task_id)
             caps = self._adapter(task, adapter)
+            currency = db.execute("SELECT currency FROM budgets WHERE budget_key=?",
+                                  (task["budget_key"],)).fetchone()["currency"]
+            if caps.currency != currency:
+                raise Conflict("PROVIDER_CURRENCY_MISMATCH")
             if task["state"] not in ACTIVE:
                 return self._public(task)
             key, provider_task_id = task["idempotency_key"], task["provider_task_id"]
@@ -546,6 +566,10 @@ class GenerationStore:
                 return self._public(self._task(db,task_id))
             if task["state"] in ACTIVE:
                 caps = self._adapter(task,adapter)
+                currency = db.execute("SELECT currency FROM budgets WHERE budget_key=?",
+                                      (task["budget_key"],)).fetchone()["currency"]
+                if caps.currency != currency:
+                    raise Conflict("PROVIDER_CURRENCY_MISMATCH")
                 if task["cancel_call_started"]:
                     return self._public(task)
                 if not caps.cancel_supported:
@@ -657,18 +681,18 @@ class GenerationStore:
                     or type(amount) is not int or not 0 <= amount <= 2**63 - 1):
                 raise GenerationError("BILLING_EVIDENCE_INVALID")
             existing=db.execute("SELECT * FROM billing_events WHERE event_key=?",(event_key,)).fetchone()
-            if existing:
-                if (existing["task_id"],existing["evidence_sha256"],existing["actual_cost_micros"]) != (
-                        task_id,evidence_sha256,amount):
-                    raise Conflict("BILLING_EVENT_KEY_CONFLICT")
-                if not path.is_file() or _sha_file(path) != evidence_sha256:
-                    raise Conflict("BILLING_EVIDENCE_HASH_MISMATCH")
-                return {"task_id":task_id,"event_key":event_key,"actual_cost_micros":amount,
-                        "idempotent":True}
+            if existing and (existing["task_id"],existing["evidence_sha256"],existing["actual_cost_micros"]) != (
+                    task_id,evidence_sha256,amount):
+                raise Conflict("BILLING_EVENT_KEY_CONFLICT")
             for prior in db.execute("SELECT evidence_path,evidence_sha256 FROM billing_events WHERE task_id=?",
                                     (task_id,)):
                 if not Path(prior["evidence_path"]).is_file() or _sha_file(prior["evidence_path"]) != prior["evidence_sha256"]:
                     raise Conflict("PRIOR_BILLING_EVIDENCE_CHANGED")
+            if existing:
+                if not path.is_file() or _sha_file(path) != evidence_sha256:
+                    raise Conflict("BILLING_EVIDENCE_HASH_MISMATCH")
+                return {"task_id":task_id,"event_key":event_key,"actual_cost_micros":amount,
+                        "idempotent":True}
             previous=db.execute("SELECT actual_cost_micros FROM billing_events WHERE task_id=? ORDER BY rowid DESC LIMIT 1",
                                 (task_id,)).fetchone()
             baseline=(previous["actual_cost_micros"] if previous else
@@ -701,9 +725,8 @@ class GenerationStore:
         """Import one recorded provider output; failed downloads may retry this step."""
         _hash(receipt_sha256,"RESULT_RECEIPT_SHA256")
         receipt_file=Path(receipt_path).resolve(strict=True)
-        if not receipt_file.is_file() or _sha_file(receipt_file) != receipt_sha256:
-            raise Conflict("RESULT_RECEIPT_HASH_MISMATCH")
-        receipt=json.loads(receipt_file.read_text(encoding="utf-8"))
+        receipt = _bound_json(receipt_file, receipt_sha256,
+                              "RESULT_RECEIPT_HASH_MISMATCH", "RESULT_RECEIPT_INVALID")
         if not isinstance(receipt,dict) or receipt.get("schema") != "generation-output-receipt/1":
             raise GenerationError("RESULT_RECEIPT_INVALID")
         _hash(receipt.get("result_sha256"),"RESULT_SHA256")
@@ -793,9 +816,10 @@ class GenerationStore:
         _hash(review_sha256,"REVIEW_SHA256")
         candidate_file=Path(candidate_path).resolve(strict=True)
         review_file=Path(review_path).resolve(strict=True)
-        if _sha_file(candidate_file) != candidate_sha256 or _sha_file(review_file) != review_sha256:
+        if _sha_file(candidate_file) != candidate_sha256:
             raise Conflict("CANDIDATE_OR_REVIEW_HASH_MISMATCH")
-        review=json.loads(review_file.read_text())
+        review = _bound_json(review_file, review_sha256,
+                             "CANDIDATE_OR_REVIEW_HASH_MISMATCH", "REVIEW_RECORD_INVALID")
         if (not isinstance(review,dict) or review.get("schema") != "generation-candidate-review/1"
                 or review.get("task_id") != task_id or review.get("candidate_sha256") != candidate_sha256
                 or not isinstance(review.get("result_receipt_sha256"),str)
@@ -814,6 +838,9 @@ class GenerationStore:
                 raise Conflict("REVIEW_RESULT_MISMATCH")
             existing=db.execute("SELECT * FROM candidate_reviews WHERE task_id=? AND candidate_sha256=?",
                                 (task_id,candidate_sha256)).fetchone()
+            if (_sha_file(candidate_file) != candidate_sha256 or
+                    _sha_file(review_file) != review_sha256):
+                raise Conflict("CANDIDATE_OR_REVIEW_HASH_MISMATCH")
             if existing:
                 if existing["review_path"] != str(review_file) or existing["review_sha256"] != review_sha256:
                     raise Conflict("CANDIDATE_REVIEW_ALREADY_RECORDED")
@@ -833,9 +860,8 @@ class GenerationStore:
             return self._reuse_adoption_gate(task_id, current_work, candidate_path, candidate_sha256, reuse)
         _hash(candidate_sha256,"CANDIDATE_SHA256")
         candidate_file=Path(candidate_path).resolve(strict=True)
-        if _sha_file(candidate_file) != candidate_sha256:
-            raise Conflict("CANDIDATE_HASH_MISMATCH")
-        candidate=json.loads(candidate_file.read_text())
+        candidate = _bound_json(candidate_file, candidate_sha256,
+                                "CANDIDATE_HASH_MISMATCH", "CANDIDATE_INVALID")
         if not isinstance(current_work,dict) or set(current_work)!={"work_id","version","document_sha256"}:
             raise GenerationError("CURRENT_WORK_BINDING_INVALID")
         with self._connection() as db:
@@ -867,10 +893,21 @@ class GenerationStore:
                 raise NotReady("EXPLICIT_ACCEPTED_REVIEW_REQUIRED")
             if _sha_file(review["review_path"]) != review["review_sha256"] or review["result_sha256"] != task["result_sha256"]:
                 raise Conflict("ACCEPTED_REVIEW_HASH_CHANGED")
-            review_content=json.loads(Path(review["review_path"]).read_text(encoding="utf-8"))
-            if (review_content.get("result_receipt_sha256") != task["result_receipt_sha256"] or
+            review_content = _bound_json(review["review_path"], review["review_sha256"],
+                                        "ACCEPTED_REVIEW_HASH_CHANGED", "ACCEPTED_REVIEW_OUTPUT_IDENTITY_CHANGED")
+            if (review_content.get("schema") != "generation-candidate-review/1" or
+                    review_content.get("task_id") != task_id or
+                    review_content.get("candidate_sha256") != candidate_sha256 or
+                    review_content.get("decision") != "ACCEPT" or
+                    review_content.get("result_sha256") != task["result_sha256"] or
+                    review_content.get("result_receipt_sha256") != task["result_receipt_sha256"] or
                     review_content.get("provider_output_id") != task["provider_output_id"]):
                 raise Conflict("ACCEPTED_REVIEW_OUTPUT_IDENTITY_CHANGED")
+            self._verify_result_chain(task, db)
+            if _sha_file(candidate_file) != candidate_sha256:
+                raise Conflict("CANDIDATE_HASH_MISMATCH")
+            if _sha_file(review["review_path"]) != review["review_sha256"]:
+                raise Conflict("ACCEPTED_REVIEW_HASH_CHANGED")
             return {"schema":"generation-adoption-gate/1","task_id":task_id,
                     "intent_sha256":task["intent_sha256"],"result_sha256":task["result_sha256"],
                     "provider_task_id":task["provider_task_id"],

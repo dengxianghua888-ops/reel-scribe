@@ -42,6 +42,21 @@ trust record. The original host file is compared again after capture. A later
 change is reported as DIVERGED; the archived branch remains available. Absence
 of a later change is not a cross-system CAS or a promise about unsaved host edits.
 
+Readback pins the existing COMPLETE checksum manifests for both the export and
+saved snapshot. The binding, projection, original Storyboard, snapshot manifest,
+saved OTIO and optional caption JSON are parsed from the same byte buffers that
+match their pinned checksum rows. A changed member or even a self-consistent
+replacement snapshot is rejected, rather than reporting the old identity for
+new fields. Resource, optional caption and opaque companion identities that
+provide a snapshot path must agree with that member's sealed SHA and any recorded
+byte length; rewriting only the seal cannot certify contradictory manifest data.
+Both packages are checked again before returning a proposal; byte
+drift is a blocking error, not an opaque host-format compatibility finding.
+Failure preserves the archived bytes and current film authority. These are
+observable boundary checks, not a continuous filesystem lock or a guarantee
+against a hostile process with the same permissions.
+
+
 ## Comparison contract
 
 - Base identity comes from the verified X1 export binding and projection.
@@ -99,6 +114,7 @@ roundtrip all remain NOT_RUN until independently tested in a named host version.
 
 ```bash
 PYTHONPATH=src python -m unittest discover -s tests -p test_otio_readback.py -v
+PYTHONPATH=src python -m unittest discover -s tests -p test_readback_snapshot_identity.py -v
 ```
 
 Tests cover unchanged files, repeated-source lost IDs, field/cross-field conflicts,

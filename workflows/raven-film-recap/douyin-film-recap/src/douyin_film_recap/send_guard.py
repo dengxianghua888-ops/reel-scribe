@@ -46,6 +46,15 @@ class SendSession:
         if self._cancelled.is_set():
             raise SendCancelled("REMOTE_SEND_CANCELLED: no new sends in this session")
 
+    def _check_grant(self):
+        if self.grant:
+            try:
+                current = read(member(self.root, ".remote-authorization.json"))
+            except (OSError, ValueError) as exc:
+                raise SendBlocked("REMOTE_AUTHORIZATION_REVOKED_OR_CHANGED") from exc
+            if current != self.grant:
+                raise SendBlocked("REMOTE_AUTHORIZATION_REVOKED_OR_CHANGED")
+
     def _reserve(self, kind: str, payload: dict, intent_key=None, prepare=None):
         with self._lock:
             return self._reserve_locked(kind, payload, intent_key, prepare)
@@ -92,9 +101,7 @@ class SendSession:
         if self.max_requests is not None and self.sent >= self.max_requests:
             raise SendBlocked("LOCAL_REQUEST_LIMIT_REACHED: this is not a provider billing cap")
         if self.grant:
-            current = read(member(self.root, ".remote-authorization.json"))
-            if current != self.grant:
-                raise SendBlocked("REMOTE_AUTHORIZATION_REVOKED_OR_CHANGED")
+            self._check_grant()
             used = 0
             for receipt in (self.root / ".remote-intents").glob("*.json"):
                 prior = read(member(self.root, str(receipt.relative_to(self.root))))
@@ -105,6 +112,9 @@ class SendSession:
         # a durable send reservation. Never perform network I/O in this callback.
         if prepare is not None:
             prepare()
+            # Local capability preparation can take time. A previously checked
+            # grant does not authorize a send after an observable revocation.
+            self._check_grant()
         attempts = previous.get("send_attempts", []) if path.exists() else []
         attempts = [*attempts, {"reserved_at": now(),
                                "authorization_id": self.grant["id"] if self.grant else None}]
@@ -125,11 +135,13 @@ class SendSession:
     def _check_before_transport(self, path, record):
         try:
             self.check_cancelled()
-        except SendCancelled:
+            self._check_grant()
+        except SendBlocked as exc:
             # We have not invoked the transport callback. Reservations still count
             # conservatively toward the local budget; no billing claim is made.
             record.update(status="NOT_SUBMITTED_CONFIRMED",
-                          cancellation={"at": now(), "reason": "cancelled_before_transport"})
+                          cancellation={"at": now(), "reason": "cancelled_before_transport"
+                                        if isinstance(exc, SendCancelled) else "authorization_revoked_before_transport"})
             atomic(path, record)
             raise
 
