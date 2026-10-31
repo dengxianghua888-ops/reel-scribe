@@ -1,4 +1,4 @@
-"""Work commits must consume the same UTF-8 candidate bytes as their pinned SHA.
+"""Work commits and previews consume the candidate bytes bound to their SHA.
 
 Real temporary SQLite and the existing scope/CAS code run here. The reused
 SyntheticMediaTools fixture declares clock metadata for plain bytes; it does not
@@ -118,6 +118,75 @@ class WorkCandidateBytesTests(unittest.TestCase):
         before = self.snapshot()
         with self.assertRaisesRegex(ValueError, 'OUTSIDE_SCOPE: notes'):
             self.commit()
+        self.assertEqual(self.snapshot(), before)
+
+    def preview(self):
+        output = self.contracts.root / 'preview-output'
+        output.mkdir()
+        return fixtures.work_ops.work_render({
+            'operation': 'work-render', 'store': str(self.work['store']),
+            'expected_version': self.work['state']['version'],
+            'preview_candidate': {'path': str(self.candidate), 'sha256': self.pinned},
+        }, output, self.work['tools'])
+
+    def rendered(self, document, *args, **kwargs):
+        # Only candidate binding is under test; this is not a media render.
+        return {'document_sha256': fixtures.editing_runtime.fingerprint(document),
+                'source_consumption': {'status': 'SYNTHETIC_ONLY'},
+                'video': {'path': 'synthetic-preview', 'sha256': '0' * 64}}
+
+    def test_preview_rejects_hash_parse_hash_aba_before_render(self):
+        before = self.snapshot()
+        original = self.candidate.read_bytes()
+        original_source = fixtures.editing_runtime.source
+        original_diff = fixtures.work_ops.revision_diff
+        swapped = []
+
+        def hash_then_replace(ref, *args, **kwargs):
+            result = original_source(ref, *args, **kwargs)
+            if ref.get('path') == str(self.candidate) and not swapped:
+                swapped.append(True)
+                self.candidate.write_text(json.dumps(self.other), encoding='utf-8')
+            return result
+
+        def validate_then_restore(*args, **kwargs):
+            result = original_diff(*args, **kwargs)
+            self.candidate.write_bytes(original)
+            return result
+
+        with patch.object(fixtures.editing_runtime, 'source', hash_then_replace), \
+                patch.object(fixtures.work_ops, 'revision_diff', validate_then_restore), \
+                patch.object(fixtures.work_ops, 'render_document', side_effect=self.rendered) as render:
+            with self.assertRaisesRegex(ValueError, 'SOURCE_HASH_MISMATCH'):
+                self.preview()
+            render.assert_not_called()
+        self.assertEqual(swapped, [True])
+        self.assertEqual(self.snapshot(), before)
+
+    def test_normal_preview_binds_candidate_and_does_not_commit(self):
+        before = self.snapshot()
+        with patch.object(fixtures.work_ops, 'render_document', side_effect=self.rendered) as render:
+            result = self.preview()
+        render.assert_called_once()
+        self.assertEqual(render.call_args.args[0]['notes']['manual-note'], 'Reviewed change A')
+        self.assertEqual(result['preview_candidate']['sha256'], self.pinned)
+        self.assertFalse(result['adoption_authorized_by_preview'])
+        self.assertEqual(self.snapshot(), before)
+
+    def test_preview_still_rejects_candidate_changed_during_validation(self):
+        before = self.snapshot()
+        original_diff = fixtures.work_ops.revision_diff
+
+        def validate_then_replace(*args, **kwargs):
+            result = original_diff(*args, **kwargs)
+            self.candidate.write_text(json.dumps(self.other), encoding='utf-8')
+            return result
+
+        with patch.object(fixtures.work_ops, 'revision_diff', validate_then_replace), \
+                patch.object(fixtures.work_ops, 'render_document', side_effect=self.rendered) as render:
+            with self.assertRaisesRegex(ValueError, 'SOURCE_HASH_MISMATCH'):
+                self.preview()
+            render.assert_not_called()
         self.assertEqual(self.snapshot(), before)
 
 

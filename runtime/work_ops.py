@@ -552,7 +552,10 @@ def work_render(request,directory,tools):
     candidate_ref=None;diff=None
     if preview:
         candidate_ref=source(request['preview_candidate'])
-        with open(candidate_ref['path'],encoding='utf-8') as stream:bundle=json.load(stream)
+        candidate_bytes=Path(candidate_ref['path']).read_bytes()
+        require(hashlib.sha256(candidate_bytes).hexdigest()==candidate_ref['sha256'],
+                'SOURCE_HASH_MISMATCH: '+candidate_ref['path'])
+        bundle=json.loads(candidate_bytes.decode('utf-8'))
         exact_keys(bundle,['schema','base_version','base_document_sha256','document','scope'],
                    ['schema','base_version','base_document_sha256','document','scope'])
         require(bundle['schema']=='work-candidate/1','CANDIDATE_SCHEMA_UNSUPPORTED')
