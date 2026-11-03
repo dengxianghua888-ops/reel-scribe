@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+import math
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -115,6 +117,21 @@ def _cues_from_boundaries(
     boundaries = segment.tts_word_boundaries
     if not boundaries:
         return []
+    def meaningful(value: str) -> str:
+        return "".join(ch for ch in unicodedata.normalize("NFKC", value).casefold()
+                       if not ch.isspace() and not unicodedata.category(ch).startswith("P"))
+
+    expected = meaningful(segment.text)
+    actual = meaningful("".join(str(item.get("text", "")) for item in boundaries))
+    if expected != actual:
+        raise ValueError(f"TTS_BOUNDARY_TEXT_MISMATCH: {segment.segment_id}")
+    previous = -1.0
+    for boundary in boundaries:
+        start = float(boundary.get("start", 0.0))
+        duration = float(boundary.get("duration", 0.0))
+        if not math.isfinite(start) or not math.isfinite(duration) or start < previous or start < 0 or duration <= 0:
+            raise ValueError(f"TTS_BOUNDARY_TIMING_INVALID: {segment.segment_id}")
+        previous = start
     groups: list[list[dict]] = []
     current: list[dict] = []
     current_text = ""
@@ -155,6 +172,8 @@ def _cues_from_boundaries(
         text = "".join(str(item["text"]) for item in group).strip()
         if end > start and text:
             cues.append(SubtitleCue(start=start, end=end, text=text))
+    if meaningful("".join(cue.text for cue in cues)) != expected:
+        raise ValueError(f"TTS_BOUNDARY_CUE_INCOMPLETE: {segment.segment_id}")
     return cues
 
 
