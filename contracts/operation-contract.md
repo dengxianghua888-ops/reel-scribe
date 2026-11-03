@@ -73,7 +73,7 @@ python3 runtime/editing_runtime.py run --request /absolute/request.json --work-d
 
 timeline-render 产生新的剪辑时间轴，不自动继承输入容器中未经重映射的章节，避免源章节延长成片或保留错误位置。evidence-plan-compile 的显式 chapters 仍是受保护的 JSON 时间映射与导航报告，不因本策略被删除，也不等同已写入 MP4 章节轨；当前 ExecutionPlan 没有容器章节导出字段。此输出策略只作用于 timeline-render，不对独立混音、字幕烧录或视觉叠层操作全局清除元数据。
 
-此示例不是可直接执行的素材引用。片段 ID 唯一，sources 列出已登记的真实素材；画幅为正偶数，帧率支持 `30000/1001`。同源重叠默认拒绝，有意回看需显式 `allow_source_reuse: true`。不静默裁掉越界部分、跳过无效段或补造镜头。
+此示例不是可直接执行的素材引用。片段 ID 唯一，sources 列出已登记的真实素材；画幅为正偶数，帧率支持 `30000/1001`。同源重叠默认拒绝：按已验证的素材字节 SHA-256 识别来源，不同 source_id、软链接或同字节副本不能绕过此限制；同源不重叠片段仍允许。有意回看需显式 `allow_source_reuse: true`。不静默裁掉越界部分、跳过无效段或补造镜头。
 
 片段可选 `mute: true/false`，默认 false；必须布尔类型。true 时内嵌声音显式置零，gain_db 保留但不作用；不以 -120dB 近似静音。片段可选 `speed`（有理数字符串或数值，0.5–2，默认 1）；归一化计划返回恒定速度、量化后的有效源终点和 source_to_output_map。按输出帧数取整，短于一帧拒绝；末尾量化补帧不扩张有效源区间。省略 audio_backend 时，仅实际有效源窗内有可消费的非1倍速原声才选择默认 R3 流式后端；1x/静音/量化后已无原声使用身份或静音路径，无 helper 门槛。显式旧 atempo 或 v4 见下节；真实听感仍须另验。无音频段继续补静音。
 
