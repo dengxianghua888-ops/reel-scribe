@@ -58,8 +58,19 @@ def _distributed_words(text: str, start: float, end: float) -> list[TranscriptWo
     return words
 
 
+def _read_subtitle_text(path: str | Path) -> str:
+    """Accept UTF-8 only; reject undecodable or NUL-containing subtitle input."""
+    try:
+        text = Path(path).read_text(encoding="utf-8-sig", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"SUBTITLE_ENCODING_UNSUPPORTED: {path}; convert to UTF-8") from exc
+    if "\x00" in text or "\ufffd" in text:
+        raise ValueError(f"SUBTITLE_ENCODING_INVALID: {path}; convert to UTF-8")
+    return text
+
+
 def parse_srt_or_vtt(path: str | Path, source_id: str) -> list[TranscriptSegment]:
-    text = Path(path).read_text(encoding="utf-8-sig", errors="replace")
+    text = _read_subtitle_text(path)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     blocks = re.split(r"\n\s*\n", text)
     segments: list[TranscriptSegment] = []
@@ -95,7 +106,7 @@ def parse_srt_or_vtt(path: str | Path, source_id: str) -> list[TranscriptSegment
 
 
 def parse_ass(path: str | Path, source_id: str) -> list[TranscriptSegment]:
-    lines = Path(path).read_text(encoding="utf-8-sig", errors="replace").splitlines()
+    lines = _read_subtitle_text(path).splitlines()
     fields: list[str] | None = None
     segments: list[TranscriptSegment] = []
     for raw in lines:
