@@ -1,5 +1,5 @@
 """Explicit scoped variants and restartable local render batches; no creative decisions."""
-import copy,json,os,re,sqlite3
+import copy,hashlib,json,os,re,sqlite3
 from pathlib import Path
 from contextlib import contextmanager
 import fcntl
@@ -23,7 +23,11 @@ def variant_create(q,directory,tools):
     require(target.resolve()!=Path(q['parent_store']).resolve(),'VARIANT_CANNOT_OVERWRITE_PARENT')
     require(not target.exists(),'VARIANT_STORE_EXISTS')
     require(isinstance(q['variant_id'],str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,79}',q['variant_id']),'VARIANT_ID_INVALID')
-    candidate=source(q['candidate']);bundle=json.loads(Path(candidate['path']).read_text())
+    candidate=source(q['candidate'])
+    candidate_bytes=Path(candidate['path']).read_bytes()
+    require(hashlib.sha256(candidate_bytes).hexdigest()==candidate['sha256'],
+            'SOURCE_HASH_MISMATCH: '+candidate['path'])
+    bundle=json.loads(candidate_bytes)
     bk=['schema','base_version','base_document_sha256','document','scope'];exact_keys(bundle,bk,bk)
     require(bundle['schema']=='work-candidate/1','CANDIDATE_SCHEMA_UNSUPPORTED')
     require(bundle['base_version']==parent['version'] and bundle['base_document_sha256']==parent['document_sha256'],'CANDIDATE_BASE_CONFLICT')
@@ -38,6 +42,8 @@ def variant_create(q,directory,tools):
     drama_inheritance=({'drama_inheritance':{'store':str(Path(q['parent_store']).resolve()),
                         'expected_version':parent['version']}}
                        if 'drama_domain_ref' in doc['notes'] else {})
+    # Recheck availability without parsing a second, potentially different document.
+    source(q['candidate'])
     rr=run({'operation':'work-version','action':'init','store':str(target),'work_id':q['variant_id'],
             'document':doc,'message':q['message'],'author':q['author'],**drama_inheritance},directory/'initialize',tools)
     require(rr['status']=='SUCCEEDED','VARIANT_INITIALIZE_FAILED: '+rr.get('error','unknown'))

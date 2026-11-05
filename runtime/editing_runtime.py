@@ -482,9 +482,11 @@ def normalize_plan(plan, tools):
                                              kind='audio', start=a, allow_no_audio=True, playback=True)
             audio_intersection(audio_clock, a, b, playback=True)
         require(-120 <= gain <= 24, 'GAIN_OUT_OF_RANGE')
+        # Source IDs and paths are aliases, not permission to reuse identical media.
+        identity = sources[sid]['sha256']
         if not plan.get('allow_source_reuse', False):
-            require(not any(a < y and b > x for x, y in ranges.get(sid, [])), 'SOURCE_REUSE_NOT_AUTHORIZED')
-        ranges.setdefault(sid, []).append((a, b))
+            require(not any(a < y and b > x for x, y in ranges.get(identity, [])), 'SOURCE_REUSE_NOT_AUTHORIZED')
+        ranges.setdefault(identity, []).append((a, b))
         frames = round((Fraction(str(b)) - Fraction(str(a))) * fps / speed)
         require(frames > 0, 'SUBFRAME_CLIP')
         length = float(frames / fps)
