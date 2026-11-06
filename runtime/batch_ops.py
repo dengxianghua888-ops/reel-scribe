@@ -81,8 +81,39 @@ def database(batch):
     return db
 
 
-def snapshot(db,manifest):
-    rows=[dict(r) for r in db.execute('SELECT * FROM jobs ORDER BY ordinal')]
+def queue_snapshot(db):
+    # One statement gives all queue tables the same SQLite read snapshot. Fetch
+    # and release it before Python validation or reading any external Work DB.
+    from editing_runtime import require
+    cursor=db.execute('''
+        SELECT 'metadata' AS kind,key AS id,value,NULL AS ordinal,NULL AS status,
+               NULL AS attempt,NULL AS receipt,NULL AS receipt_sha256,NULL AS error,NULL AS path
+        FROM metadata
+        UNION ALL
+        SELECT 'jobs',id,NULL,ordinal,status,attempt,receipt,receipt_sha256,error,NULL FROM jobs
+        UNION ALL
+        SELECT 'attempts',job_id,NULL,NULL,status,number,NULL,NULL,error,path FROM attempts
+        ORDER BY kind,ordinal,id,attempt
+    ''')
+    try:captured=cursor.fetchall()
+    finally:cursor.close()
+    result={'metadata':{},'jobs':[],'attempts':[]}
+    for row in captured:
+        if row['kind']=='metadata':
+            require(row['id'] not in result['metadata'],'BATCH_MANIFEST_DATABASE_MISMATCH')
+            result['metadata'][row['id']]=row['value']
+        elif row['kind']=='jobs':
+            result['jobs'].append({key:row[key] for key in
+                                  ['id','ordinal','status','attempt','receipt','receipt_sha256','error']})
+        else:
+            result['attempts'].append({'job_id':row['id'],'number':row['attempt'],
+                                      'status':row['status'],'path':row['path'],'error':row['error']})
+    return result
+
+
+def snapshot(db,manifest,queue=None):
+    queue=queue_snapshot(db) if queue is None else queue
+    rows=[dict(r) for r in queue['jobs']]
     for row in rows:
         spec=next(j for j in manifest['jobs'] if j['id']==row['id'])
         try:row['current_version_matches']=work_state(spec['store'])['version']==spec['expected_version']
@@ -90,7 +121,7 @@ def snapshot(db,manifest):
     states=[r['status'] for r in rows]
     status='RENDERED' if all(s=='RENDERED' for s in states) else 'PARTIAL' if 'RENDERED' in states else 'PENDING_OR_FAILED'
     if status=='RENDERED' and not all(r['current_version_matches'] for r in rows):status='RENDERED_HISTORICAL'
-    return {'schema':'batch-state/1','batch_id':manifest['batch_id'],'status':status,'jobs':rows,'attempts':[dict(r) for r in db.execute('SELECT * FROM attempts ORDER BY job_id,number')],'creative_quality':'NOT_RUN','native_editor':'NOT_RUN','scope':'Local explicit work exports. RENDERED is not semantic, listening, publishing or platform acceptance.'}
+    return {'schema':'batch-state/1','batch_id':manifest['batch_id'],'status':status,'jobs':rows,'attempts':queue['attempts'],'creative_quality':'NOT_RUN','native_editor':'NOT_RUN','scope':'Local explicit work exports. RENDERED is not semantic, listening, publishing or platform acceptance.'}
 
 
 def render_request(spec):
@@ -214,30 +245,32 @@ def batch_render(q,directory,tools):
             finally:db.close()
         result['manifest_sha256']=sha256(batch/'manifest.json');write_json(directory/'batch-state.json',result);return result
     require(batch.is_dir(),'BATCH_NOT_FOUND')
-    require(sha256(batch/'manifest.json')==q['manifest_sha256'],'BATCH_MANIFEST_CHANGED')
-    manifest=json.loads((batch/'manifest.json').read_text());require(manifest['schema']=='local-render-batch/1','BATCH_MANIFEST_SCHEMA')
+    # Bind the exact JSON bytes consumed, not a prior read of this pathname.
+    manifest_bytes=(batch/'manifest.json').read_bytes()
+    require(hashlib.sha256(manifest_bytes).hexdigest()==q['manifest_sha256'],'BATCH_MANIFEST_CHANGED')
+    manifest=json.loads(manifest_bytes);require(manifest['schema']=='local-render-batch/1','BATCH_MANIFEST_SCHEMA')
     def open_bound():
         db=database(batch)
         try:
-            binding=db.execute('SELECT value FROM metadata WHERE key=?',('manifest_sha256',)).fetchone()
-            require(binding is not None and binding[0]==q['manifest_sha256'],'BATCH_MANIFEST_DATABASE_MISMATCH')
-            rows=[dict(r) for r in db.execute('SELECT * FROM jobs ORDER BY ordinal')]
+            queue=queue_snapshot(db)
+            require(queue['metadata'].get('manifest_sha256')==q['manifest_sha256'],'BATCH_MANIFEST_DATABASE_MISMATCH')
+            rows=queue['jobs']
             require([(r['id'],r['ordinal']) for r in rows]==[(j['id'],i) for i,j in enumerate(manifest['jobs'])],'BATCH_JOB_INDEX_MISMATCH')
             for row in rows:
                 require(row['status'] in ['PENDING','RUNNING','RENDERED','FAILED','INVALID_OUTPUT'] and type(row['attempt']) is int and row['attempt']>=0,'BATCH_JOB_STATE_INVALID')
-                attempts=[dict(r) for r in db.execute('SELECT * FROM attempts WHERE job_id=? ORDER BY number',(row['id'],))]
+                attempts=[a for a in queue['attempts'] if a['job_id']==row['id']]
                 require([a['number'] for a in attempts]==list(range(1,row['attempt']+1)),'BATCH_ATTEMPT_INDEX_MISMATCH')
                 for a in attempts:
                     require(Path(a['path']).resolve()==batch/'jobs'/row['id']/f"attempt-{a['number']:04d}",'BATCH_ATTEMPT_PATH_INVALID')
                 require(row['status'] not in ['RUNNING','RENDERED','INVALID_OUTPUT'] or row['attempt']>0,'BATCH_ATTEMPT_INDEX_MISMATCH')
                 if row['status']=='RENDERED':require(row['receipt']==str(batch/'jobs'/row['id']/f"attempt-{row['attempt']:04d}"/'receipt.json') and isinstance(row['receipt_sha256'],str),'BATCH_RECEIPT_INDEX_INVALID')
-            return db
+            return db,queue
         except Exception:
             db.close();raise
     if action=='status':
-        db=open_bound()
-        try:result=snapshot(db,manifest)
-        finally:db.close()
+        db,queue=open_bound()
+        db.close()
+        result=snapshot(None,manifest,queue)
         result['artifact_integrity']='NOT_RECHECKED_STATUS_ONLY';write_json(directory/'batch-state.json',result);return result
     require(isinstance(q['job_ids'],list) and q['job_ids'] and all(isinstance(x,str) for x in q['job_ids']) and len(q['job_ids'])==len(set(q['job_ids'])),'BATCH_JOB_SELECTION_INVALID')
     specs={j['id']:j for j in manifest['jobs']};require(set(q['job_ids'])<=set(specs),'BATCH_JOB_UNKNOWN')
@@ -245,7 +278,10 @@ def batch_render(q,directory,tools):
     env=environment(tools);require(env==manifest['environment'],'BATCH_ENVIRONMENT_CHANGED_CREATE_NEW_BATCH')
     events=[]
     with exclusive(batch):
-        db=open_bound()
+        # Environment inspection/lock acquisition may outlive the initial read.
+        # Refuse observed drift before touching queue state or starting a render.
+        require(sha256(batch/'manifest.json')==q['manifest_sha256'],'BATCH_MANIFEST_CHANGED')
+        db,_=open_bound()
         try:
             def finish(jid,attempt,path,rr):
                 status='RENDERED' if rr['status']=='SUCCEEDED' else 'FAILED';error=rr.get('error')
