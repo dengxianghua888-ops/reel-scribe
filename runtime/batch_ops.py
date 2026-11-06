@@ -214,8 +214,10 @@ def batch_render(q,directory,tools):
             finally:db.close()
         result['manifest_sha256']=sha256(batch/'manifest.json');write_json(directory/'batch-state.json',result);return result
     require(batch.is_dir(),'BATCH_NOT_FOUND')
-    require(sha256(batch/'manifest.json')==q['manifest_sha256'],'BATCH_MANIFEST_CHANGED')
-    manifest=json.loads((batch/'manifest.json').read_text());require(manifest['schema']=='local-render-batch/1','BATCH_MANIFEST_SCHEMA')
+    # Bind the exact JSON bytes consumed, not a prior read of this pathname.
+    manifest_bytes=(batch/'manifest.json').read_bytes()
+    require(hashlib.sha256(manifest_bytes).hexdigest()==q['manifest_sha256'],'BATCH_MANIFEST_CHANGED')
+    manifest=json.loads(manifest_bytes);require(manifest['schema']=='local-render-batch/1','BATCH_MANIFEST_SCHEMA')
     def open_bound():
         db=database(batch)
         try:
@@ -245,6 +247,9 @@ def batch_render(q,directory,tools):
     env=environment(tools);require(env==manifest['environment'],'BATCH_ENVIRONMENT_CHANGED_CREATE_NEW_BATCH')
     events=[]
     with exclusive(batch):
+        # Environment inspection/lock acquisition may outlive the initial read.
+        # Refuse observed drift before touching queue state or starting a render.
+        require(sha256(batch/'manifest.json')==q['manifest_sha256'],'BATCH_MANIFEST_CHANGED')
         db=open_bound()
         try:
             def finish(jid,attempt,path,rr):
