@@ -144,3 +144,61 @@ def test_existing_text_validation_remains(comparison, value, error):
     spec['artifact'] = reference(path)
     with pytest.raises(ValueError, match=error):
         text_compare_ops.witness(spec)
+
+
+@pytest.mark.parametrize('side', ['reference', 'observed'])
+@pytest.mark.parametrize('payload,pointer', [
+    ('{"text":"不可以","text":"可以"}', '/text'),
+    ('{"segments":[{"text":"不可以","text":"可以"}]}', '/segments/0/text'),
+    ('{"row":{"text":"不可以"},"row":{"text":"可以"}}', '/row/text'),
+    ('{"text":"不可以","te\\u0078t":"可以"}', '/text'),
+    ('{"":"不可以","":"可以"}', '/'),
+    ('{"text":"可以","text":"可以"}', '/text'),
+    ('{"text":"可以","unused":{"note":"一","note":"二"}}', '/text'),
+])
+def test_ambiguous_witness_members_cannot_produce_a_text_match(comparison, side, payload, pointer):
+    request, output = comparison
+    doc = request['document']
+    for name in ('reference', 'observed'):
+        spec = doc[name]
+        path = Path(spec['artifact']['path'])
+        path.write_text(payload if name == side else '{"text":"可以"}', encoding='utf-8')
+        spec['artifact'] = reference(path)
+        spec['pointers'] = [pointer if name == side else '/text']
+    request['expected_revision'] = editing_runtime.fingerprint(doc)
+    before = {name: Path(doc[name]['artifact']['path']).read_bytes()
+              for name in ('reference', 'observed')}
+    with pytest.raises(ValueError, match='WITNESS_DUPLICATE_JSON_KEY'):
+        text_compare_ops.execute(request, output, FakeAudioTools())
+    assert not (output / 'text-comparison.json').exists()
+    for name, data in before.items():
+        assert Path(doc[name]['artifact']['path']).read_bytes() == data
+
+
+@pytest.mark.parametrize('payload,pointers,expected', [
+    ('{"segments":[{"text":"不"},{"text":"可以"}]}',
+     ['/segments/0/text', '/segments/1/text'], '不可以'),
+    ('{"a":{"text":"不"},"b":{"text":"可以"}}', ['/a/text', '/b/text'], '不可以'),
+    ('{"a/b":"不","a~b":"可以"}', ['/a~1b', '/a~0b'], '不可以'),
+    ('{"text":"不","Text":"可以"}', ['/text', '/Text'], '不可以'),
+    ('{"é":"不","e\\u0301":"可以"}', ['/é', '/e\u0301'], '不可以'),
+    ('"不可以"', [''], '不可以'),
+])
+def test_unambiguous_witness_selection_preserves_pointer_semantics(comparison, payload, pointers, expected):
+    request, output = comparison
+    doc = request['document']
+    for name in ('reference', 'observed'):
+        spec = doc[name]
+        path = Path(spec['artifact']['path'])
+        path.write_text(payload, encoding='utf-8')
+        spec['artifact'] = reference(path)
+        spec['pointers'] = pointers
+    request['expected_revision'] = editing_runtime.fingerprint(doc)
+    result = text_compare_ops.execute(request, output, FakeAudioTools())
+    report = json.loads((output / 'text-comparison.json').read_text())
+    assert result['status'] == 'TEXT_MATCH_UNDER_DECLARED_NORMALIZATION'
+    assert report['reference']['text'] == report['observed']['text'] == expected
+    assert [entry['pointer'] for entry in report['reference']['selections']] == pointers
+    assert report['audio_truth'] == 'NOT_VERIFIED'
+    assert report['semantic_review'] == report['acoustic_alignment'] == 'NOT_RUN'
+    assert report['corrections'] == [] and report['cut_plan'] is None
