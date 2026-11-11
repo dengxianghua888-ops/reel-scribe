@@ -12,7 +12,9 @@ document字段：
 
 每份文本的`artifact`是UTF-8 JSON文件的绝对path与SHA-256；`pointers`是非空、有序、不重复的RFC6901 JSON指针，每个指针必须指向字符串。`joiner`显式指定拼接字符（最长4个Unicode码点）。如公开语料可选择`/rows/0/raw_transcription`，识别原稿可选择`/segments/0/text`及后续明确字段，不能把示例字段当所有文件的通用结构。role允许`corpus-reference`、`user-script`、`model-observation`、`human-transcript`，属于调用者声明，不认证其权威或听检状态。
 
-文件最多32MiB，每侧拼接文本最多20000码点，两侧长度乘积最多4000000；超限显式分窗口／语义段运行。所有选取范围写入报告，不暗中截断。每次处理前后复核原文件哈希；文档、字段、窗口或身份任何变化均使expected_revision失效。
+每个 JSON 对象内解码后的成员名必须唯一。任一层级存在重复成员（包括未选字段或相同值重复）均以`WITNESS_DUPLICATE_JSON_KEY`拒绝整份文本，不以“最后一个值”为准产生匹配报告。转义后相同的成员名也算重复；不同对象各自拥有同名成员合法，不进行大小写或 Unicode 规范化。拒绝时不改写来源，也不自动生成去重稿。
+
+文件最多32MiB，每侧拼接文本最多20000码点，两侧长度乘积最多4000000；超限显式分窗口／语义段运行。所有选取范围写入报告，不暗中截断。JSON 读取受32MiB上限约束，核对 SHA-256 后从同一份 UTF-8 字节解析；读取期间文件增长也会拒绝。每次处理前后继续复核原文件哈希；这不是持续文件锁或对同用户进程的隔离。文档、字段、窗口或身份任何变化均使expected_revision失效。
 
 输出`text-comparison.json`保留两侧原文、来源、字段到拼接文字的范围、比较规则、差异和原字符半开区间。方向为参考→观察：`insert`是观察多出的字，`delete`是观察相对参考缺的字，`replace`是不同文字。使用difflib.SequenceMatcher且禁用autojunk，结果不是最小编辑距离／CER，不与原FLEURS规范化指标混称。
 

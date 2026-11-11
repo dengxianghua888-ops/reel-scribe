@@ -1,9 +1,20 @@
 """Compare explicit, version-bound text witnesses without choosing a true reading."""
 import difflib
+import hashlib
 import json
 import re
 
 from editing_runtime import exact_keys, require, source, fingerprint, span, write_json
+
+
+def unique_object(pairs):
+    # Duplicate decoded names make a JSON Pointer ambiguous. Never silently
+    # choose the last witness value, even when its file hash is correct.
+    result = {}
+    for key, value in pairs:
+        require(key not in result, 'WITNESS_DUPLICATE_JSON_KEY')
+        result[key] = value
+    return result
 
 
 def pointer_value(value, pointer):
@@ -29,8 +40,15 @@ def witness(spec):
     require(spec['role'] in ['corpus-reference', 'user-script', 'model-observation', 'human-transcript'], 'WITNESS_ROLE_REQUIRED')
     artifact = source(spec['artifact'])
     require(artifact['bytes'] <= 32 * 1024 * 1024, 'WITNESS_FILE_TOO_LARGE')
-    with open(artifact['path'], encoding='utf-8') as stream:
-        data = json.load(stream)
+    # Hash and parse the same bounded buffer. Pathname checks alone cannot
+    # detect a replacement that is restored before the final observation.
+    with open(artifact['path'], 'rb') as stream:
+        payload = stream.read(32 * 1024 * 1024 + 1)
+    require(len(payload) <= 32 * 1024 * 1024, 'WITNESS_FILE_TOO_LARGE')
+    require(hashlib.sha256(payload).hexdigest() == artifact['sha256'],
+            'SOURCE_HASH_MISMATCH: ' + artifact['path'])
+    artifact['bytes'] = len(payload)
+    data = json.loads(payload.decode('utf-8'), object_pairs_hook=unique_object)
     pointers = spec['pointers']
     require(isinstance(pointers, list) and pointers and all(isinstance(p, str) for p in pointers), 'TEXT_POINTERS_REQUIRED')
     require(len(pointers) == len(set(pointers)), 'DUPLICATE_TEXT_POINTER')
