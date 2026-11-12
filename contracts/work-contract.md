@@ -215,3 +215,41 @@ derived recipe; if this would leave no recipe parameters at all,
 `UNDO_EMPTY_DERIVED_RECIPE_UNSUPPORTED` rejects the action. It never silently clears
 the Work binding. Existing explicit derived identity, scope, layout revalidation,
 CAS and no-auto-commit rules continue to apply.
+
+## Explicit independent-track sample envelope
+
+An independent audio track may declare optional `envelope` with exactly
+`sample_rate: 48000`, nonnegative integer (not boolean) `fade_in_samples` and
+`fade_out_samples`, and `curve: tri|qsin`. Source window length must be an exact
+positive 48 kHz sample count; fades must fit without overlap. Envelope absence
+preserves the old render path. No source replacement, clip-original-audio change,
+automatic ducking, limiter, normalization or semantic endorsement occurs.
+
+The envelope is applied after source trim/resampling/gain and before placement.
+Precise full source audio coverage and independently decoded unpadded sample
+count are required. Audio evidence intersecting either nonzero fade is rejected;
+zero fades may touch evidence boundaries. Current style bindings with an envelope
+are unsupported and rejected rather than cleared. Scope remains `audio_ids`;
+existing CAS and review invalidation remain mandatory.
+
+Local undo supports `{kind:audio_track,id:<id>,field:envelope}` as a whole-field
+three-way selection including restoring absence; later independent gain/notes
+are retained, source/anchor changes and conflicting envelopes reject. Batch reuse
+may share only the verified underlying timeline; mixing and final checks rerun.
+Technical sample comparisons are not listening acceptance.
+
+For this first envelope implementation, source start/end and placed output start
+must also be exact 48 kHz sample boundaries. The envelope branch decodes the
+selected source window without asynchronous padding into a checked stereo
+`pcm_f32le` raw intermediate, then mixes that same intermediate. Its hash, sample
+count and quantization format are recorded; Work continues to reference the
+original source. The float32 intermediate avoids an unnecessary 16-bit quantization step; the
+legacy branch without an envelope remains unchanged. The receipt grants no original-sound or
+listening evidence.
+
+Work placement uses the original frame clock plus the declared offset before
+serializing seconds. Decimal JSON floats may differ from an integral sample by
+at most two floating-point ULPs, capped at 0.000001 sample; larger deviations are
+rejected, not rounded. Each source endpoint is validated independently before
+subtracting integer sample counts, so floating-point cancellation cannot turn a
+valid source window into a false alignment failure.

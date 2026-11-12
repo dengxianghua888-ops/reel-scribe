@@ -85,7 +85,7 @@ timeline-render 产生新的剪辑时间轴，不自动继承输入容器中未�
 
 ## 回执与 QC
 
-audio-mix 的每轨为 `{source,start,end,output_start,gain_db}`；原片音量由 base_gain_db 给定，可选 base_gain_windows 为有序不重叠的 `{start,end,gain_db}` 数组，按窗口设置绝对增益，精度为音频帧边界。超过画面范围拒绝，不自动拉伸或截断语音。混音不做主观对白避让，也不自动限幅或平滑增益；实际音量/峰值仍需检查。
+audio-mix 的每轨为 `{source,start,end,output_start,gain_db}`，可选独立轨 `envelope:{sample_rate:48000,fade_in_samples:非负整数,fade_out_samples:非负整数,curve:"tri"|"qsin"}`。显式包络要求源窗入出点及输出位置精确采样对齐，两段之和不超源窗；解码为48kHz双声道f32并验证完整样本数后淡变，无隐式补齐。省略包络不改变旧路径；原片音量由 base_gain_db 给定，可选 base_gain_windows 为有序不重叠的 `{start,end,gain_db}` 数组，按窗口设置绝对增益，精度为音频帧边界。超过画面范围拒绝，不自动拉伸或截断语音。混音不做主观对白避让，也不自动限幅或平滑增益；实际音量/峰值仍需检查。
 
 caption-burn 的 cues 使用输出时间，字段为 start/end/text，可选非空 style_override 仅允许 font_size、color_rgb、margin_v，未覆盖字段继承全局。字号与边距仍按实际画布校验，局部字体及任意 ASS 指令不支持；font 是带哈希的本地字体。color_rgb 使用六位十六进制 RGB，font_size/margin_v 按视频画布像素；当前底部居中、黑色 1px 描边。不支持的 ASS 控制字符拒绝而不改写。字体 fallback 与字形完整性必须检查实际输出。
 

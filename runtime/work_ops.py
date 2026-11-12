@@ -53,7 +53,7 @@ def validate_document(doc,tools):
     require(not cues or style is not None,'CAPTION_STYLE_REQUIRED')
     tracks=[]
     for aid,track in doc['audio_tracks'].items():
-        exact_keys(track,['source','start','end','anchor_clip_id','offset','gain_db'],['source','start','end','anchor_clip_id','offset','gain_db'])
+        exact_keys(track,['source','start','end','anchor_clip_id','offset','gain_db','envelope'],['source','start','end','anchor_clip_id','offset','gain_db'])
         asset=source(track['source']);media=tools.probe(asset['path'])
         require(any(s['codec_type']=='audio' for s in media['streams']),'AUDIO_STREAM_REQUIRED')
         a,b=span(track['start'],track['end'],media['duration'])
@@ -63,6 +63,16 @@ def validate_document(doc,tools):
         require(start>=0 and start+b-a<=norm['duration']+1e-8,'AUDIO_TRACK_OUTSIDE_WORK: '+aid)
         gain=number(track['gain_db'],'gain_db');require(-120<=gain<=24,'GAIN_OUT_OF_RANGE')
         tracks.append({'source':track['source'],'start':a,'end':b,'output_start':start,'gain_db':gain})
+        if 'envelope' in track:
+            from audio_ops import validate_work_envelope, envelope_sample_count
+            from fractions import Fraction
+            validate_work_envelope(track['envelope'],Fraction(envelope_sample_count(b)-envelope_sample_count(a),48000))
+            precise_start=(Fraction(clips[anchor]['output_start_frame'])/Fraction(norm['fps']) if anchor is not None else Fraction(0))+Fraction(str(track['offset']))
+            start=float(Fraction(envelope_sample_count(precise_start),48000))
+            envelope_sample_count(a);envelope_sample_count(b)
+            tracks[-1]['output_start']=start
+            require(not doc['style_bindings'],'AUDIO_ENVELOPE_STYLE_BINDING_UNSUPPORTED')
+            tracks[-1]['envelope']=track['envelope']
     for key,binding in doc['style_bindings'].items():
         require(key=='*' or key in clips,'STYLE_ANCHOR_MISSING: '+key)
         exact_keys(binding,['family','style_id','version','card','parameters'],['family','style_id','version','card','parameters'])

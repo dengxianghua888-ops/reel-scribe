@@ -58,9 +58,9 @@ def prepare(db, current, request, tools, *, directory=None):
             path = ('caption_style', key)
         elif kind == 'audio_track':
             exact_keys(selection, ['kind', 'id', 'field'], ['kind', 'id', 'field'])
-            require(isinstance(selection['id'], str) and selection['id'] and selection['field'] == 'gain_db',
+            require(isinstance(selection['id'], str) and selection['id'] and selection['field'] in ('gain_db','envelope'),
                     'UNDO_FIELD_UNSUPPORTED')
-            path = ('audio_tracks', selection['id'], 'gain_db')
+            path = ('audio_tracks', selection['id'], selection['field'])
         else:
             require(False, 'UNDO_FIELD_UNSUPPORTED')
         require(path not in seen, 'UNDO_FIELD_DUPLICATE')
@@ -71,12 +71,12 @@ def prepare(db, current, request, tools, *, directory=None):
             for part in path[:-1]:
                 require(isinstance(value, dict) and part in value, 'UNDO_FIELD_MISSING')
                 value = value[part]
-            require(isinstance(value, dict) and path[-1] in value, 'UNDO_FIELD_MISSING')
+            require(isinstance(value, dict) and (path[-1] in value or path[-1]=='envelope'), 'UNDO_FIELD_MISSING')
             containers.append(value)
         if kind == 'audio_track':
             identities = []
             for state, track in zip([before, after, current], containers):
-                identity = {k: v for k, v in track.items() if k != 'gain_db'}
+                identity = {k: v for k, v in track.items() if k not in (('gain_db','envelope') if path[-1]=='envelope' else ('gain_db',))}
                 anchor = track.get('anchor_clip_id')
                 if anchor is not None:
                     clips = state['document']['plan']['clips']
@@ -86,7 +86,10 @@ def prepare(db, current, request, tools, *, directory=None):
                     identity['anchor_source'] = state['document']['plan']['sources'].get(clip['source_id'])
                 identities.append(identity)
             require(identities[0] == identities[1] == identities[2], 'UNDO_AUDIO_IDENTITY_CONFLICT')
-        old, edited, now = [v[path[-1]] for v in containers]
+        presence=[path[-1] in v for v in containers]
+        old, edited, now = [v.get(path[-1]) for v in containers]
+        if path[-1]=='envelope':
+            require(not candidate['style_bindings'],'AUDIO_ENVELOPE_STYLE_BINDING_UNSUPPORTED')
         # Canonical comparison preserves types as well as values (1 is not true).
         eq = lambda a, b: fingerprint(a) == fingerprint(b)
         require(eq(now, edited) or eq(now, old), 'UNDO_FIELD_CONFLICT: ' + '.'.join(path))
@@ -94,7 +97,8 @@ def prepare(db, current, request, tools, *, directory=None):
         target = candidate
         for part in path[:-1]:
             target = target[part]
-        target[path[-1]] = copy.deepcopy(old)
+        if presence[0]:target[path[-1]] = copy.deepcopy(old)
+        else:target.pop(path[-1],None)
         records.append({'selection': selection, 'before': old, 'after': edited, 'current': now,
                         'status': 'RESTORE_BEFORE' if changed else 'ALREADY_RESTORED'})
     # Resolve inherited appearance after ALL selected fields, independent of order.

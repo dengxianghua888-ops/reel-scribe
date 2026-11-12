@@ -20,21 +20,30 @@ def provider(callback):
 
 def compatible(left, right):
     """Only post-timeline presentation parameters may differ; never layer identity."""
-    allowed = {'audio_tracks': {'gain_db'}, 'visual_layers': {'rect', 'opacity', 'z'}}
+    allowed = {'audio_tracks': {'gain_db', 'envelope'}, 'visual_layers': {'rect', 'opacity', 'z'}}
     def same_type(a, b):
         return type(a) is type(b) and (not isinstance(a, list) or
             len(a) == len(b) and all(same_type(x, y) for x, y in zip(a, b)))
+    try:
+        from audio_ops import validate_work_envelope, envelope_sample_count
+        from fractions import Fraction
+        for document in (left,right):
+            for track in document.get('audio_tracks',{}).values():
+                if 'envelope' in track:
+                    validate_work_envelope(track['envelope'],Fraction(envelope_sample_count(track['end'])-envelope_sample_count(track['start']),48000))
+    except (ValueError,TypeError,KeyError,AttributeError):
+        return False
     for field, mutable in allowed.items():
         before, after = left.get(field, {}), right.get(field, {})
         if not isinstance(before, dict) or not isinstance(after, dict) or before.keys() != after.keys():
             return False
         for key, value in before.items():
             other = after[key]
-            if not isinstance(value, dict) or not isinstance(other, dict) or value.keys() != other.keys():
+            if not isinstance(value, dict) or not isinstance(other, dict) or (value.keys()-mutable) != (other.keys()-mutable):
                 return False
             if any(value[k] != other[k] for k in value if k not in mutable):
                 return False
-            if any(not same_type(value[k], other[k]) for k in mutable if k in value):
+            if any(not same_type(value[k], other[k]) for k in mutable if k in value and k in other):
                 return False
     # Only a validated finite cue-style map may be omitted from timeline identity.
     def caption_core(document):

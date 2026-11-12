@@ -975,7 +975,7 @@ def audio_mix(request, directory, tools):
         filters.append(f'anullsrc=r=48000:cl=stereo,atrim=duration={picture_duration}[base]')
     labels.append('[base]')
     for i, track in enumerate(request['tracks'], 1):
-        exact_keys(track, ['source', 'start', 'end', 'output_start', 'gain_db'], ['source','start','end','output_start','gain_db'])
+        exact_keys(track, ['source', 'start', 'end', 'output_start', 'gain_db', 'envelope'], ['source','start','end','output_start','gain_db'])
         ref=source(track['source']); info=tools.probe(ref['path'])
         require(any(s['codec_type']=='audio' for s in info['streams']), 'TRACK_AUDIO_REQUIRED')
         a,b=span(track['start'],track['end'],info['duration'])
@@ -985,10 +985,28 @@ def audio_mix(request, directory, tools):
         require(output_start+b-a <= picture_duration+0.000001, 'AUDIO_EXCEEDS_PICTURE')
         volume=number(track['gain_db'],'gain_db'); require(-120 <= volume <= 24,'GAIN_OUT_OF_RANGE')
         samples=round(output_start*48000)
-        args += ['-i',ref['path']]
-        filters.append(f'[{i}:a:0]atrim=start={a}:end={b},asetpts=PTS-{a}/TB,aresample=48000:async=1:first_pts=0,'
-                       f'aformat=sample_fmts=fltp:channel_layouts=stereo,volume={volume}dB,adelay={samples}S:all=1[t{i}]')
+        envelope_filter=''
+        if 'envelope' in track:
+            from audio_ops import validate_work_envelope, work_envelope_filters, envelope_sample_count
+            envelope_sample_count(a);envelope_sample_count(b)
+            samples=envelope_sample_count(output_start)
+            count=validate_work_envelope(track['envelope'],Fraction(envelope_sample_count(b)-envelope_sample_count(a),48000))
+            audio_intersection(track_clock,a,b,require_full=True,require_precise=True)
+            checked=directory/f'envelope-source-{i}.f32'
+            tools.ff(['-copyts','-i',ref['path'],'-map','0:a:0','-af',
+                      f'atrim=start={a}:end={b},asetpts=PTS-STARTPTS,aresample=48000',
+                      '-ar','48000','-ac','2','-c:a','pcm_f32le','-f','f32le',str(checked)])
+            require(checked.stat().st_size==count*8,'ENVELOPE_AUDIO_COVERAGE_INCOMPLETE')
+            envelope_filter=work_envelope_filters(track['envelope'],count)
+        args += (['-f','f32le','-ar','48000','-ac','2','-i',str(checked)] if 'envelope' in track else ['-i',ref['path']])
+        if 'envelope' in track:
+            filters.append(f'[{i}:a:0]asetpts=PTS-STARTPTS,aformat=sample_fmts=fltp:channel_layouts=stereo,volume={volume}dB{envelope_filter},adelay={samples}S:all=1[t{i}]')
+        else:
+            filters.append(f'[{i}:a:0]atrim=start={a}:end={b},asetpts=PTS-{a}/TB,aresample=48000:async=1:first_pts=0,'
+                       f'aformat=sample_fmts=fltp:channel_layouts=stereo,volume={volume}dB{envelope_filter},adelay={samples}S:all=1[t{i}]')
         labels.append(f'[t{i}]'); used.append({'source':ref,'start':a,'end':b,'output_start_samples':samples,'gain_db':volume,'audio_clock_basis':track_clock.get('playback_basis', {'status':'OBSERVED_ONLY'})})
+        if 'envelope' in track:
+            used[-1].update(envelope=dict(track['envelope']), envelope_pcm={'path':str(checked),'sha256':sha256(checked),'samples':count,'sample_rate':48000,'format':'pcm_f32le','padding':False})
     filters.append(''.join(labels)+f'amix=inputs={len(labels)}:duration=first:dropout_transition=0:normalize=0[mix]')
     tools.ff(args+['-filter_complex',';'.join(filters),'-map','0:v:0','-map','[mix]','-c:v','copy','-c:a','aac','-b:a','192k',str(directory/'mixed.mp4')])
     return {'source':asset,'tracks':used,'base_gain_windows':windows,'picture_clock':picture_clock,
