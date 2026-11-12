@@ -663,6 +663,13 @@
       "entry": "atomic/style-recipe-preview/SKILL.md",
       "description": "对同一当前作品的两到四份显式包装配方生成隔离视频预览与参数对照；不提交作品、不自动选风格，不继承真实效果验收。",
       "status": "experimental"
+    },
+    {
+      "id": "result-preview-compile",
+      "layer": "atomic",
+      "entry": "atomic/result-preview-compile/SKILL.md",
+      "description": "将明确教程结果源窗前置为标注的后段画面预览，保留完整原流程并按显式范围生成Work候选；不判断因果、不自动参考迁移、不提交作品。",
+      "status": "local-synthetic-tested"
     }
   ]
 }
