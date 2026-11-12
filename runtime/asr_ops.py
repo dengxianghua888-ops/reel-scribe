@@ -89,6 +89,52 @@ def normalize_observation(raw,asset,language,start,end,origin):
             'origin':{'method':'faster-whisper 1.2.1 internal word alignment; no separate forced alignment, diarization or human hearing check','reference':origin},'words':words},[]
 
 
+def recognition_pcm(reference):
+    """Read only our bound 16k mono PCM16 WAV; never invoke a second decoder."""
+    import hashlib
+    import io
+    import wave
+    import numpy as np
+    from editing_runtime import source,require
+    bound=source(reference)
+    data=Path(bound['path']).read_bytes()
+    require(hashlib.sha256(data).hexdigest()==reference['sha256'],'ASR_PCM_IDENTITY_CHANGED')
+    require(len(data)>=12 and data[:4]==b'RIFF' and data[8:12]==b'WAVE'
+            and int.from_bytes(data[4:8],'little')+8==len(data),'ASR_PCM_CONTAINER_INVALID')
+    # wave.readframes alone ignores trailing chunks and inconsistent PCM headers.
+    # Validate the entire bounded RIFF, while retaining opaque metadata chunks.
+    import struct
+    offset=12;seen=set();data_size=None
+    while offset<len(data):
+        require(offset+8<=len(data),'ASR_PCM_CONTAINER_INVALID')
+        kind=data[offset:offset+4];size=int.from_bytes(data[offset+4:offset+8],'little')
+        start=offset+8;end=start+size;padded=end+(size%2)
+        require(padded<=len(data),'ASR_PCM_FRAMES_INCOMPLETE' if kind==b'data' else 'ASR_PCM_CONTAINER_INVALID')
+        if size%2:require(data[end]==0,'ASR_PCM_PADDING_INVALID')
+        if kind in (b'fmt ',b'data'):
+            require(kind not in seen,'ASR_PCM_DUPLICATE_CHUNK')
+            seen.add(kind)
+        if kind==b'fmt ':
+            require(size==16 and struct.unpack('<HHIIHH',data[start:end])==(1,1,16000,32000,2,16),
+                    'ASR_PCM_FORMAT_INVALID')
+        if kind==b'data':
+            require(b'fmt ' in seen and size>0 and size%2==0,'ASR_PCM_FRAMES_INCOMPLETE')
+            data_size=size
+        offset=padded
+    require(seen=={b'fmt ',b'data'} and offset==len(data),'ASR_PCM_CONTAINER_INVALID')
+    try:
+        with wave.open(io.BytesIO(data),'rb') as stream:
+            require(stream.getnchannels()==1 and stream.getframerate()==16000 and
+                    stream.getsampwidth()==2 and stream.getcomptype()=='NONE','ASR_PCM_FORMAT_INVALID')
+            count=stream.getnframes()
+            pcm=stream.readframes(count+1)
+            require(count>0 and len(pcm)==count*2==data_size,'ASR_PCM_FRAMES_INCOMPLETE')
+    except (wave.Error,EOFError) as exc:
+        raise ValueError('ASR_PCM_FORMAT_INVALID: '+str(exc)) from exc
+    source(reference)
+    return np.frombuffer(pcm,dtype='<i2').astype(np.float32)/32768.0
+
+
 def transcribe(request,directory,tools):
     from editing_runtime import exact_keys,require,source,span,write_json,sha256
     keys=['operation','source','audio_stream','start','end','model_lock','environment_lock','language','beam_size','vad_filter','condition_on_previous_text','cpu_threads']
@@ -105,10 +151,12 @@ def transcribe(request,directory,tools):
     # Explicit input PTS window and absolute audio-stream index; retain initial silence if audio begins later.
     tools.ff(['-copyts','-i',asset['path'],'-map',f'0:{idx}','-af',f'atrim=start={a}:end={b},asetpts=PTS-{a}/TB,aresample=16000:async=1:first_pts=0,apad,atrim=duration={b-a}',
               '-ac','1','-c:a','pcm_s16le',str(wav)])
-    write_json(directory/'input-binding.json',{'source':request['source'],'window':[a,b],'audio_stream':idx,'audio':{'path':str(wav),'sha256':sha256(wav)},'model_lock':request['model_lock'],'environment_lock':request['environment_lock'],'model_revision':model['revision'],'network':'local_files_only; no media upload or implicit model download','clock':'source PTS trimmed; resampled to16k mono with source-window-relative zero'})
+    audio_ref={'path':str(wav),'sha256':sha256(wav)}
+    audio=recognition_pcm(audio_ref)
+    write_json(directory/'input-binding.json',{'source':request['source'],'window':[a,b],'audio_stream':idx,'audio':audio_ref,'model_lock':request['model_lock'],'environment_lock':request['environment_lock'],'model_revision':model['revision'],'network':'local_files_only; no media upload or implicit model download','clock':'source PTS trimmed; resampled to16k mono with source-window-relative zero'})
     try:
         engine=WhisperModel(str(root),device='cpu',compute_type='int8',cpu_threads=request['cpu_threads'],local_files_only=True)
-        segments,info=engine.transcribe(str(wav),language=request['language'],task='transcribe',beam_size=request['beam_size'],word_timestamps=True,
+        segments,info=engine.transcribe(audio,language=request['language'],task='transcribe',beam_size=request['beam_size'],word_timestamps=True,
              vad_filter=request['vad_filter'],condition_on_previous_text=request['condition_on_previous_text'],temperature=0.0)
         rows=[s._asdict() for s in segments]
         for row in rows:row['words']=[w._asdict() if hasattr(w,'_asdict') else w for w in row.get('words') or []]
@@ -118,6 +166,7 @@ def transcribe(request,directory,tools):
          'speaker_status':'NOT_DIARIZED','recognition_accuracy':'NOT_VERIFIED','acoustic_alignment':'MODEL_ONLY'}
     write_json(directory/'raw-observation.json',raw)
     # Inputs or dependency bytes changing during inference invalidate the observation.
+    source(audio_ref)
     source(request['source']);verify_model(request['model_lock']);verify_environment(request['environment_lock'])
     transcript,issues=normalize_observation(raw,request['source'],request['language'],a,b,str(directory/'raw-observation.json')+'#sha256='+sha256(directory/'raw-observation.json'))
     if transcript:
