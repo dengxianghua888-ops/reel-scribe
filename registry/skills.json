@@ -675,7 +675,7 @@
       "id": "creation-brief-prepare",
       "layer": "atomic",
       "entry": "atomic/creation-brief-prepare/SKILL.md",
-      "description": "将明确解析且标明出处的简报绑定当前Work，准备字幕呈现或教程校验请求并列缺项；不自动推荐、渲染或提交。",
+      "description": "将明确解析且标明出处的简报绑定当前Work，准备字幕呈现、教程校验或显式口播决定请求并列缺项；不自动推荐、渲染或提交。",
       "status": "local-synthetic-tested"
     }
   ]

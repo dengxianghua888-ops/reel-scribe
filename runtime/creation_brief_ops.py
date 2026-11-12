@@ -1,6 +1,10 @@
 """Prepare explicit Agent-parsed briefs. No language inference, authorization or execution."""
 import copy
 import re
+import json
+import hashlib
+from pathlib import Path
+from fractions import Fraction
 
 
 def execute(request, directory, tools):
@@ -33,7 +37,7 @@ def execute(request, directory, tools):
     finally:db.close()
     require(state['version']==request['expected_version'],'WORK_VERSION_CONFLICT')
     parameters=request['parameters'];require(isinstance(parameters,dict),'BRIEF_PARAMETERS_OBJECT_REQUIRED')
-    issues=[]; draft=None
+    issues=[]; draft=None; speech_binding=None; recheck_refs=[]
     intent=brief['intent']
     if intent=='caption-presentation':
         exact_keys(parameters,['variants','audio_backend','source_consumption'],[])
@@ -78,15 +82,91 @@ def execute(request, directory, tools):
             draft={'operation':'tutorial-plan-compile','plan':copy.deepcopy(state['document']['plan']),
                    'expected_revision':fingerprint(state['document']['plan']),**copy.deepcopy(parameters)}
     elif intent=='speech-tighten':
-        exact_keys(parameters,['aligned_transcript'],[])
+        fields=['aligned_transcript','expected_transcript_revision','segments','protected_word_ids','allow_reorder','source_clip_ids']
+        exact_keys(parameters,fields,[])
         if 'aligned_transcript' not in parameters:
-            issues.append({'code':'REVIEWED_WORD_ALIGNMENT_REQUIRED','detail':'A readable transcript alone cannot authorize word-level cuts; supply reviewed alignment and explicit keep/cut decisions to speech workflow.'})
+            issues.append({'code':'REVIEWED_WORD_ALIGNMENT_REQUIRED','detail':'A readable transcript alone cannot authorize word-level cuts; provide timing provenance and explicit decisions.'})
+        elif set(fields)-set(parameters):
+            issues.append({'code':'SPEECH_EXPLICIT_DECISIONS_REQUIRED','missing_fields':sorted(set(fields)-set(parameters)),
+                           'detail':'No word selections, protection IDs, reordering or source scope are inferred.'})
         else:
-            source(parameters['aligned_transcript'])
-            issues.append({'code':'SPEECH_EDIT_DECISIONS_NOT_IMPLEMENTED','detail':'Attached alignment identity is recorded, not certified accurate; prepare reviewed word selections through raven-speech-edit.'})
+            require(brief['scene']=='speech','BRIEF_SPEECH_SCENE_REQUIRED')
+            ref=parameters['aligned_transcript']; identity=source(ref)
+            require(identity['bytes']<=4*1024*1024,'BRIEF_TRANSCRIPT_TOO_LARGE')
+            with Path(identity['path']).open('rb') as handle:raw=handle.read(4*1024*1024+1)
+            require(len(raw)<=4*1024*1024,'BRIEF_TRANSCRIPT_TOO_LARGE')
+            require(hashlib.sha256(raw).hexdigest()==identity['sha256'],'BRIEF_TRANSCRIPT_BYTES_CHANGED')
+            def unique_pairs(pairs):
+                obj={}
+                for key,value in pairs:
+                    require(key not in obj,'BRIEF_TRANSCRIPT_DUPLICATE_KEY');obj[key]=value
+                return obj
+            transcript=json.loads(raw.decode('utf-8'),object_pairs_hook=unique_pairs,
+                parse_constant=lambda _:require(False,'BRIEF_TRANSCRIPT_NONFINITE'))
+            require(isinstance(transcript,dict) and transcript.get('schema')=='word-transcript/1','TRANSCRIPT_SCHEMA_UNSUPPORTED')
+            require(transcript.get('timing') in ['model-aligned','human-checked'],
+                    'ESTIMATED_OR_UNKNOWN_WORD_TIMES_NOT_EDIT_BOUNDARIES')
+            require(fingerprint(transcript)==parameters['expected_transcript_revision'],'TRANSCRIPT_REVISION_CONFLICT')
+            require(parameters['allow_reorder'] is False,'BRIEF_SPEECH_REORDER_UNSUPPORTED')
+            require(isinstance(parameters['protected_word_ids'],list) and
+                    all(isinstance(x,str) and x for x in parameters['protected_word_ids']) and
+                    len(set(parameters['protected_word_ids']))==len(parameters['protected_word_ids']),
+                    'PROTECTED_WORD_IDS_REQUIRED')
+            selected=parameters['source_clip_ids'];plan=state['document']['plan'];clips=plan['clips']
+            require(isinstance(selected,list) and selected and all(isinstance(x,str) for x in selected) and
+                    len(set(selected))==len(selected),'BRIEF_SPEECH_SOURCE_SCOPE_REQUIRED')
+            positions={c['id']:i for i,c in enumerate(clips)}
+            require(set(selected)<=set(positions),'BRIEF_SPEECH_CLIP_UNKNOWN')
+            indices=[positions[x] for x in selected]
+            require(indices==list(range(indices[0],indices[-1]+1)),'BRIEF_SPEECH_CONTIGUOUS_CLIPS_REQUIRED')
+            chosen=[clips[i] for i in indices];sid=chosen[0]['source_id']
+            require(all(c['source_id']==sid and Fraction(str(c.get('speed',1)))==1 and
+                        not c.get('mute',False) and c['gain_db']>-120 for c in chosen),
+                    'BRIEF_SPEECH_SINGLE_SOURCE_1X_AUDIBLE_REQUIRED')
+            asset=source(transcript['source']);current_asset=source(plan['sources'][sid])
+            require(asset['sha256']==current_asset['sha256'] and
+                    Path(asset['path']).resolve()==Path(current_asset['path']).resolve(),
+                    'BRIEF_SPEECH_SOURCE_MISMATCH')
+            fps=Fraction(str(plan['fps']));windows=[]
+            for clip in chosen:
+                start,end=Fraction(str(clip['start'])),Fraction(str(clip['end']))
+                effective=min(end,start+round((end-start)*fps)/fps)
+                require(effective>start,'BRIEF_SPEECH_EMPTY_SOURCE_WINDOW')
+                if windows:require(start==windows[-1][1],'BRIEF_SPEECH_CONTIGUOUS_SOURCE_REQUIRED')
+                windows.append((start,effective))
+            segments=parameters['segments']
+            require(isinstance(segments,list) and segments,'SEGMENTS_REQUIRED')
+            from editing_runtime import number
+            boundary_refs=[]
+            for segment in segments:
+                segment_fields=['id','word_ids','start','end','gain_db','boundary_evidence']
+                exact_keys(segment,segment_fields,segment_fields)
+                boundary=segment['boundary_evidence']
+                exact_keys(boundary,['method','artifact'],['method','artifact'])
+                require(boundary['method'] in ['waveform-review','listening-review','alignment-review'],'BOUNDARY_METHOD_REQUIRED')
+                source(boundary['artifact']);boundary_refs.append(boundary['artifact'])
+                a=Fraction(str(number(segment['start'],'start',0)));b=Fraction(str(number(segment['end'],'end',0)))
+                require(windows[0][0]<=a<b<=windows[-1][1],'BRIEF_SPEECH_SEGMENT_OUTSIDE_WORK_SCOPE')
+            draft={'operation':'speech-plan-compile','transcript':transcript,
+                   'expected_revision':parameters['expected_transcript_revision'],
+                   'output':{k:copy.deepcopy(plan[k]) for k in ['fps','width','height','fit']},
+                   **{k:copy.deepcopy(parameters[k]) for k in ['segments','protected_word_ids','allow_reorder']}}
+            recheck_refs=[ref,transcript['source'],plan['sources'][sid],*boundary_refs]
+            speech_binding={'transcript_file':identity,'timing':transcript['timing'],
+                'source_clip_ids':selected,'source_id':sid,'source':current_asset,
+                'source_window':[float(windows[0][0]),float(windows[-1][1])],
+                'persistent_protection_sha256':fingerprint(state['document'].get('evidence_protection')),
+                'adoption_state':'REQUIRES_TIMELINE_REVISE_AND_DEPENDENT_MAPPING',
+                'apply_authorized_by_preparation':False,
+                'dependent_resources':{k:list(state['document'].get(k,{})) for k in ['captions','audio_tracks','visual_layers','style_bindings']},
+                'persistent_protection_present':'evidence_protection' in state['document'],
+                'dependent_mapping_validation':'NOT_RUN',
+                'timing_truth':'Upstream declaration, not word-boundary certification by this helper',
+                'adoption':'Compiler creates an independent plan only. Merge by timeline-revise with explicit scope, remap captions/audio/protection, and preserve current Work protections; do not replace plan directly.'}
     else:
         exact_keys(parameters,[],[])
         issues.append({'code':'EDITORIAL_DECISION_REQUIRED','detail':'Choose supported source beats, order and reveal limits through the scene workflow; no narrative inferred from a style name.'})
+    for ref in recheck_refs:source(ref)
     db=connect(request['store'])
     try:require(load(db)['version']==state['version'],'WORK_VERSION_CONFLICT')
     finally:db.close()
@@ -100,8 +180,9 @@ def execute(request, directory, tools):
         'executed':False,'committed':False,'draft_request':draft,
         'execution_guard':{'store':request['store'],'expected_version':state['version'],
                            'require_fresh_work_read_before_execution':True,
-                           'note':'tutorial-plan-compile validates an immutable plan, not current Work CAS; never treat its success as an applied edit'},
+                           'note':'tutorial/speech compilers validate independent plans, not current Work CAS; adoption requires timeline-revise and explicit scope, never direct plan replacement'},
         'semantic_recommendation':'NOT_PERFORMED','downstream_validation':'NOT_RUN'}
+    if speech_binding is not None:report['speech_binding']=speech_binding
     if draft is not None and not planning:
         write_json(directory/'prepared-request.json',draft)
         report['prepared_request_sha256']=fingerprint(draft)

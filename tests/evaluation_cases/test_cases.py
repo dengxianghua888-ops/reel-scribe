@@ -85,3 +85,30 @@ def test_changed_receipt_bytes_rejected(tmp_path,monkeypatch):
         return raw.replace(b'do not remove',b'DO NOT REMOVE') if p.name=='apply.json' else raw
     monkeypatch.setattr(Path,'read_bytes',tampered)
     with pytest.raises(ValueError,match='ASSET_IDENTITY_MISMATCH'):m.verify_local(d,tmp_path)
+
+
+def test_evidence_changed_on_disk_after_read_uses_verified_snapshot(tmp_path,monkeypatch):
+    d=local_receipt_fixture(tmp_path);read=Path.read_bytes
+    def read_then_change(p):
+        original=read(p)
+        if p.name=='apply.json':p.write_bytes(b'{"status":"TAMPERED_AFTER_READ"}')
+        return original
+    monkeypatch.setattr(Path,'read_bytes',read_then_change)
+    assert m.verify_local(d,tmp_path)['work']['restore_exact']
+    assert b'TAMPERED_AFTER_READ' in read(tmp_path/'apply.json')
+
+
+@pytest.mark.parametrize('field,value',[('sources',[]),('evidence','wrong'),('work_receipt_keys',None),('cases',{})])
+def test_manifest_collection_types(field,value):
+    d=data();d[field]=value
+    with pytest.raises(ValueError):m.validate(d)
+
+
+def test_duplicate_case_ids_rejected():
+    d=data();d['cases'][1]['id']=d['cases'][0]['id']
+    with pytest.raises(ValueError,match='NINE_UNIQUE_CASES_REQUIRED'):m.validate(d)
+
+
+def test_duplicate_json_keys_rejected(tmp_path):
+    p=tmp_path/'duplicate.json';p.write_text('{"sources":{},"sources":{}}')
+    with pytest.raises(ValueError,match='DUPLICATE_JSON_KEY'):m.load_manifest(p)

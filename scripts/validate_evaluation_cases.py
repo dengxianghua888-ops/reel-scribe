@@ -20,7 +20,10 @@ def digest(path):
 
 
 def validate(data):
+    require(isinstance(data,dict),'MANIFEST_OBJECT_REQUIRED')
     require(data.get('schema')=='evaluation-cases/1','SCHEMA_INVALID')
+    require(all(isinstance(data.get(k),dict) for k in ['sources','evidence','work_receipt_keys']),'MANIFEST_DICTIONARIES_REQUIRED')
+    require(isinstance(data.get('cases'),list) and all(isinstance(c,dict) and isinstance(c.get('id'),str) for c in data['cases']),'CASE_OBJECTS_REQUIRED')
     cases=data['cases'];sources=data['sources'];evidence=data['evidence']
     require(not (sources.keys() & evidence.keys()),'SOURCE_EVIDENCE_KEY_CONFLICT')
     require(len(cases)==9 and len({c['id'] for c in cases})==9,'NINE_UNIQUE_CASES_REQUIRED')
@@ -84,10 +87,20 @@ def verify_local(data,root):
     return {'status':'LOCAL_IDENTITIES_VERIFIED','work':verify_work(receipts),'semantic_acceptance':'NOT_RUN'}
 
 
+def load_manifest(path):
+    def unique_pairs(pairs):
+        result={}
+        for key,value in pairs:
+            require(key not in result,'DUPLICATE_JSON_KEY: '+key)
+            result[key]=value
+        return result
+    return json.loads(Path(path).read_bytes(),object_pairs_hook=unique_pairs)
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('manifest');parser.add_argument('--asset-root')
-    args=parser.parse_args();data=json.loads(Path(args.manifest).read_text())
+    args=parser.parse_args();data=load_manifest(args.manifest)
     result=validate(data)
     if args.asset_root:result['local']=verify_local(data,args.asset_root)
     else:result['local']={'status':'NOT_RUN_NO_ASSET_ROOT'}
