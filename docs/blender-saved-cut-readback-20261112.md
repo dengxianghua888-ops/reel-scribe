@@ -32,3 +32,33 @@ python tools/editor-adapters/blender_cut_readback.py --host edited.blend --packa
 早期验证曾把音频 time range 错写成视频帧率，未改工程都被既有解析拒绝。已修复保留原样本率并新增回归；旧 CONFLICT 结果保留，不算最终通过。首轮默认属性假设也曾被真实宿主拒绝，最终按 4.3.2 实际默认值限定。
 
 **本批成果是保存分支的可靠观察和保守提案桥接，不是完整可采用编辑器往返。** 下步应按既有 revision 权威，在明确授权范围内实现 Storyboard 映射，再运行 pre/post QC；不能通过忽略 CONFLICT 直接修改真源。
+
+## 显式绑定的成对源窗扩展（实验）
+
+默认仍拒绝 `HOST_WINDOW_EXTENSION_UNSUPPORTED`。可选 `--extension-scope /absolute/scope.json --extension-scope-sha256 <sha256>` 仅扩大已保存源窗的可观察范围，不代表编辑批准或自动采用。scope 必须绑定该保存 `.blend` 和原包摘要，逐稳定实例声明原源窗、目标源窗、目标起点和原资源 SHA：
+
+```json
+{"schema":"blender-bound-extension/1","package_sha256":"64位小写摘要","host_sha256":"64位小写摘要","instances":{"稳定实例ID":{"source_sha256":"原资源摘要","before_start_frame":600,"before_end_frame":1008,"start_frame":600,"end_frame":1080,"target_start_frame":0}}}
+```
+
+帧数为整数，源与目标起点从0开始，区间半开，帧率沿封存包；每个实际扩展的 Video 和 linked Audio 都须独立列出，且同源同窗同位置。声明实例必须恰好等于实际扩展集合。新源窗必须包含原源窗，不支持一端裁短同时另一端扩展。其余旧裁短和自然顺移规则不变，未声明源身份、轨道、处理和顺序变化继续拒绝。
+
+终点同时受封存 `frame_count`、当前 probe 的对应流 `duration_ts*time_base` 约束；音频另核 `duration_samples`，且原OTIO采样时钟必须精确整样本。未知实际时长拒绝，不把通用素材duration当音轨完整性。原包源文件身份仍前后核验；这不是逐帧内容、音频听感或边界语义认证。
+
+launcher 核验scope字节SHA、复制同字节到临时隔离输入，子进程绑定host SHA、校验前后scope，最终发布前父进程再核原scope及host/package。回执携带scope和SHA，应作为快照 companion 与原生工程读回回执保留。后续 `capture_saved_snapshot`、三方冲突及 `apply_host_boundary` 的当前明确批准 BoundaryProposal、完整投影和原事务门槛均不改变，不以此scope代替批准。
+
+### 真实有界扩展证据与未采用原因
+
+本批另行隔离复制 stage13 的真实 ToS25–42秒技术工作区，不覆盖原工作区或此前两窗测试包。新导出包在 Blender4.3.2 实际导入、保存、受控重开读回；未改分支封存后的三方提案为 `NO_CHANGES`。
+
+- 实际另存只裁视频至40.25秒、完整保留25–42秒原声的工程，读回拒绝 `HOST_AUDIO_VIDEO_DESYNC`，没有发布OTIO。该失败保留，不用移除音频绕过。
+- 实际另存声画配对25–42→25–45秒工程。显式scope精确绑定两个实例的原600–1008帧、新600–1080帧、输出起点0、原资源/包/保存工程SHA。受控重开与扩展读回成功，完整保留原17秒源窗并追加3秒，输出观察长度480帧。未渲染这个宿主工程，不冒称完整视听验证。
+- 保存OTIO与scope/readback回执作为companion封存；三方提案保留4项host-only变化及两轨 `HOST_TRACK_END_REQUIRES_EXPLICIT_MAPPING` 冲突。此处只是可核验待采纳变化，不是已采用。
+
+实际查看源25–45秒的2fps联系表及切点图，观察到人物对话画面→机器人图→文字 `40 YEARS LATER`。英语ASR与官方字幕尾句存在差异，不据此裁对白，也不把稀疏图观察当完整听审。
+
+另建明确标识的隔离准备基线，仅补25–42源窗一致的高光引用关系，并将25–45的真实稀疏视觉观察及未知写入02/03；保留原候选零置信、原计划、所有原声与范围门槛。Agent作出的范围判断仅是“保留全部原窗并追加可见时间跃迁上下文”，不是用户具体剪点批准、听审或完整剧情判断。原 `prepare_boundary_revision` 实际运行后返回 **`SELECTION_CHANGED_REPLAN_REQUIRED`**：既有候选confidence=0，原阈值0.62，不人为提分。
+
+原声比例1.0超出现有0.25–0.45约束、技术事件图为空不能证明hook eligibility，是源码/当前配置核查发现的后续限制；本次prepare先在选池变化处停止，不能声称后两项也是此次实际抛出的错误。没有降低门槛、编造事件、拼凑旁白或强行执行采用后QC。原stage13和准备操作前后的隔离输入摘要均保持。
+
+完成的是**真实素材成对扩展保存→身份绑定读回→待采纳提案**。纯原片技术夹具不是完整影视解说作品；其原事务采用与采用后QC仍未完成，需独立设计符合产品定位且有真实内容证据的作品。默认拒绝行为、旧失败、未知/低置信证据保留。作者38项定向与独立11项对抗检查已通过；最终整体验证另绑定提交报告。
