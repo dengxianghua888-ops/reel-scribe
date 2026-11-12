@@ -677,6 +677,20 @@
       "entry": "atomic/creation-brief-prepare/SKILL.md",
       "description": "将明确解析且标明出处的简报绑定当前Work，准备字幕呈现、教程校验或显式口播决定请求并列缺项；不自动推荐、渲染或提交。",
       "status": "local-synthetic-tested"
+    },
+    {
+      "id": "creation-recommendation",
+      "layer": "atomic",
+      "entry": "atomic/creation-recommendation/SKILL.md",
+      "description": "依明确简报与当前作品推荐受限字幕呈现候选，显式选择后准备预览并记录绑定反馈；不自动理解、采用或认证效果。",
+      "status": "experimental"
+    },
+    {
+      "id": "reference-transfer-prepare",
+      "layer": "atomic",
+      "entry": "atomic/reference-transfer-prepare/SKILL.md",
+      "description": "将显式参考观察分轴逐项采纳、调整或舍弃，准备目标作品字幕呈现请求；不复制叙事、不执行或认证观察真伪。",
+      "status": "experimental"
     }
   ]
 }

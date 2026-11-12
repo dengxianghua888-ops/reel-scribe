@@ -511,9 +511,17 @@ def _render_document_bound(document,directory,tools,*,work_version,audio_backend
         require(receipt['status']=='SUCCEEDED','WORK_RENDER_FAILED: '+name+': '+receipt.get('error',''))
         child_receipts.append({'operation':req['operation'],'path':str(directory/name/'receipt.json'),
                                'sha256':sha256(directory/name/'receipt.json')})
-    invoke({'operation':'timeline-render','plan':doc['plan'],
+    timeline_request={'operation':'timeline-render','plan':doc['plan'],
             **({'source_consumption':source_consumption} if source_consumption is not None else {}),
-            **({'audio_backend':audio_backend} if audio_backend is not None else {})},'timeline')
+            **({'audio_backend':audio_backend} if audio_backend is not None else {})}
+    from shared_timeline import obtain, inspect_lineage
+    shared=obtain(doc,timeline_request,directory,tools)
+    if shared is None:
+        invoke(timeline_request,'timeline')
+    else:
+        child_receipts.append({'operation':'timeline-render','path':str(directory/'timeline/receipt.json'),
+                               'sha256':sha256(directory/'timeline/receipt.json'),
+                               'execution':'REUSED_VERIFIED_NOT_EXECUTED'})
     current=directory/'timeline/preview.mp4'
     if tracks:
         invoke({'operation':'audio-mix','source':{'path':str(current),'sha256':sha256(current)},'base_gain_db':0,'tracks':tracks},'audio')
@@ -531,11 +539,15 @@ def _render_document_bound(document,directory,tools,*,work_version,audio_backend
         current=directory/'captions/captioned.mp4'
     invoke({'operation':'media-qc','source':{'path':str(current),'sha256':sha256(current)},
             'expected':{'duration':norm['duration'],'duration_tolerance':0.1,'width':norm['width'],'height':norm['height'],'audio_required':True}},'qc')
+    if shared is not None:
+        shared[1]()
+        inspect_lineage(directory,shared[0])
     write_json(directory/'rendered-document.json',doc)
     write_json(directory/'output-captions.json',{'cues':cues,'work_version':work_version})
     if visual:write_json(directory/'output-visual-layers.json',{'layers':visual,'work_version':work_version,'order':'after audio, before captions'})
     return {'video':{'path':str(current),'sha256':sha256(current)},'document_sha256':fingerprint(doc),
             'child_receipts':child_receipts,
+            **({'timeline_reuse':shared[0]} if shared is not None else {}),
             'layer_counts':{'audio_tracks':len(tracks),'visual_layers':len(visual),'captions':len(cues)}}
 
 
@@ -585,6 +597,7 @@ def work_render(request,directory,tools):
             'source_audio_evidence':'NOT_GRANTED_BY_RENDER',
             'style_application':'explicit document operations only; bindings are not automatic effects',
             'content_review':'NOT_RUN','listening_review':'NOT_RUN','native_editor_acceptance':'NOT_RUN'}
+    if 'timeline_reuse' in rendered:result['timeline_reuse']=rendered['timeline_reuse']
     if preview:
         result.update(preview_status='CANDIDATE_PREVIEW_NOT_COMMITTED',
                       preview_candidate=candidate_ref,

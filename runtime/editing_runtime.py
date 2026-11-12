@@ -1070,6 +1070,12 @@ def tts_macos(request, directory, tools):
 
 def execute(request, directory, tools):
     op = request.get('operation')
+    if op == 'creation-recommendation':
+        from creation_recommendation_ops import execute as recommendation_execute
+        return recommendation_execute(request, directory, tools)
+    if op == 'reference-transfer-prepare':
+        from reference_transfer_ops import execute as reference_execute
+        return reference_execute(request, directory, tools)
     if op == 'creation-brief-prepare':
         from creation_brief_ops import execute as brief_execute
         return brief_execute(request, directory, tools)

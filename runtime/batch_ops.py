@@ -241,6 +241,17 @@ def check_receipt(path,spec,env,tools=None):
                 if selected is not None:
                     require(Path(selected['path']).resolve()==Path(helper['path']).resolve() and
                             selected['sha256']==helper['sha256'],'BATCH_AUDIO_BACKEND_HELPER_MISMATCH')
+    if rr.get('result',{}).get('timeline_reuse'):
+        from shared_timeline import inspect_lineage
+        lineage=rr['result']['timeline_reuse']
+        donor=Path(lineage['donor_receipt']['path'])
+        require(donor.resolve().parents[3]==folder.resolve().parents[2], 'SHARED_TIMELINE_OUTSIDE_BATCH')
+        inspect_lineage(folder,lineage)
+        manifest=json.loads((folder.parents[2]/'manifest.json').read_bytes())
+        candidates=[j for j in manifest['jobs'] if j['id']==donor.parent.parent.name]
+        require(len(candidates)==1,'SHARED_TIMELINE_DONOR_UNKNOWN')
+        donor_rr=check_receipt(donor,candidates[0],env,tools)
+        require(not donor_rr['result'].get('timeline_reuse'),'SHARED_TIMELINE_CHAIN_UNSUPPORTED')
     if 'preview_candidate' in spec:
         require(work_state(spec['store'])['version']==spec['expected_version'],'BATCH_WORK_VERSION_CONFLICT')
     return rr
@@ -383,7 +394,37 @@ def batch_render(q,directory,tools):
                 with db:
                     db.execute('INSERT INTO attempts VALUES(?,?,?,?,?)',(jid,attempt,'RUNNING',str(path),None))
                     db.execute('UPDATE jobs SET status=?,attempt=?,error=? WHERE id=?',('RUNNING',attempt,None,jid))
-                rr=run(render_request(spec),path,tools)
+                def shared_provider(document,timeline_request):
+                    from shared_timeline import compatible,checked_bytes
+                    # Only already successful native timelines in this locked batch.
+                    for donor_row in db.execute("SELECT * FROM jobs WHERE status='RENDERED' ORDER BY ordinal").fetchall():
+                        donor_spec=specs[donor_row['id']]
+                        if (donor_spec['store'],donor_spec['expected_version']) != (spec['store'],spec['expected_version']):continue
+                        if any(donor_spec.get(k)!=spec.get(k) for k in ['audio_backend','source_consumption']):continue
+                        donor_path=Path(donor_row['receipt'])
+                        def recheck(p=donor_path,ds=donor_spec,h=donor_row['receipt_sha256']):
+                            original=json.loads(checked_bytes(p,h))
+                            checked=check_receipt(p,ds,env,tools)
+                            require(checked==original,'SHARED_TIMELINE_RECEIPT_CHANGED')
+                            checked_bytes(p,h)
+                            return original
+                        donor_rr=recheck()
+                        if donor_rr['result'].get('timeline_reuse'):continue
+                        bound={a['path']:a for a in donor_rr['artifacts']}
+                        def read_bound(name):
+                            a=bound[name]
+                            return json.loads(checked_bytes(donor_path.parent/name,a['sha256'],a['bytes']))
+                        other=read_bound('rendered-document.json')
+                        if not compatible(other,document):continue
+                        child=read_bound('timeline/receipt.json')
+                        if child['status']!='SUCCEEDED' or child['request_sha256']!=fingerprint(timeline_request):continue
+                        require(read_bound('timeline/request.json')==timeline_request,'SHARED_TIMELINE_REQUEST_CHANGED')
+                        require(child['runtime_files']==env['runtime_files'] and child['tools']==env['tools'],'SHARED_TIMELINE_ENVIRONMENT_CHANGED')
+                        return ({'path':str(donor_path),'sha256':donor_row['receipt_sha256']},donor_rr,recheck)
+                    return None
+                from shared_timeline import provider
+                with provider(shared_provider):
+                    rr=run(render_request(spec),path,tools)
                 check_receipt(path/'receipt.json',spec,env,tools);finish(jid,attempt,path/'receipt.json',rr)
                 events.append({'job_id':jid,'action':'RENDER_ATTEMPT','attempt':attempt,'status':rr['status']})
             result=snapshot(db,manifest);result['events']=events;result['artifact_integrity']='SELECTED_COMPLETED_JOBS_VERIFIED'
