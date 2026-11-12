@@ -74,7 +74,9 @@ ATOMIC_REQUIREMENTS = {
 # successful branch observation; it is reported as conditional unknown.
 BRANCH_KEYS = {'work-version': 'action', 'work-batch-render': 'action',
                'sync-offset-measure': 'method', 'caption-burn': 'font',
-               'work-render': 'document', 'speech-transcribe-local': 'locks'}
+               'work-render': 'document', 'speech-transcribe-local': 'locks',
+               'style-recipe-compile': 'recipe.layout_constraints',
+               'style-recipe-preview': 'variants[].recipe.layout_constraints'}
 
 
 def _selected_requirements(identifier, request):
@@ -103,6 +105,17 @@ def _selected_requirements(identifier, request):
             required += ['ffmpeg', 'numpy']
         elif branch not in ('declared-clock', 'declared-markers'):
             unknown.append('method: declared-clock, declared-markers or audio-correlation')
+    elif identifier in ('style-recipe-compile', 'style-recipe-preview'):
+        if request is None:
+            unknown.append('optional recipe layout constraints require actual FFmpeg/Pillow coverage checks')
+        else:
+            recipes = ([request.get('recipe')] if identifier == 'style-recipe-compile' else
+                       [v.get('recipe') for v in request.get('variants', []) if isinstance(v, dict)])
+            if any(isinstance(recipe, dict) and 'layout_constraints' in recipe for recipe in recipes):
+                required += ['ffmpeg', 'Pillow']
+                branch = 'actual-static-caption-layout'
+            else:
+                branch = 'no-layout-constraints'
     elif identifier == 'caption-burn':
         if request is None:
             unknown.append('request.font path and hash')

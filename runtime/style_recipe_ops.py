@@ -18,7 +18,7 @@ def execute(request, directory, tools):
     require(request['operation'] == 'style-recipe-compile', 'STYLE_OPERATION_UNSUPPORTED')
     recipe = request['recipe']
     require(fingerprint(recipe) == request['expected_recipe_sha256'], 'RECIPE_REVISION_CONFLICT')
-    exact_keys(recipe, ['schema', 'id', 'version', 'style', 'parameters'],
+    exact_keys(recipe, ['schema', 'id', 'version', 'style', 'parameters', 'layout_constraints'],
                ['schema', 'id', 'version', 'style', 'parameters'])
     require(recipe['schema'] == 'style-recipe/1', 'RECIPE_SCHEMA_UNSUPPORTED')
     require(all(isinstance(recipe[k], str) and recipe[k].strip() for k in ['id', 'version']),
@@ -71,6 +71,13 @@ def execute(request, directory, tools):
     candidate['style_bindings']['*'] = {**copy.deepcopy(style), 'parameters': {
         'recipe_id': recipe['id'], 'recipe_version': recipe['version'],
         'recipe_sha256': request['expected_recipe_sha256'], 'presentation': copy.deepcopy(parameters)}}
+    layout_report = {'status': 'UNKNOWN', 'reason': 'No explicit layout constraints supplied'}
+    if 'layout_constraints' in recipe:
+        from caption_layout import check
+        from work_ops import revision_diff
+        candidate['style_bindings']['*']['parameters']['layout_constraints'] = copy.deepcopy(recipe['layout_constraints'])
+        revision_diff(document, candidate, request['scope'], tools)
+        layout_report = check(candidate, recipe['layout_constraints'], directory/'layout', tools)
     # Validate all changes before producing any candidate. Work commit rechecks
     # the scope against the authoritative store and rejects a stale base version.
     diff = timeline_revise({'operation': 'timeline-revise', 'base_version': request['base_version'],
@@ -84,6 +91,6 @@ def execute(request, directory, tools):
               'capabilities_evidence': 'CALLER_DECLARED_NOT_PROBED',
               'applied_to_work': False, 'render': 'NOT_RUN', 'style_effect': 'NOT_VERIFIED',
               'content_selection': 'UNCHANGED', 'unsupported_fallbacks': [],
-              'invalidated': diff['invalidated']}
+              'invalidated': diff['invalidated'], 'caption_layout': layout_report}
     write_json(directory / 'style-recipe.json', report)
     return report

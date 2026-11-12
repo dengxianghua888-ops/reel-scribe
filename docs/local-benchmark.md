@@ -1,0 +1,37 @@
+# 本地证据效率基线（非成本/人工收益）
+
+`scripts/report_benchmark.py` 离线读取显式指定证据根目录内、调用者给出 SHA256 的 `operation-receipt/1`。它重核子回执和声明产物的大小/摘要，按实际 attempt 路径去重，拒绝重复 attempt、冲突快照、重复 JSON key、变更证据和越出证据目录的引用。不读取 Work 数据库、不重新批准历史缓存、不调用模型或媒体工具。摘要不是可信签名，不能识别连同预期摘要一起重写的恶意伪造。
+
+```sh
+python scripts/report_benchmark.py --root /absolute/evidence \
+  --receipt SHA256=/absolute/evidence/comparison/batch-run/receipt.json > report.json
+```
+
+可重复 `--receipt`；同一路径回执只计一次。报告统计已观测尝试、失败及复用事件，保留源窗/源摘要和输出时长。相同媒体被多个候选使用时逐候选报告，不当作独立素材覆盖。没有时间、命令或模型调用记录的历史回执使用 `NOT_RECORDED`，不从文件修改时间估算，不把未发现模型记录说成零调用。缺失失败阶段也不当作零失败，统计范围只含传入且通过摘要校验的回执。状态变更的 attempt 快照请分开报告，不用时间猜测先后。
+
+## 一次可控冷渲染/复用测量
+
+`scripts/run_local_benchmark.py` 是显式执行工具，区别于上面的只读报告器：读取标准 batch prepare 请求，在全新输出目录建立新的队列，按顺序执行 prepare、cold run、reuse run；不修改 runtime、作品头或原素材。调用前须拥有原素材/工作库读取及输出授权，且运行时代码/来源/候选保持稳定。
+
+```sh
+python scripts/run_local_benchmark.py --prepare-request /absolute/prepare.json \
+  --output /absolute/new-benchmark-directory
+```
+
+外层 `time.monotonic()` 测每阶段墙钟时长，包含哈希与验证开销；只在冷阶段为成功 RENDER_ATTEMPT、重复阶段全部为 REUSED_VERIFIED 时称本次测量通过。不承诺通用提速比例。manifest、请求、每阶段回执的摘要关联源/候选/运行时/工具/输出身份。FFmpeg 全调用次数未插桩，保留 `NOT_RECORDED`。模型调用 0 仅表示本工具的本地 batch 路径未调用模型，不是整个系统的审计结果；价格、云费用和人工节省未知。
+
+模型/实际内容/字幕适切性、听觉及用户偏好不在效率指标里。重复实验应新建输出目录，不覆盖原测量。没有完整外层启动/子进程日志时不补填未记录指标。
+
+## 2026-11-12 单次真实短窗观测
+
+公开 The Green Interview 100–106 秒的显式归一化说话人短窗（非原 WebM 直通），一个候选、全新 Work 与 batch：prepare 1.2396 秒，cold 6.9880 秒（1 次成功 RENDER_ATTEMPT），reuse 1.4709 秒（1 次 REUSED_VERIFIED）。两阶段指向同一 attempt 及同一回执，输出视频 SHA-256 `a7eea90d00ddf22c7c87c782fbd3343138c84191a8f1b5385c459b6c184c377f`；离线重核得到 1 个唯一 attempt / 1 份 timeline。
+
+这是单机单次6秒样例，包含源/候选/工具/输出核验时间，不作为总体加速比、真实生产成本或用户节时结论。最初 runner 缺少 batch 必填字段，被正常合同拒绝，未渲染；修正后在新目录重跑成功，失败记录保留而未覆盖。历史记录没有的耗时仍未补填。
+
+## 2026-11-12 单次短窗测量（不是性能承诺）
+
+在助手云端使用独立 Work/新候选及新批次，对已明确转换为 30fps/PCM 的访谈说话人 6 秒短窗实际运行：prepare 1.2396 秒，cold run 6.9880 秒，reuse run 1.4709 秒。cold 为一次成功 `RENDER_ATTEMPT`，reuse 为同一 attempt 的一次 `REUSED_VERIFIED`；回执和视频摘要相同。计时包含验证/哈希，未控制系统负载或重复采样，不据此声称通用加速倍数。历史四窗没有计时数据，仍标记未记录。
+
+派生源 SHA256：`d269e525ff3ef82b0956dcf05c521d148c3cbb1d903f72816a04c890687f94cb`。输出 SHA256：`a7eea90d00ddf22c7c87c782fbd3343138c84191a8f1b5385c459b6c184c377f`。原片为 The Green Interview 的 Sir Tim Smit 访谈，CC BY 3.0，固定来源 https://commons.wikimedia.org/w/index.php?title=File:Sir_Tim_Smit,_The_Green_Interview.webm&oldid=1096433542 ，原片 100–106 秒；改动包含截取、显式转码及演示标注。派生媒体和运行证据保留于独立验收目录，不随公开代码包提供；这里不是可直接从仓库重放的媒体基准。
+
+第一次实验 runner 漏传批次合同必需的 job_ids/retry_failed，冷阶段在渲染前被正确拒绝。修复 runner 后另建目录重测，上述数字仅来自第二次成功实验；原失败证据未覆盖，不混算为媒体或 runtime 失败。

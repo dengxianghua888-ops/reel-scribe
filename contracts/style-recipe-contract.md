@@ -40,3 +40,24 @@
 - `style-recipe.json`：记录实际映射参数和候选摘要；状态 `CANDIDATE_COMPILED`，`render: NOT_RUN`、`style_effect: NOT_VERIFIED`、`applied_to_work: false`。这是参数编译证据，不是参数已在成片生效证据。
 
 示例位于 `examples/style-recipes/`，均 authored-unvalidated，只演示呈现层。没有真实媒体效果、盲评或编辑器往返验收。换配方产生新候选并重新验证，不能继承旧成片验收。实际渲染、语义正确性、可读性、响度和风格适切性必须在目标作品上检查。
+
+## 可选真实字幕覆盖检查
+
+配方可增加 `layout_constraints`，它和配方一起绑定摘要，并写入候选的风格绑定：
+
+```json
+{"schema":"caption-layout/1","canvas":{"width":960,"height":636},
+ "subtitle_band":{"x":0,"y":592,"width":960,"height":44},
+ "protected_regions":[{"id":"caller-declared-screen-content",
+ "rect":{"x":0,"y":48,"width":960,"height":540}}]}
+```
+
+所有矩形为**成片画布像素**、整数、正面积、半开范围；调用者必须明确画布与保护区，不是系统识别 UI。示例描述一个已存在空白字幕带的画布，不会创建黑边或改变源画面。声明带与保护区相交即拒绝。无约束的旧调用保持兼容并返回 `caption_layout.status=UNKNOWN`。
+
+有约束时，编译真实调用 FFmpeg/libass，用与 `caption-burn` 共享的 ASS 生成器、相同字体文件/样式，在透明画布上逐 cue 生成字形及描边 alpha mask，不根据视频颜色猜文字。覆盖检查仅支持不重叠、无动态 ASS 控制语法、无显式换行/制表或连续空白的静态字幕（允许renderer自然换行；特殊排版明确拒绝，而普通caption-burn不改变），每条 cue 的字形在显示期不变。原尺寸 mask 必须与扩大画布、同步平移边距后的中心区域逐像素一致；扩大画布中越出原画布的字形视为截断。对实际包围盒额外扩 2 像素，必须落在声明带内且不与保护区相交，不能仅凭声明带背书。
+
+成功为 `STATIC_GLYPH_COVERAGE_VERIFIED`，只证明当前字体配置、脚本和工具下的**编码前静态字幕 alpha 覆盖**；不证明字形没有 fallback、文字正确、整体美观可读、UI 标注完整或编码后的所有边缘像素。改变字体、参数、内容、画布、工具或保护区必须重验。编译仍不改 Work、不渲染正式成片、不自动采用。
+
+证据在 `layout/layout-report.json`，绑定候选文档/约束/字体/renderer、每 cue 时间与文字摘要、原尺寸和扩展 alpha PNG、ASS 及实际范围。缺工具或无法证明等价时拒绝该约束调用，不伪造通过。正常无约束编译不会增加 mask 工作量。
+
+资源上限：画布每边≤1920、cue≤256、每cue文字≤256码点、整次扩大mask总像素≤2亿；超限明确拒绝，不能静默抽样。字体仅拷贝一次，逐cue处理，raw临时帧转换成可复核的无损alpha PNG后移除，避免长期积累巨型raw文件。显示性能、专名/否定语义、声文对齐仍需独立验收。

@@ -993,6 +993,36 @@ def audio_mix(request, directory, tools):
             'audio_review':'NOT_RUN','note':'Gains and overlap are caller decisions; no automatic peak or loudness correction'}
 
 
+def caption_ass(request, width, height, duration, *, layout_padding=0):
+    """Canonical static ASS; padding preserves the original layout rectangle."""
+    family=request['font_family'];size=number(request['font_size'],'font_size',1)
+    margin=number(request['margin_v'],'margin_v',0);rgb=request['color_rgb']
+    require(isinstance(family,str) and bool(re.fullmatch(r'[\w \-]+',family)), 'FONT_FAMILY_INVALID')
+    require(size <= height and margin < height, 'CAPTION_GEOMETRY_INVALID')
+    require(isinstance(rgb,str) and bool(re.fullmatch('[0-9A-Fa-f]{6}',rgb)), 'COLOR_RGB_INVALID')
+    require(isinstance(request['cues'],list) and request['cues'],'CUES_REQUIRED')
+    require(type(layout_padding) is int and layout_padding >= 0, 'CAPTION_PADDING_INVALID')
+    ass='[Script Info]\nScriptType: v4.00+\nPlayResX: '+str(width + 2*layout_padding)+'\nPlayResY: '+str(height + 2*layout_padding)+'\nWrapStyle: 0\n'
+    ass+='[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n'
+    ass+=f'Style: Default,{family},{size},&H00{rgb[4:6]}{rgb[2:4]}{rgb[0:2]},&H00000000,1,1,0,2,{20+layout_padding},{20+layout_padding},{margin+layout_padding},1\n'
+    ass+='[Events]\nFormat: Layer, Start, End, Style, Text\n'
+    previous_end=0
+    def ts(value):
+        centis=round(value*100); hours,centis=divmod(centis,360000); mins,centis=divmod(centis,6000); secs,centis=divmod(centis,100)
+        return f'{hours}:{mins:02}:{secs:02}.{centis:02}'
+    for cue in request['cues']:
+        exact_keys(cue,['start','end','text'],['start','end','text'])
+        a,b=span(cue['start'],cue['end'],duration)
+        require(a >= previous_end,'OVERLAPPING_CAPTIONS');previous_end=b
+        require(round(b*100)>round(a*100),'CUE_TOO_SHORT_FOR_ASS')
+        require(isinstance(cue['text'],str) and cue['text'].strip(),'CUE_TEXT_REQUIRED')
+        # ASS override syntax must not be accepted through ordinary text.
+        require(not any(x in cue['text'] for x in ['{','}','\\','\r']),'ASS_CONTROL_CHARACTERS_UNSUPPORTED')
+        text=cue['text'].replace('\n',r'\N')
+        ass+=f'Dialogue: 0,{ts(a)},{ts(b)},Default,{text}\n'
+    return ass
+
+
 def caption_burn(request, directory, tools):
     exact_keys(request,['operation','source','font','font_family','font_size','margin_v','color_rgb','cues'],
                ['operation','source','font','font_family','font_size','margin_v','color_rgb','cues'])
@@ -1009,24 +1039,7 @@ def caption_burn(request, directory, tools):
     suffix=Path(font['path']).suffix.lower(); require(suffix in ['.ttf','.otf','.ttc'],'FONT_FORMAT_UNSUPPORTED')
     from source_binding import execution_path
     shutil.copyfile(execution_path(font['path']),directory/'fonts'/('specified'+suffix))
-    ass='[Script Info]\nScriptType: v4.00+\nPlayResX: '+str(video['width'])+'\nPlayResY: '+str(video['height'])+'\nWrapStyle: 0\n'
-    ass+='[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n'
-    ass+=f'Style: Default,{family},{size},&H00{rgb[4:6]}{rgb[2:4]}{rgb[0:2]},&H00000000,1,1,0,2,20,20,{margin},1\n'
-    ass+='[Events]\nFormat: Layer, Start, End, Style, Text\n'
-    previous_end=0
-    def ts(value):
-        centis=round(value*100); hours,centis=divmod(centis,360000); mins,centis=divmod(centis,6000); secs,centis=divmod(centis,100)
-        return f'{hours}:{mins:02}:{secs:02}.{centis:02}'
-    for cue in request['cues']:
-        exact_keys(cue,['start','end','text'],['start','end','text'])
-        a,b=span(cue['start'],cue['end'],media['duration'])
-        require(a >= previous_end,'OVERLAPPING_CAPTIONS');previous_end=b
-        require(round(b*100)>round(a*100),'CUE_TOO_SHORT_FOR_ASS')
-        require(isinstance(cue['text'],str) and cue['text'].strip(),'CUE_TEXT_REQUIRED')
-        # ASS override syntax must not be accepted through ordinary text.
-        require(not any(x in cue['text'] for x in ['{','}','\\','\r']),'ASS_CONTROL_CHARACTERS_UNSUPPORTED')
-        text=cue['text'].replace('\n',r'\N')
-        ass+=f'Dialogue: 0,{ts(a)},{ts(b)},Default,{text}\n'
+    ass=caption_ass(request,video['width'],video['height'],media['duration'])
     (directory/'captions.ass').write_text(ass,encoding='utf-8')
     tools.ff(['-i',asset['path'],'-vf','ass=captions.ass:fontsdir=fonts','-map','0:v:0','-map','0:a?',
               '-c:v','libx264','-crf','18','-preset','medium','-c:a','copy','captioned.mp4'],cwd=directory)
