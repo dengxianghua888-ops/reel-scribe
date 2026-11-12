@@ -27,7 +27,10 @@ def test_prepare_preserves_work_and_binds_recipe(reference):
  assert r['draft_request']['operation']=='style-recipe-preview'
  assert r['draft_request']['variants']==q['items'][0]['parameters']['variants']
  assert r['draft_request']['expected_version']==q['expected_version']
- assert not r['executed'] and not r['committed'] and not r['reference_media_in_output']
+ assert not r['executed'] and not r['committed'] and not r['reference_media_inserted_by_transfer']
+ assert r['schema']=='reference-transfer/2' and 'reference_media_in_output' not in r
+ assert r['reference_output_presence']=='NOT_EVALUATED'
+ assert r['reference_target_source_matches']==[{'collection':'plan.sources','id':'s','source':doc['plan']['sources']['s']}]
  assert r['style_validation']=='NOT_PERFORMED' and r['downstream_validation']=='NOT_RUN'
  with work_ops.connect(q['store']) as db:s=work_ops.load(db)
  assert s['document']==doc and s['version']==q['expected_version']
@@ -191,3 +194,33 @@ def test_result_first_final_head_change_no_publication(narrative,monkeypatch):
  monkeypatch.setattr(result_preview_ops,'execute',compiled);monkeypatch.setattr(work_ops,'load',stale)
  with pytest.raises(rt.ContractError,match='WORK_VERSION_CONFLICT'):mod.execute(q,out,tools)
  assert list(out.iterdir())==[]
+
+
+def test_same_reference_bytes_different_path_are_matched(reference):
+ q,out,tools,doc=reference
+ alias=out.parent/'reference-alias.mp4';alias.write_bytes(Path(q['reference']['path']).read_bytes())
+ q['reference']={'path':str(alias),'sha256':rt.sha256(alias)}
+ r=mod.execute(q,out,tools)
+ assert r['reference_target_source_matches']==[{'collection':'plan.sources','id':'s','source':doc['plan']['sources']['s']}]
+ assert r['reference_output_presence']=='NOT_EVALUATED'
+
+
+def test_distinct_reference_does_not_prove_output_absence(reference):
+ q,out,tools,_=reference
+ other=out.parent/'different-reference.mp4';other.write_bytes(b'different synthetic video probe fixture')
+ q['reference']={'path':str(other),'sha256':rt.sha256(other)}
+ r=mod.execute(q,out,tools)
+ assert r['reference_target_source_matches']==[]
+ assert r['reference_output_presence']=='NOT_EVALUATED'
+ assert not r['reference_media_inserted_by_transfer']
+
+
+def test_match_inventory_includes_audio_visual_and_unused_plan_sources():
+ ref={'path':'/reference','sha256':'a'*64}
+ alias={'path':'/alias','sha256':'a'*64};different={'path':'/different','sha256':'b'*64}
+ doc={'plan':{'sources':{'unused':alias,'other':different}},
+      'audio_tracks':{'voice':{'source':alias}},'visual_layers':{'overlay':{'source':alias}}}
+ matches=mod.target_source_matches(doc,ref)
+ assert [(x['collection'],x['id']) for x in matches]==[('plan.sources','unused'),('audio_tracks','voice'),('visual_layers','overlay')]
+ assert all(x['source']==alias for x in matches)
+ assert doc['plan']['sources']['unused']==alias

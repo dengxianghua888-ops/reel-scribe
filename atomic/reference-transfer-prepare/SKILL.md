@@ -10,3 +10,5 @@ description: 将参考片的显式观察和逐项采纳、调整、放弃决定�
 准备成功不代表真实效果、完整风格或权限已通过。执行前核参考与Work版本、用户意图及必要权限，运行既有下游验证。此入口不改Work、不把参考媒体插入作品、不签发授权。
 
 结果前置路径调用现有 result-preview-compile 在临时目录验证目标源窗、完整原流程、标签、scope与持久保护，随后丢弃临时候选。报告明确执行过临时编译，不渲染、不改Work。后续使用prepared请求仍须重核当前头并重新编译；不能解除保护或忽略独立音轨限制。
+
+报告使用 `reference-transfer/2`，去掉旧 `reference_media_in_output` 字段。`reference_media_inserted_by_transfer=false` 仅指本操作不新增参考媒体；`reference_target_source_matches` 按SHA列当前Work主源、音轨、视觉层的同身份引用，不能当实际消费记录。`reference_output_presence=NOT_EVALUATED` 保留成片存在性未知；无同SHA也不排除转码或裁切派生素材。同源参考允许，但不算独立参考研究证据。

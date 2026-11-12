@@ -100,6 +100,46 @@
       "asset_path": "reel-mandarin-caption-evaluation/results.json",
       "sha256": "9b5687829ace2f9627f19e722fe552b44a42954359850e95c81dc1e00240de13",
       "bytes": 4066
+    },
+    "film-frame43": {
+      "asset_path": "reel-ninegrid-source-review-stage10-final/frame43.png",
+      "sha256": "0e173f03b25a0fd5d75ff15a96ce278e0b9daa696c168413d208e2bf02a22bb9",
+      "bytes": 1080667
+    },
+    "film-frame43-observation": {
+      "asset_path": "reel-ninegrid-source-review-stage10-final/visual-observation.json",
+      "sha256": "15ca07f0b78bbc970edc8a085937e705b896a44d6aeec0e00457586750fb3b7b",
+      "bytes": 926
+    },
+    "film-context-regression-report": {
+      "asset_path": "reel-ninegrid-source-review-stage10-final/report.json",
+      "sha256": "8424288275d8b23be37c83d14f02a57545838396fa79e72289d46ce83694c9f0",
+      "bytes": 3372
+    },
+    "film-context-positive-init": {
+      "asset_path": "reel-ninegrid-source-review-stage10-final/positive-init/receipt.json",
+      "sha256": "e58d4fce8788c23e31b2a756378d0fc5badd9033bfb5a4052b8a29f2b56f8e51",
+      "bytes": 23938
+    },
+    "film-context-negative-admission-truncated": {
+      "asset_path": "reel-ninegrid-source-review-stage10-final/negative-admission-truncated/receipt.json",
+      "sha256": "ce1e269a9ead12c497f3d775669e39d70e4e07d30e9d7c8416248d09994d139a",
+      "bytes": 13753
+    },
+    "film-context-negative-order-reversed": {
+      "asset_path": "reel-ninegrid-source-review-stage10-final/negative-order-reversed/receipt.json",
+      "sha256": "1d80c8d710fdc8b1bc33c0ef985efff801e0cea48d52be47d52c10b1288da4a1",
+      "bytes": 13754
+    },
+    "film-context-negative-protection-removed": {
+      "asset_path": "reel-ninegrid-source-review-stage10-final/negative-protection-removed/receipt.json",
+      "sha256": "f0b1503d3a5d7c2fb46a96565b46ca6e4d162b8050d72fbef50bf15b78143471",
+      "bytes": 13760
+    },
+    "film-context-positive-render": {
+      "asset_path": "reel-ninegrid-source-review-stage10-final/positive-render/receipt.json",
+      "sha256": "477801b854a39da236fe82e45b66becbf1e087a0cc6f90c8f061e26e61a41263",
+      "bytes": 19871
     }
   },
   "cases": [
@@ -133,7 +173,13 @@
         "work-restore",
         "work-stale",
         "real-report",
-        "film-en"
+        "film-en",
+        "film-context-regression-report",
+        "film-context-positive-init",
+        "film-context-negative-admission-truncated",
+        "film-context-negative-order-reversed",
+        "film-context-negative-protection-removed",
+        "film-context-positive-render"
       ],
       "listening_review": "NOT_RUN",
       "semantic_acceptance": "NOT_RUN",
@@ -148,24 +194,32 @@
         25,
         45
       ],
-      "text": "25–30.5: passions, robotics, space;30.8–34: robot-hand question;38–42: fear admission;42.2–45: We’re done.",
-      "evidence_basis": "Official English subtitles connect these exchanges by source order; cross-speaker/cross-shot narrative candidate, not complete motion/listening review.",
+      "text": "25–30.5: ambitions;30.8–34: robot-hand question;38–42: fear admission in official subtitle text. Direct source frame43s displays 40 YEARS LATER over a futuristic city; subtitle cue9 combines title and dialogue.",
+      "evidence_basis": "Official English subtitle source order plus directly inspected original43s frame. The42.2–45 subtitle cue combines title and dialogue and cannot establish continuous bridge-conversation imagery. No listening or exact cut onset established.",
       "dependencies": [
-        "retain the shift from stated personal ambitions to robot-hand conflict and subsequent response",
-        "do not assert robot-hand fear is the sole cause of relationship outcome without wider context"
+        "retain stated ambitions, robot-hand question and subsequent response as declared source-text context; do not infer sole cause of relationship outcome",
+        "retain the visible temporal-jump distinction when using43s imagery; do not portray it as simultaneous bridge conversation"
       ],
       "expected": [
-        "candidate brief identifies who says what and flags unverified causal inference",
-        "shot and speaker boundaries require actual motion/listening labels before creative acceptance"
+        "distinguish source-subtitle wording, actually observed frame content, and unverified audio/speaker timing",
+        "declared question/denial/admission source windows must retain coverage and order; this guard is not automatic semantic interpretation"
       ],
-      "runnable_mechanism": "reference dependency review; runtime semantic understanding NOT_IMPLEMENTED",
+      "runnable_mechanism": "real-source declared dependency coverage/order negative regressions; semantic understanding NOT_IMPLEMENTED",
       "status": "NEEDS_SEMANTIC_REVIEW",
       "unknown": [
-        "Cross-shot boundaries and speakers not independently annotated; source sequence is a candidate not a verified story graph"
+        "Exact visual cut onset, continuing audio across cut, speaker identity and word-level timing remain unreviewed; no full motion/listening acceptance"
       ],
       "evidence_refs": [
         "film-en",
-        "film-zh"
+        "film-zh",
+        "film-frame43",
+        "film-frame43-observation",
+        "film-context-regression-report",
+        "film-context-positive-init",
+        "film-context-negative-admission-truncated",
+        "film-context-negative-order-reversed",
+        "film-context-negative-protection-removed",
+        "film-context-positive-render"
       ],
       "listening_review": "NOT_RUN",
       "semantic_acceptance": "NOT_RUN",
@@ -196,7 +250,13 @@
       ],
       "evidence_refs": [
         "film-en",
-        "film-zh"
+        "film-zh",
+        "film-context-regression-report",
+        "film-context-positive-init",
+        "film-context-negative-admission-truncated",
+        "film-context-negative-order-reversed",
+        "film-context-negative-protection-removed",
+        "film-context-positive-render"
       ],
       "listening_review": "NOT_RUN",
       "semantic_acceptance": "NOT_RUN",

@@ -1,6 +1,6 @@
-# Reference transfer preparation / 1
+# Reference transfer preparation / 2
 
-`reference-transfer-prepare` prepares one supported presentation or result-first request for current Work. It does not observe a reference automatically, render or commit an edit. Caption preparation does not compile; the result-first bridge runs the existing compiler in a disposable directory, explicitly reporting that validation execution. The reference is not inserted in output.
+`reference-transfer-prepare` prepares one supported presentation or result-first request for current Work. It does not observe a reference automatically, render or commit an edit. Caption preparation does not compile; the result-first bridge runs the existing compiler in a disposable directory, explicitly reporting that validation execution. This operation does not insert reference media. The target may already contain the same media or derived content.
 
 ## Request
 
@@ -38,4 +38,14 @@ Parameters are exactly the existing result-preview-compile fields `mechanism_car
 
 Report `executed=true` means `execution_kind=TEMPORARY_COMPILER_VALIDATION_ONLY`, not rendering or adoption. `rendered=false`, `applied_to_work=false`, `committed=false`. `downstream_validation=COMPILER_VALIDATED_RECHECK_BEFORE_USE` requires compiling again against the current target when actually using the prepared request. Caption-path execution semantics are unchanged. The nested compiler still correctly states `reference_video_adaptation=NOT_PERFORMED`: it knows only the target mechanism, not the outer caller observation. Neither statement grants aesthetic/causal/whole-style acceptance.
 
-Final reference, per-event observation evidence, target source/tutorial evidence/card/font/protection identities and Work head are rechecked before publication. Reference bytes are not copied into target. Any later change requires fresh validation.
+Final reference, per-event observation evidence, target source/tutorial evidence/card/font/protection identities and Work head are rechecked before publication. Reference bytes are not newly copied into target by this operation; existing target content is preserved. Any later change requires fresh validation.
+
+## Report v2: insertion is not absence
+
+Requests are unchanged. Output schema `reference-transfer/2` replaces the ambiguous v1 `reference_media_in_output=false` field; consumers must handle v2 explicitly rather than treating the removed field as false. No automatic migration of old reports or truth claims is performed.
+
+- `reference_media_inserted_by_transfer=false`: this operation does not add reference media to Work.
+- `reference_target_source_matches`: current Work `plan.sources`, `audio_tracks` and `visual_layers` entries with the same SHA256 as the reference, independent of file path. Each record contains `collection`, `id`, and `source`; matched source identities are rechecked before publication. An unused plan source or muted layer can still match. These are identity matches, not proof of actual output consumption.
+- `reference_output_presence=NOT_EVALUATED`: neither a match nor no match determines future output presence. Crops, transcodes and other derived content may have different hashes. This preparation does not render/analyze output or grant a license.
+
+Same-source reference is allowed, but cannot serve as evidence of independent reference research or material absence from a future output.

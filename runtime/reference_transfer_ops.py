@@ -4,6 +4,19 @@ import tempfile
 from pathlib import Path
 
 
+def target_source_matches(document, reference):
+    """Compare declared SHA identities, not paths, rendered use or derived content."""
+    matches=[]
+    groups=[('plan.sources',document['plan']['sources'])]
+    groups.extend((key,{ident:item['source'] for ident,item in document.get(key,{}).items()})
+                  for key in ['audio_tracks','visual_layers'])
+    for group,sources in groups:
+        for ident,asset in sorted(sources.items()):
+            if asset['sha256']==reference['sha256']:
+                matches.append({'collection':group,'id':ident,'source':copy.deepcopy(asset)})
+    return matches
+
+
 def result_first_draft(request, item, state, refs, tools):
     """Preflight only. Full proof/scope validation remains the existing compiler's job."""
     from editing_runtime import exact_keys, require, source, span
@@ -104,11 +117,13 @@ def execute(request, directory, tools):
         require(prepared['status']=='READY_FOR_DOWNSTREAM_VALIDATION','REFERENCE_CAPTION_PREPARATION_BLOCKED')
         draft=prepared['draft_request']
         for v in params['variants']:refs.append(v['recipe']['style']['card'])
+    matches=target_source_matches(state['document'],ref)
+    refs.extend(match['source'] for match in matches)
     for identity in refs:source(identity)
     db=connect(request['store'])
     try:require(load(db)['version']==state['version'],'WORK_VERSION_CONFLICT')
     finally:db.close()
-    report={'schema':'reference-transfer/1','scene':request['scene'],'reference':ref,'items':copy.deepcopy(items),
+    report={'schema':'reference-transfer/2','scene':request['scene'],'reference':ref,'items':copy.deepcopy(items),
             'base_version':state['version'],'base_document_sha256':state['document_sha256'],
             'request_sha256':fingerprint(request),'status':'READY_FOR_DOWNSTREAM_VALIDATION' if draft else 'NO_TRANSFER_SELECTED',
             'draft_request':draft,'executed':narrative_validation is not None,'execution_kind':'TEMPORARY_COMPILER_VALIDATION_ONLY' if narrative_validation is not None else 'PREPARATION_ONLY',
@@ -116,7 +131,10 @@ def execute(request, directory, tools):
             'temporary_compiler_result':narrative_validation,
             'observation_truth':'Caller-declared intervals and artifact identity only; content, watching and listening not certified',
             'style_validation':'NOT_PERFORMED','narrative_transfer':'EXPLICIT_RESULT_FIRST_DRAFT_ONLY' if draft and draft['operation']=='result-preview-compile' else 'NOT_SUPPORTED',
-            'reference_media_in_output':False,'execution_guard':{'store':request['store'],'expected_version':state['version'],
+            'reference_media_inserted_by_transfer':False,
+            'reference_target_source_matches':matches,
+            'reference_output_presence':'NOT_EVALUATED',
+            'source_match_meaning':'Same SHA256 among current Work plan/audio/visual source identities, rechecked before publication; not actual consumption or derived-content detection. No match does not prove absence from a future output.','execution_guard':{'store':request['store'],'expected_version':state['version'],
             'require_fresh_identity_and_work_check':True,'note':'Prepared request is one explicit supported mechanism; downstream compiler and scope checks remain required. Reference order observations never prove target causality. Selection is not user authorization, aesthetic acceptance or whole-style transfer.'}}
     if draft is not None:
         report['prepared_request_sha256']=fingerprint(draft)
