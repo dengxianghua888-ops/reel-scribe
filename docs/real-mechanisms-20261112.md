@@ -10,7 +10,7 @@ Nikkimaria，WikEdtutorial1.webm，CC BY-SA 3.0：
 https://commons.wikimedia.org/w/index.php?title=File:WikEdtutorial1.webm&oldid=1131672871
 https://creativecommons.org/licenses/by-sa/3.0/
 
-使用已有25–31秒派生源，原始归属和归一化记录保存在相邻`reel-real-evaluation/normalization-provenance.json`。评估修改包括局部裁切放大、显式橙色定位框、评估字幕及独立声轨混合；输出不是原作者未改动原片。现screen-focus把音轨stream-copy进MP4，已有源是PCM MOV，因此先创建显式AAC兼容副本：视频copy，音频有损AAC，不能宣称音频相对原源无损。兼容副本命令和前后SHA在compatibility-derivative.json。向外分发修改样片需保留作者、链接、许可证和改动声明及适用的相同方式共享条件；本次未公开发布。
+使用已有25–31秒派生源，原始归属和归一化记录保存在相邻`reel-real-evaluation/normalization-provenance.json`。评估修改包括局部裁切放大、显式橙色定位框、评估字幕及独立声轨混合；输出不是原作者未改动原片。现screen-focus把音轨stream-copy进MP4，已有源是PCM MOV；试验当时主动创建显式AAC副本：视频copy，音频有损AAC，不能宣称音频相对原源无损。后续独立实测当前FFmpeg将该PCM直接copy进MP4或MOV均成功，完整解码PCM与原源相同，故AAC副本并非已证明必需，不能据此宣称当前容器故障。兼容副本命令和前后SHA在compatibility-derivative.json。向外分发修改样片需保留作者、链接、许可证和改动声明及适用的相同方式共享条件；本次未公开发布。
 
 ## 阅读优先教学：固定字段聚焦，而非仅字号
 
@@ -39,7 +39,7 @@ https://creativecommons.org/licenses/by-sa/3.0/
 ## 最小后续实现提案，不标为外部阻塞
 
 1. **坐标准备器**：接收实际probe尺寸、展示尺寸和显式矩形，输出可回查源坐标+预览图；禁止悄悄用展示坐标。仍需人工确认目标，不假装自动UI理解。两套1920/960等比正例、非等比/旋转拒绝及越界负例可覆盖。
-2. **screen-focus音频容器兼容**：先探测音频codec，给调用方显式选择保持音频并使用兼容容器，或授权转码；默认不要把PCM硬copy到MP4。验证PCM MOV音频hash保持、AAC路径、明确有损选项；不因此引入付费服务。
+2. **显式容器选择增强（非已复现故障修复）**：当前FFmpeg下PCM复制至MP4/MOV均实测成功；若扩展目标编辑器容器选择，应保留原默认、明确音频copy及支持范围，验证PCM摘要保持；不因未知宿主兼容性推断必须转AAC，不新增隐式有损转码或付费服务。
 3. **证据型产品演示剩余机制**：现有wikEd窗口没有足够保存并重开成品证据，不能靠换卡名继承通过。最小可实现扩展是既有tutorial proof中显式`artifact-check`事件（画面/文件hash、检查窗口、已执行检查声明、对应result依赖），先拒绝提前成功与缺产物检查，再用合法录屏实际保存后重开窗口验证。自动证明“保存成功”仍不成立；无需重写Work或加新权威。
 
 ## 独立叙事参考：从公开茶杯教程到原教程目标
