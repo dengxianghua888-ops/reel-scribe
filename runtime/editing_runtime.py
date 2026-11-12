@@ -1070,6 +1070,9 @@ def tts_macos(request, directory, tools):
 
 def execute(request, directory, tools):
     op = request.get('operation')
+    if op == 'creation-brief-prepare':
+        from creation_brief_ops import execute as brief_execute
+        return brief_execute(request, directory, tools)
     if op == 'result-preview-compile':
         from result_preview_ops import execute as result_preview_execute
         return result_preview_execute(request, directory, tools)

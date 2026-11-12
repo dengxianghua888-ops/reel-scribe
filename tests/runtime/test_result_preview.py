@@ -57,7 +57,6 @@ def test_fail_closed(case,change,error):
     assert not (out/'result-preview.json').exists()
 
 @pytest.mark.parametrize('field,value,error',[
- ('evidence_protection',{},'DEPENDENT_MAPPING_UNSUPPORTED'),
  ('audio_tracks',{'future':{}},'DEPENDENT_MAPPING_UNSUPPORTED'),
  ('visual_layers',{'future':{}},'DEPENDENT_MAPPING_UNSUPPORTED'),
  ('notes',{'result_preview':{'user':'owned'}},'NOTE_EXISTS'),
@@ -117,3 +116,92 @@ def test_changed_evidence_after_compile_rejected(case,monkeypatch):
     monkeypatch.setattr(work_ops,'timeline_revise',changed)
     with pytest.raises(rt.ContractError,match='SOURCE_HASH_MISMATCH'):mod.execute(q,out,tools)
     assert not (out/'result-preview.json').exists()
+
+
+def protected_case(case):
+    q, out, tools, doc = case
+    ref = doc['plan']['sources']['s']
+    def update(d):
+        units = []
+        occurrences = []
+        for uid, start, end, deps in [('action', .2, .6, []), ('result', .6, 1, [{'unit_id':'action','relation':'prerequisite'}])]:
+            units.append({'id':uid,'label':uid,'kind':'claim','speaker':'declared','modality':'video',
+                          'source':ref,'start':start,'end':end,'evidence':ref,'requires':deps})
+            occurrences.append({'id':uid+'-original','unit_id':uid,'carriers':[{'type':'clip-video','id':'full'}],
+                                'dependencies':{'action':'action-original'} if deps else {}})
+        d['evidence_protection']={'schema':'work-evidence-protection/1','units':units,
+            'required_units':['action','result'],'occurrences':occurrences,
+            'chapters':[{'id':'chapter','title':'Original evidence','occurrence_ids':['action-original','result-original']}]}
+    doc = reinitialize(case, update)
+    q['scope']['evidence_mapping'] = True
+    return doc
+
+
+def test_protected_original_units_carriers_dependencies_and_chapter_shift(case):
+    q,out,tools,_=case;doc=protected_case(case)
+    result=mod.execute(q,out,tools)
+    candidate=json.loads((out/'candidate.json').read_text())['document']
+    assert candidate['evidence_protection']==doc['evidence_protection']
+    proof=json.loads((out/'candidate-protection-map.json').read_text())
+    assert proof['validation_mode']=='ordinary_protection'
+    assert proof['declared_coverage']=='DECLARED_SOURCE_RANGES_PRESERVED'
+    assert proof['occurrences'][0]['parts'][0]['clock_rational']['output_start']=='3/5'
+    assert proof['occurrences'][1]['parts'][0]['clock_rational']['output_start']=='1'
+    assert proof['chapters'][0]['start']==.6
+    assert not result['protection_shift']['preview_registered_as_evidence']
+    with work_ops.connect(q['store']) as db:assert work_ops.load(db)['document']==doc
+
+
+def test_protected_shift_requires_explicit_mapping_authorization(case):
+    q,out,tools,_=case;protected_case(case);q['scope'].pop('evidence_mapping')
+    with pytest.raises(rt.ContractError,match='PROTECTION_SHIFT_SCOPE_REQUIRED'):mod.execute(q,out,tools)
+    assert not (out/'result-preview.json').exists()
+
+
+@pytest.mark.parametrize('mutation', ['drop-unit','drop-required','redirect-preview','drop-original','change-source'])
+def test_protection_guard_rejects_changed_declaration_or_original(case, monkeypatch, mutation):
+    q,out,tools,_=case;protected_case(case)
+    original=work_ops.timeline_revise
+    def changed(request,*args,**kwargs):
+        result=original(request,*args,**kwargs)
+        c=request['candidate']
+        if mutation=='drop-unit':c['evidence_protection']['units'].pop()
+        elif mutation=='drop-required':c['evidence_protection']['required_units'].pop()
+        elif mutation=='redirect-preview':c['evidence_protection']['occurrences'][1]['carriers'][0]['id']='peek'
+        elif mutation=='drop-original':c['plan']['clips'].pop()
+        else:c['plan']['sources']['s']['sha256']='0'*64
+        return result
+    monkeypatch.setattr(work_ops,'timeline_revise',changed)
+    with pytest.raises(rt.ContractError,match='PROTECTION_CHANGED|ORIGINAL_CONTENT_CHANGED'):mod.execute(q,out,tools)
+    assert not (out/'result-preview.json').exists()
+
+
+def test_protected_evidence_change_after_proof_no_success(case, monkeypatch):
+    q,out,tools,_=case;doc=protected_case(case)
+    original=mod.protection_shift
+    def changed(*a,**k):
+        result=original(*a,**k)
+        Path(doc['evidence_protection']['units'][0]['evidence']['path']).write_bytes(b'changed')
+        return result
+    monkeypatch.setattr(mod,'protection_shift',changed)
+    with pytest.raises(rt.ContractError,match='SOURCE_HASH_MISMATCH'):mod.execute(q,out,tools)
+    assert not (out/'result-preview.json').exists()
+
+
+@pytest.mark.parametrize('field,value,error', [
+    ('freeze_positions',['full'],'FROZEN_POSITION_CHANGED'),
+    ('freeze_duration',True,'WORK_DURATION_FROZEN'),
+    ('output_fields',[],'OUTPUT_OUTSIDE_SCOPE'),
+])
+def test_protected_preview_still_honors_existing_scope(case,field,value,error):
+    q,out,tools,_=case;protected_case(case);q['scope'][field]=value
+    with pytest.raises(rt.ContractError,match=error):mod.execute(q,out,tools)
+    assert not (out/'result-preview.json').exists()
+
+
+def test_proof_failure_precedes_candidate_publication(case,monkeypatch):
+    q,out,tools,_=case;protected_case(case)
+    def fail(*a,**k):raise rt.ContractError('INJECTED_PROTECTION_PROOF_FAILURE')
+    monkeypatch.setattr(mod,'protection_shift',fail)
+    with pytest.raises(rt.ContractError,match='INJECTED'):mod.execute(q,out,tools)
+    assert not (out/'candidate.json').exists() and not (out/'result-preview.json').exists()

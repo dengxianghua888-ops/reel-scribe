@@ -31,7 +31,7 @@ jobs:
       - name: Runtime and independent package regressions
         env:
           PYTHONDONTWRITEBYTECODE: "1"
-        run: python -m pytest -q tests/runtime tests/packaging tests/drama tests/editor_adapters tests/media_import tests/benchmark --junitxml="${RUNNER_TEMP}/runtime-packaging-junit.xml"
+        run: python -m pytest -q tests/runtime tests/packaging tests/drama tests/editor_adapters tests/media_import tests/benchmark tests/evaluation_cases --junitxml="${RUNNER_TEMP}/runtime-packaging-junit.xml"
       - name: Preserve runtime and packaging JUnit after failures
         if: always()
         uses: actions/upload-artifact@v7

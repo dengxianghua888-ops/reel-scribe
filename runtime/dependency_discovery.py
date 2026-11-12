@@ -46,6 +46,7 @@ ATOMIC_REQUIREMENTS = {
     'tutorial-plan-compile': ('ffprobe',),
     'timeline-revise': ('ffprobe',),
     'style-recipe-compile': ('ffprobe',),
+    'creation-brief-prepare': ('sqlite',),
     'result-preview-compile': ('sqlite', 'ffprobe'),
     'style-recipe-preview': ('sqlite', 'ffmpeg', 'ffprobe'),
     'revision-impact-inspect': ('ffprobe',),

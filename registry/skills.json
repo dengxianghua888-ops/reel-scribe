@@ -670,6 +670,13 @@
       "entry": "atomic/result-preview-compile/SKILL.md",
       "description": "将明确教程结果源窗前置为标注的后段画面预览，保留完整原流程并按显式范围生成Work候选；不判断因果、不自动参考迁移、不提交作品。",
       "status": "local-synthetic-tested"
+    },
+    {
+      "id": "creation-brief-prepare",
+      "layer": "atomic",
+      "entry": "atomic/creation-brief-prepare/SKILL.md",
+      "description": "将明确解析且标明出处的简报绑定当前Work，准备字幕呈现或教程校验请求并列缺项；不自动推荐、渲染或提交。",
+      "status": "local-synthetic-tested"
     }
   ]
 }
