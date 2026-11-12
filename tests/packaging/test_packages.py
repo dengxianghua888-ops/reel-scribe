@@ -98,7 +98,8 @@ def test_default_build_navigation_and_reproducibility(source, tmp_path, builder)
             assert not (output / name).exists()
         structure = json.loads(run(sys.executable, output / 'scripts/verify_library.py', 'structure', cwd=tmp_path).stdout)
         assert structure['status'] == 'PASSED'
-        assert structure['skills'] == 59
+        assert structure['skills'] == 60
+        assert json.loads((output / 'registry/skills.json').read_text()) == json.loads((source / 'registry/skills.json').read_text())
     name = MANIFESTS[BUILDERS.index(builder)]
     first, second = [json.loads((out / name).read_text()) for out in outputs]
     assert first['files'] == second['files']
@@ -292,6 +293,7 @@ def test_copy_drift_has_no_success_manifest(source, tmp_path, monkeypatch, build
 
 @pytest.mark.parametrize('builder', BUILDERS)
 def test_relocated_output_doctor_stdio_and_real_render(source, tmp_path, builder):
+    original_registry = json.loads((source / 'registry/skills.json').read_text())
     ffmpeg = os.environ.get('EDITING_FFMPEG') or shutil.which('ffmpeg')
     ffprobe = os.environ.get('EDITING_FFPROBE') or shutil.which('ffprobe')
     assert ffmpeg and ffprobe, 'Packaging media acceptance requires real FFmpeg/ffprobe'
@@ -337,7 +339,11 @@ def test_relocated_output_doctor_stdio_and_real_render(source, tmp_path, builder
     responses = [json.loads(line) for line in result.stdout.splitlines()]
     assert responses[0]['result']['protocolVersion'] == '2025-03-26'
     assert len(responses[1]['result']['tools']) == 3
-    assert len(json.loads(responses[2]['result']['content'][0]['text'])['entries']) == 59
+    listed = json.loads(responses[2]['result']['content'][0]['text'])['entries']
+    assert len(listed) == 60
+    assert listed == [{k: row.get(k) for k in ('id', 'layer', 'entry', 'status')}
+                      for row in original_registry['entries']]
+    assert json.loads((relocated / 'registry/skills.json').read_text()) == original_registry
     assert not responses[3]['result'].get('isError'), responses[3]
     result = json.loads(responses[3]['result']['content'][0]['text'])
     assert result['status'] == 'SUCCEEDED', result

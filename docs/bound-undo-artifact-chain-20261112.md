@@ -43,3 +43,7 @@ LINKAGE_VALIDATED仅表示文件字节与声明关联通过。截图产生来源
 四份回执与45个冻结runtime文件一致，原源SHA未改、没有Work操作。另独立复现旧原片49.503/59.003/113.003三帧的字节与PTS，只对这三帧提供重现证据；原子报告仍如实保留FRAME_DERIVATION_NOT_VERIFIED，不推广为任意截图都已认证。后台事实与观察真伪均未认证，未听审。
 
 本地完整记录：`reel-stage12-artifact-evaluation/normalized-final/report.json`、`explicit-import/receipt.json`、`reproduced/report.json`及README。素材不入仓，派生对外分发须保留Nikkimaria归属/来源/修改说明及[CC BY-SA3.0](https://creativecommons.org/licenses/by-sa/3.0/)。
+
+## 完整回归发现并修正的集成遗漏
+
+首次确切归档 `3468a1b2` 的完整回归为761通过/5失败/0跳过，不能标为通过。五项均是新增第60个原子后，两个打包入口仍期望59（四个参数化用例）及原52项兼容快照允许新增集合漏该ID（一项）。失败断言提前结束的打包后续流程当时未验。已显式更新60和新ID，不改原52项摘要/层级断言；同时增加完整源/打包registry对象与MCP公开字段/顺序一致断言。运行时文件未改，真实媒体证据仅按逐文件相同复用，最终新SHA必须重新完整验收。
