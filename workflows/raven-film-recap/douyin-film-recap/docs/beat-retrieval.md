@@ -111,3 +111,56 @@ layer names above. The additional `test_retrieval_plan_cases.py` and frozen
 The frozen summaries and gold are metadata-only contract inputs. The planned
 and consumed sets in these tests are synthetic traces, not evidence of a real
 writer or rendered film. Real-media/semantic acceptance remains NOT_RUN.
+
+## Optional bound recorded-window diagnostics
+
+`revision-preview WORK --support-windows declarations.json` adds a read-only
+`support_window_diagnostics` projection. The default command and R0/R1 retrieval
+remain unchanged. This is not a new QC/release gate or an adoption operation.
+
+```json
+{"schema":"film-support-windows/1","beats":[{"beat_id":"beat-1","alternatives":[[
+  {"id":"context","source_id":"source-1","source_sha256":"<full source SHA256>","start":30.8,"end":34,"basis":"Explicit reference-text window; not listening-reviewed"},
+  {"id":"response","source_id":"source-1","source_sha256":"<full source SHA256>","start":34.5,"end":36,"basis":"Explicit declared supporting window"}
+]]}]}
+```
+
+Each alternative is a conjunction: every declared window must be covered. Any
+complete alternative satisfies the declared group. `basis` records the caller's
+claim, not authenticated semantics. No declaration is automatically promoted to
+protection, a correct causal relationship, or a semantic gold label. The canonical
+declaration digest is recorded under the existing preview `binding` object.
+
+The existing preview validator checks current Storyboard/source identities, passed
+render-stage artifact bindings, the render plan's content/timeline binding, and
+EDL consistency. The diagnostic cannot accept an independent EDL. Missing or
+unusable bindings, unrendered candidates, and unsupported mappings remain UNKNOWN.
+It neither executes a renderer nor reruns/borrows a QC verdict.
+
+First-version eligible mappings are `original` segments with one continuous
+source window. Their exact source SHA/size, segment contract key, source range,
+mode and duration must agree. The renderer's millisecond seek/trim precision must
+represent the source start and duration exactly. Measured segment frame count/fps,
+realized timeline duration/frame span and EDL duration must equal the source-window
+duration exactly; the existing one-frame drift tolerance is **not** used to assert
+complete coverage. Audio clock/padding contract checks reuse the existing measured
+duration checker, without implying original PCM or audible-word preservation.
+Voiceover/multi-visual and ambiguous clock cases remain UNKNOWN.
+
+For each same-Beat/source window, exact rational interval union reports covered
+and missing intervals. Adjacent pieces may join; repeated pieces never multiply
+coverage. Another Beat's use never fills this Beat's gap. Statuses mean:
+
+- `RECORDED_WINDOW_FULL`: the declaration is fully covered by eligible bound records.
+- `RECORDED_WINDOW_PARTIAL`: some recorded coverage remains but the declaration is incomplete.
+- `RECORDED_WINDOW_MISSING`: no eligible recorded interval covers the declaration.
+- `UNKNOWN`: insufficient binding or an unsupported mapping could affect the missing region.
+
+Every result explicitly retains `physical_frame_coverage: NOT_VERIFIED`,
+`semantic_review: NOT_RUN`, `media_reverified: false`, and
+`declaration_is_semantic_gold: false`. The renderer's records do not contain the
+selected original frame PTS or a per-frame source/output map; measured output
+length is not proof that every physical source frame is visible. Cropping,
+resampling, audio fades, original meaning, and perceptual suitability are not
+certified. These diagnostics supplement, not replace, the earlier ID-membership
+benchmark or a full source/finished-film review.

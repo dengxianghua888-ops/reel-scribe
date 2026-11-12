@@ -51,7 +51,39 @@ for _code, _description in {
     "render_evidence_unusable": "成片证据不可用",
 }.items():
     _STATUS[_code] = _description + " / " + _code
-_CODE_FIELDS = {"status", "reason", "plan_binding", "coverage_status", "beat_role", "visual_role", "role"}
+_LABELS.update({
+    "support_windows_sha256": "支持窗口声明 SHA-256（非语义金标）",
+    "declaration": "输入窗口与依据声明", "alternatives": "替代支持组（任一组满足记录要求）",
+    "windows": "同组必需窗口（全部满足记录要求）", "covered": "已记录覆盖区间（源秒）",
+    "gaps": "记录未覆盖区间（源秒；未知时不等于实际缺失）",
+    "mapping_unknowns": "区间映射未知原因", "basis": "人工 / 上游声明依据",
+    "source_sha256": "声明源 SHA-256", "render_binding_status": "已有成片记录绑定状态",
+    "render_binding_reason": "已有成片记录绑定限制", "declaration_is_semantic_gold": "声明是否语义金标",
+    "physical_frame_coverage": "逐帧实际消费验证", "semantic_review": "语义验收",
+    "num": "分子", "den": "分母",
+})
+_STATUS.update({
+    "RECORDED_WINDOW_FULL": "记录窗口完整覆盖（不等于逐帧消费或语义支持） / RECORDED_WINDOW_FULL",
+    "RECORDED_WINDOW_PARTIAL": "记录窗口部分覆盖 / RECORDED_WINDOW_PARTIAL",
+    "RECORDED_WINDOW_MISSING": "记录窗口未覆盖（不等于已证实实际缺失） / RECORDED_WINDOW_MISSING",
+    "UNKNOWN": "记录窗口覆盖未知 / UNKNOWN",
+    "NOT_VERIFIED": "未验证 / NOT_VERIFIED", "NOT_RUN": "未执行 / NOT_RUN",
+})
+for _code, _description in {
+    "unsupported_nonoriginal_or_multivisual": "非原声模式或多画面映射不在本次诊断支持范围",
+    "segment_contract_missing": "缺少唯一片段或合成合同",
+    "segment_contract_key_mismatch": "片段与合成依赖键不匹配",
+    "millisecond_seek_rounding_unresolved": "毫秒寻址取整关系未解决",
+    "segment_source_binding_mismatch": "片段源字节身份绑定不匹配",
+    "segment_source_window_mismatch": "片段源窗口记录不匹配",
+    "realized_segment_missing": "缺少唯一实际时间线片段记录",
+    "measured_duration_not_exact_source_window": "测得时长不能精确映射到源窗口",
+    "edl_duration_not_exact_source_window": "EDL时长不能精确映射到源窗口",
+    "segment_contract_unusable": "片段合同记录不可用",
+    "edl_segment_missing": "缺少唯一EDL片段记录",
+}.items():
+    _STATUS[_code] = _description + " / " + _code
+_CODE_FIELDS = {"status", "reason", "plan_binding", "coverage_status", "beat_role", "visual_role", "role", "render_binding_status", "render_binding_reason", "physical_frame_coverage", "semantic_review"}
 
 
 def _text(value):
@@ -118,6 +150,18 @@ def render_preview_html(preview):
              '<section><h2>3. 选材候选记录</h2>', _value(preview.get("candidate_pool")),
              _details("高光候选声明（不代表已采用）", preview.get("highlights", [])), '</section>',
              '<section><h2>4. 按 Beat 定位</h2>']
+    diagnostics = preview.get("support_window_diagnostics")
+    if "support_window_diagnostics" in preview:
+        body += ['<aside class="support-windows"><h3>可选：支持窗口记录诊断</h3>',
+                 '<p class="notice">这里只比对声明窗口与已绑定的成片记录。FULL 不是逐帧消费、叙事支持或语义真值；PARTIAL / MISSING 不是自动发布阻断，UNKNOWN 必须连同原因阅读。</p>',
+                 '<p>组内窗口为全部需要，替代组为任一可满足。区间使用精确分数表示源秒。声明依据不是金标；不改变原采用流程或 QC 门槛。</p>']
+        if isinstance(diagnostics, dict):
+            body += [_value({k:v for k,v in diagnostics.items() if k not in {"beats", "declaration"}}),
+                     _details("原始支持窗口与依据声明（不认证为事实）", diagnostics.get("declaration")),
+                     _details("全部 Beat 窗口诊断原记录", diagnostics.get("beats"))]
+        else:
+            body += ['<p class="muted">诊断格式异常，未解释为覆盖结论。</p>', _value(diagnostics)]
+        body += ['</aside>']
     body += [navigation]
     if not beats:
         body += ['<p class="muted">无 Beat 记录；不能由此推断作品完整。</p>']
@@ -125,6 +169,16 @@ def render_preview_html(preview):
         body += [f'<article id="beat-{i}"><h3>Beat：{_text(beat.get("beat_id"))}</h3>',
                  '<h4>方案声明</h4>', _value({"plan_binding": beat.get("plan_binding")}), _value(beat.get("plan")),
                  '<h4>检索与未知项</h4>', _retrieval(beat.get("retrieval", {})), '<h4>分镜引用（不是成片证明）</h4>']
+        if "support_window_diagnostics" in preview:
+            entries = diagnostics.get("beats") if isinstance(diagnostics, dict) else None
+            matches = [row for row in entries if isinstance(row, dict) and row.get("beat_id") == beat.get("beat_id")] if isinstance(entries, list) else []
+            body += ['<h4>本 Beat 的声明窗口记录覆盖</h4>']
+            if len(matches) == 1:
+                body += [_value(matches[0])]
+            elif not matches:
+                body += ['<p class="muted">本 Beat 没有可对应的窗口诊断；不推断完整或缺失。</p>']
+            else:
+                body += ['<p class="muted">出现重复 Beat 诊断，未合并为单一结论。</p>', _value(matches)]
         references = beat.get("storyboard_references", [])
         if not references:
             body += ['<p class="muted">无分镜引用记录</p>']
