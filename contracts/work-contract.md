@@ -155,3 +155,34 @@ candidate. Conflicts emit no candidate. Commit is a separate existing action,
 which must recheck the current version and candidate. No render, delivery choice,
 semantic acceptance or media/listening approval is implied. As with other Work
 operations, use a fresh operation output directory.
+
+#### Explicit compatible recipe resolution for local undo
+
+The default bound-work rejection above remains. A caller may explicitly supply
+`binding_resolution: {recipe, expected_recipe_sha256, derived_recipe_id,
+derived_recipe_version}` to resolve the narrowly supported case. `recipe` must be
+the complete current `style-recipe/1`, including any original `layout_constraints`;
+its canonical digest and compiler-produced global `*` binding must match exactly.
+Only one global binding and caption presentation / existing audio gain parameters
+are supported. All original mapped parameters must still match the current Work.
+An unrelated manual edit to a mapped parameter makes the binding divergent and
+is refused; unrelated notes or unmapped presentation values are preserved.
+
+The selected fields must already occur in that recipe's parameter map. Explicit
+scope must authorize `style_keys:["*"]` as well as the selected document fields.
+A derived recipe changes only selected values and its explicitly supplied id/version
+pair, which must differ from the original pair. The card, other mapped values and
+original constraints remain byte-equivalent as JSON values. Original and candidate
+caption layouts are both checked under those same constraints before any candidate
+is emitted. No weakening, dropping or substitution of constraints is supported.
+
+A successful change emits `derived-recipe.json`; the candidate binding records this
+new recipe digest and mapped values, not a false assertion that the old recipe is
+still fully applied. `local-undo-report.json.binding_resolution` records
+`derived_from` (original recipe id/version/digest), both binding digests, derived
+recipe/digest and layout results. This audit is not a new Work authority or proof
+of visual quality. A NO_OP never changes the binding or emits a derived recipe,
+even when resolution was supplied. Multiple/clip bindings, custom compiler metadata,
+unknown parameters, absent original recipe, stale binding, unmapped selected fields
+and identity-changing audio edits remain unsupported. No render or commit is run;
+layout masks, when required, are an explicit local validation step only.

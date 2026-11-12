@@ -311,7 +311,8 @@ def work_version(request,directory,tools):
             'relink-style-resources':['store','expected_version','relocations','message','author']}
     require(action in fields,'WORK_ACTION_UNSUPPORTED')
     optional=(['style_resource_relocations'] if action=='restore' else
-              ['drama_inheritance'] if action=='init' else [])
+              ['drama_inheritance'] if action=='init' else
+              ['binding_resolution'] if action=='prepare-local-undo' else [])
     exact_keys(request,['operation','action']+fields[action]+optional,['operation','action']+fields[action])
     p=Path(request['store']);require(p.is_absolute(),'ABSOLUTE_STORE_PATH_REQUIRED')
     from drama_binding import (validate_work_attachment, recheck as drama_recheck,
@@ -379,9 +380,11 @@ def work_version(request,directory,tools):
                 require(request['expected_version']==current['version'],'WORK_VERSION_CONFLICT')
                 if action=='prepare-local-undo':
                     from local_undo import prepare
-                    report,bundle=prepare(db,current,request,tools)
+                    report,bundle=prepare(db,current,request,tools,directory=directory)
                     result={**current,'action':action,**report}
                     if bundle is not None:
+                        if 'binding_resolution' in report:
+                            write_json(directory/'derived-recipe.json',report['binding_resolution']['derived_recipe'])
                         write_json(directory/'candidate.json',bundle)
                     write_json(directory/'local-undo-report.json',report)
                 elif action=='commit':

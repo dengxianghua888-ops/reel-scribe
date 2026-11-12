@@ -198,3 +198,137 @@ def test_dependency_discovery_requires_probe_without_render_tools():
     required, unknown, branch = _selected_requirements('work-version', {'action': 'prepare-local-undo'})
     assert set(required) == {'sqlite', 'ffprobe'}
     assert unknown == [] and branch == 'prepare-local-undo'
+
+
+def bound_case(case, constraints=None, parameters=None):
+    """Build actual compiler binding then commit; no invented binding envelope."""
+    import style_recipe_ops
+    q,out,tools,_=case;old=state(q)
+    recipe={'schema':'style-recipe/1','id':'explicit','version':'1',
+        'style':{'family':'test','style_id':'caption','version':'1', 'card':old['document']['caption_style']['font']},
+        'parameters':{'caption_style':{'font_size':14,'color_rgb':'FFFFFF'}}}
+    if parameters is not None:
+        recipe['parameters']=parameters
+    if constraints is not None:
+        recipe['layout_constraints']=constraints
+    folder=out/'recipe';folder.mkdir();allowed=scope();allowed['style_keys']=['*']
+    style_recipe_ops.execute({'operation':'style-recipe-compile','base_version':old['version'],
+        'document':old['document'],'expected_document_sha256':old['document_sha256'],
+        'recipe':recipe,'expected_recipe_sha256':rt.fingerprint(recipe),'capabilities':['caption-style','audio-track-gain'],
+        'scope':allowed},folder,tools)
+    target=out/'recipe-commit';target.mkdir()
+    work_ops.work_version({'operation':'work-version','action':'commit','store':q['store'],
+        'expected_version':old['version'],'candidate':{'path':str(folder/'candidate.json'),'sha256':rt.sha256(folder/'candidate.json')},
+        'message':'explicit recipe','author':'human'},target,tools)
+    req=request(case);req['scope']['style_keys']=['*']
+    req['binding_resolution']={'recipe':recipe,'expected_recipe_sha256':rt.fingerprint(recipe),
+        'derived_recipe_id':'explicit-local-undo','derived_recipe_version':'1'}
+    return req
+
+
+def test_bound_undo_derives_truthful_recipe_preserves_later_note(case):
+    req=bound_case(case);commit(case,lambda d:d['notes'].update(manual='later'))
+    req['expected_version']=state(req)['version'];before=state(req)
+    result=run(case,req);bundle=json.loads((case[1]/'candidate.json').read_bytes())
+    derived=json.loads((case[1]/'derived-recipe.json').read_bytes())
+    assert state(req)==before
+    assert derived['parameters']['caption_style']=={'font_size':12,'color_rgb':'FFFFFF'}
+    binding=bundle['document']['style_bindings']['*']
+    assert binding['parameters']['recipe_sha256']==rt.fingerprint(derived)
+    assert binding['parameters']['recipe_sha256']!=req['binding_resolution']['expected_recipe_sha256']
+    assert bundle['document']['notes']['manual']=='later'
+    assert result['binding_resolution']['derived_from']['recipe_id']=='explicit'
+
+
+@pytest.mark.parametrize('mutate,error',[
+    (lambda q:q['scope'].update(style_keys=[]),'UNDO_BINDING_SCOPE_REQUIRED'),
+    (lambda q:q['binding_resolution'].update(expected_recipe_sha256='0'*64),'UNDO_RECIPE_HASH_CONFLICT'),
+    (lambda q:q['binding_resolution'].update(derived_recipe_id='explicit',derived_recipe_version='1'),'UNDO_DERIVED_RECIPE_ID_MUST_CHANGE'),
+    (lambda q:q['fields'].append({'kind':'caption_style','field':'margin_v'}),'UNDO_SELECTED_FIELD_NOT_RECIPE_MAPPED'),
+])
+def test_bound_resolution_fail_closed(case,mutate,error):
+    req=bound_case(case);mutate(req)
+    with pytest.raises(rt.ContractError,match=error):run(case,req)
+    assert not (case[1]/'candidate.json').exists()
+
+
+def test_bound_other_parameter_manually_changed_rejected(case):
+    req=bound_case(case);commit(case,lambda d:d['caption_style'].update(color_rgb='FF0000'))
+    req['expected_version']=state(req)['version']
+    with pytest.raises(rt.ContractError,match='UNDO_BINDING_ALREADY_DIVERGED'):run(case,req)
+
+
+def test_bound_noop_does_not_change_recipe(case):
+    req=bound_case(case);commit(case,lambda d:d['caption_style'].update(font_size=12))
+    req['expected_version']=state(req)['version'];before=state(req)
+    result=run(case,req)
+    assert result['status']=='NO_OP' and state(req)==before
+    assert not (case[1]/'derived-recipe.json').exists() and not (case[1]/'candidate.json').exists()
+
+
+def test_noncompiler_binding_still_rejected(case):
+    req=bound_case(case)
+    req['binding_resolution']['recipe']['parameters']['caption_style']['font_size']=15
+    req['binding_resolution']['expected_recipe_sha256']=rt.fingerprint(req['binding_resolution']['recipe'])
+    with pytest.raises(rt.ContractError,match='UNDO_BINDING_RECIPE_MISMATCH'):run(case,req)
+
+
+def test_layout_preserved_and_both_documents_rechecked(case,monkeypatch):
+    import caption_layout
+    calls=[]
+    def check(doc,constraints,directory,tools):
+        calls.append((copy.deepcopy(doc),copy.deepcopy(constraints)))
+        return {'status':'TEST_DOUBLE_NOT_REAL_LAYOUT_ACCEPTANCE'}
+    monkeypatch.setattr(caption_layout,'check',check)
+    constraints={'schema':'caption-layout/1','canvas':{'width':64,'height':64},
+        'subtitle_band':{'x':0,'y':32,'width':64,'height':32},
+        'protected_regions':[{'id':'ui','rect':{'x':0,'y':0,'width':64,'height':20}}]}
+    req=bound_case(case,constraints);calls.clear();result=run(case,req)
+    assert len(calls)==2 and [c[0]['caption_style']['font_size'] for c in calls]==[14,12]
+    assert all(c[1]==constraints for c in calls)
+    assert result['binding_resolution']['derived_recipe']['layout_constraints']==constraints
+
+
+def test_failed_layout_never_emits_candidate(case,monkeypatch):
+    import caption_layout
+    monkeypatch.setattr(caption_layout,'check',lambda *a:{'status':'TEST_DOUBLE'})
+    req=bound_case(case,{'fixture':'only verifies call rejection, not layout geometry'})
+    def reject(*a):raise rt.ContractError('ACTUAL_LAYOUT_REJECTION_TEST_DOUBLE')
+    monkeypatch.setattr(caption_layout,'check',reject)
+    before=state(req)
+    with pytest.raises(rt.ContractError,match='ACTUAL_LAYOUT_REJECTION'):run(case,req)
+    assert state(req)==before and not (case[1]/'candidate.json').exists()
+
+
+def test_multiple_binding_unsupported(case):
+    req=bound_case(case)
+    # Independently recorded additional binding makes global-only resolution unsupported.
+    old=state(req);doc=copy.deepcopy(old['document']);doc['style_bindings']['full']=copy.deepcopy(doc['style_bindings']['*'])
+    folder=case[1]/'extra-binding';folder.mkdir();allowed=scope();allowed['style_keys']=['full']
+    work_ops.timeline_revise({'operation':'timeline-revise','base_version':old['version'],
+        'document':old['document'],'expected_document_sha256':old['document_sha256'],
+        'candidate':doc,'scope':allowed},folder,case[2])
+    applied=case[1]/'extra-commit';applied.mkdir()
+    work_ops.work_version({'operation':'work-version','action':'commit','store':req['store'],
+        'expected_version':old['version'],'candidate':{'path':str(folder/'candidate.json'),'sha256':rt.sha256(folder/'candidate.json')},
+        'message':'explicit extra binding','author':'human'},applied,case[2])
+    req['expected_version']=state(req)['version']
+    with pytest.raises(rt.ContractError,match='UNDO_BINDING_RECIPE_MISMATCH'):run(case,req)
+
+
+def test_bound_audio_gain_derived_recipe(case):
+    audio_case(case)
+    req=bound_case(case,parameters={'audio_gain_db':{'music':-12}})
+    req['undo_sequence']=3
+    req['fields']=[{'kind':'audio_track','id':'music','field':'gain_db'}]
+    result=run(case,req)
+    doc=json.loads((case[1]/'candidate.json').read_bytes())['document']
+    assert doc['audio_tracks']['music']['gain_db']==-6
+    assert result['binding_resolution']['derived_recipe']['parameters']=={'audio_gain_db':{'music':-6}}
+
+
+def test_bound_constraint_replacement_rejected(case):
+    req=bound_case(case)
+    req['binding_resolution']['recipe']['layout_constraints']={'attempt':'new less strict constraint'}
+    req['binding_resolution']['expected_recipe_sha256']=rt.fingerprint(req['binding_resolution']['recipe'])
+    with pytest.raises(rt.ContractError,match='UNDO_BINDING_RECIPE_MISMATCH'):run(case,req)

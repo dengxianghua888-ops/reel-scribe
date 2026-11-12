@@ -44,6 +44,7 @@ ATOMIC_REQUIREMENTS = {
     'tts-macos': ('say', 'ffmpeg', 'ffprobe'),
     'screen-focus': ('ffmpeg', 'ffprobe'),
     'tutorial-plan-compile': ('ffprobe',),
+    'tutorial-artifact-check': ('ffprobe',),
     'timeline-revise': ('ffprobe',),
     'style-recipe-compile': ('ffprobe',),
     'creation-brief-prepare': ('sqlite',),
@@ -91,6 +92,11 @@ def _selected_requirements(identifier, request):
         branch = request.get('action') if request else None
         if branch in ('init', 'commit', 'set-protection', 'restore', 'prepare-local-undo'):
             required.append('ffprobe')
+            if branch == 'prepare-local-undo':
+                resolution = request.get('binding_resolution')
+                recipe = resolution.get('recipe') if isinstance(resolution, dict) else None
+                if isinstance(recipe, dict) and 'layout_constraints' in recipe:
+                    required += ['ffmpeg', 'Pillow']
         elif branch == 'relink-style-resources':
             required.append('style-resources')
         elif branch != 'read':

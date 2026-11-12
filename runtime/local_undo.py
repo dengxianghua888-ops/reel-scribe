@@ -2,7 +2,7 @@
 import copy
 
 
-def prepare(db, current, request, tools):
+def prepare(db, current, request, tools, *, directory=None):
     from editing_runtime import exact_keys, require, fingerprint
     from work_ops import load, revision_diff
     sequence = request['undo_sequence']
@@ -74,7 +74,13 @@ def prepare(db, current, request, tools):
     changed = fingerprint(candidate) != current['document_sha256']
     # A recipe's parameters/constraints cannot silently remain an endorsement of
     # altered values. Binding changes require a separate explicit operation.
-    require(not changed or not candidate['style_bindings'], 'UNDO_STYLE_BINDING_REQUIRES_EXPLICIT_RESOLUTION')
+    binding_report = None
+    if changed and candidate['style_bindings']:
+        require('binding_resolution' in request, 'UNDO_STYLE_BINDING_REQUIRES_EXPLICIT_RESOLUTION')
+        require('*' in request['scope'].get('style_keys', []), 'UNDO_BINDING_SCOPE_REQUIRED')
+        binding_report = resolve_binding(current['document'], candidate, records, request['binding_resolution'], tools, directory)
+    elif 'binding_resolution' in request:
+        require(not changed, 'UNDO_BINDING_RESOLUTION_WITHOUT_BINDING')
     diff = revision_diff(current['document'], candidate, request['scope'], tools)
     bundle = {'schema': 'work-candidate/1', 'base_version': current['version'],
               'base_document_sha256': current['document_sha256'], 'document': candidate, 'scope': request['scope']}
@@ -83,4 +89,71 @@ def prepare(db, current, request, tools):
               'history': {label: {k: state[k] for k in ['sequence', 'version', 'document_sha256']}
                          for label, state in [('before', before), ('after', after), ('current', current)]},
               'semantic_review': 'NOT_RUN', 'render': 'NOT_RUN'}
+    if binding_report is not None:
+        report['binding_resolution'] = binding_report
     return report, bundle if changed else None
+
+
+def resolve_binding(current, candidate, records, resolution, tools, directory):
+    """Derive a new explicit recipe, never relabel the old recipe as still applied."""
+    from editing_runtime import exact_keys, require, fingerprint, source, number
+    exact_keys(resolution, ['recipe', 'expected_recipe_sha256', 'derived_recipe_id', 'derived_recipe_version'],
+               ['recipe', 'expected_recipe_sha256', 'derived_recipe_id', 'derived_recipe_version'])
+    recipe = resolution['recipe']
+    exact_keys(recipe, ['schema', 'id', 'version', 'style', 'parameters', 'layout_constraints'],
+               ['schema', 'id', 'version', 'style', 'parameters'])
+    require(recipe['schema'] == 'style-recipe/1', 'UNDO_RECIPE_SCHEMA_UNSUPPORTED')
+    require(fingerprint(recipe) == resolution['expected_recipe_sha256'], 'UNDO_RECIPE_HASH_CONFLICT')
+    require(all(isinstance(recipe[k], str) and recipe[k].strip() for k in ['id', 'version']), 'UNDO_RECIPE_ID_REQUIRED')
+    style = recipe['style']
+    exact_keys(style, ['family', 'style_id', 'version', 'card'], ['family', 'style_id', 'version', 'card'])
+    card_identity = source(style['card'])
+    expected = {**copy.deepcopy(style), 'parameters': {
+        'recipe_id': recipe['id'], 'recipe_version': recipe['version'],
+        'recipe_sha256': fingerprint(recipe), 'presentation': copy.deepcopy(recipe['parameters'])}}
+    if 'layout_constraints' in recipe:
+        expected['parameters']['layout_constraints'] = copy.deepcopy(recipe['layout_constraints'])
+    require(fingerprint(current['style_bindings']) == fingerprint({'*': expected}), 'UNDO_BINDING_RECIPE_MISMATCH')
+    parameters = recipe['parameters']
+    exact_keys(parameters, ['caption_style', 'audio_gain_db'])
+    require(bool(parameters), 'UNDO_RECIPE_PARAMETERS_REQUIRED')
+    if 'caption_style' in parameters:
+        values = parameters['caption_style']
+        exact_keys(values, ['font_size', 'margin_v', 'color_rgb'])
+        require(bool(values) and isinstance(current['caption_style'], dict), 'UNDO_RECIPE_PARAMETERS_REQUIRED')
+        require(all(fingerprint(current['caption_style'].get(k)) == fingerprint(v) for k, v in values.items()),
+                'UNDO_BINDING_ALREADY_DIVERGED')
+    if 'audio_gain_db' in parameters:
+        values = parameters['audio_gain_db']
+        require(isinstance(values, dict) and bool(values), 'UNDO_RECIPE_PARAMETERS_REQUIRED')
+        require(all(isinstance(k, str) and k in current['audio_tracks'] and
+                    current['audio_tracks'][k]['gain_db'] == number(v, 'gain_db') for k, v in values.items()), 'UNDO_BINDING_ALREADY_DIVERGED')
+    derived = copy.deepcopy(recipe)
+    for key, target in [('id', 'derived_recipe_id'), ('version', 'derived_recipe_version')]:
+        require(isinstance(resolution[target], str) and resolution[target].strip(), 'UNDO_DERIVED_RECIPE_ID_REQUIRED')
+        derived[key] = resolution[target]
+    require((derived['id'], derived['version']) != (recipe['id'], recipe['version']), 'UNDO_DERIVED_RECIPE_ID_MUST_CHANGE')
+    for record in records:
+        selection = record['selection']
+        group = 'caption_style' if selection['kind'] == 'caption_style' else 'audio_gain_db'
+        key = selection['field'] if group == 'caption_style' else selection['id']
+        require(group in parameters and key in parameters[group], 'UNDO_SELECTED_FIELD_NOT_RECIPE_MAPPED')
+        derived['parameters'][group][key] = copy.deepcopy(record['before'])
+    binding = copy.deepcopy(expected)
+    binding['parameters'].update(recipe_id=derived['id'], recipe_version=derived['version'],
+                                 recipe_sha256=fingerprint(derived), presentation=copy.deepcopy(derived['parameters']))
+    candidate['style_bindings']['*'] = binding
+    layout = {'status': 'NOT_APPLICABLE', 'reason': 'Original recipe has no layout constraints'}
+    if 'layout_constraints' in derived:
+        require(directory is not None, 'UNDO_LAYOUT_OUTPUT_REQUIRED')
+        from caption_layout import check
+        current_layout = check(current, recipe['layout_constraints'], directory/'undo-current-layout', tools)
+        layout = {'current': current_layout,
+                  'candidate': check(candidate, derived['layout_constraints'], directory/'undo-layout', tools)}
+    require(source(style['card']) == card_identity, 'UNDO_RECIPE_CARD_CHANGED_DURING_VALIDATION')
+    return {'policy': 'EXPLICIT_DERIVED_RECIPE', 'original_recipe_sha256': fingerprint(recipe),
+            'derived_recipe_sha256': fingerprint(derived), 'derived_recipe': derived,
+            'derived_from': {'recipe_id': recipe['id'], 'recipe_version': recipe['version'],
+                             'recipe_sha256': fingerprint(recipe)},
+            'original_binding_sha256': fingerprint(expected), 'derived_binding_sha256': fingerprint(binding),
+            'constraints_preserved': True, 'caption_layout': layout, 'style_effect': 'NOT_VERIFIED'}

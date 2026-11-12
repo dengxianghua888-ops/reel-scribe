@@ -1151,6 +1151,9 @@ def execute(request, directory, tools):
     if op in ['work-version','timeline-revise','work-render']:
         from work_ops import execute as work_execute
         return work_execute(request,directory,tools)
+    if op == 'tutorial-artifact-check':
+        from artifact_check_ops import execute as artifact_check_execute
+        return artifact_check_execute(request,directory,tools)
     if op in ['screen-focus','tutorial-plan-compile']:
         from tutorial_ops import execute as tutorial_execute
         return tutorial_execute(request,directory,tools)

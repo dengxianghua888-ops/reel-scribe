@@ -691,6 +691,13 @@
       "entry": "atomic/reference-transfer-prepare/SKILL.md",
       "description": "逐项记录参考观察的采纳、调整或舍弃，准备字幕呈现或明确教程结果先行请求；保留原流程与保护，不认证观察真伪或提交作品。",
       "status": "experimental"
+    },
+    {
+      "id": "tutorial-artifact-check",
+      "layer": "atomic",
+      "entry": "atomic/tutorial-artifact-check/SKILL.md",
+      "description": "核验明确教程产物文件身份及声明的检查窗口关联，区分文件缺失和证据链完整；不认证观察真伪、服务端保存或实际教学效果。",
+      "status": "experimental"
     }
   ]
 }
