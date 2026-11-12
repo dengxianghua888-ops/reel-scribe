@@ -99,13 +99,17 @@ def _build(request):
 def _verify_bindings(report):
     from editing_runtime import source, require
     source(report['card']);source(report['catalog'])
+    if 'refinement' in report:
+        refs=report['refinement']['request']
+        source(refs['recommendation']);source(refs['feedback'])
+        for observation in refs['observations']:source(observation['evidence'])
     state=_state(report['request']['store'])
     require(state['version']==report['base_version'] and state['document_sha256']==report['base_document_sha256'],'WORK_VERSION_CONFLICT')
     if any(x['execution']=='caption-presentation-only' for x in report['options']):
         source(state['document']['caption_style']['font'])
 
 
-def _bound_report(ref):
+def _read_bound_json(ref):
     from editing_runtime import source, require, fingerprint
     identity=source(ref)
     require(identity['bytes']<=1024*1024,'RECOMMENDATION_REPORT_TOO_LARGE')
@@ -117,15 +121,88 @@ def _bound_report(ref):
             require(key not in result,'RECOMMENDATION_REPORT_DUPLICATE_KEY');result[key]=value
         return result
     doc=json.loads(raw.decode('utf-8'),object_pairs_hook=pairs,parse_constant=lambda _:require(False,'RECOMMENDATION_REPORT_NONFINITE'))
+    return doc
+
+
+def _bound_report(ref, allow_refine=True):
+    from editing_runtime import require, fingerprint
+    doc=_read_bound_json(ref)
     require(isinstance(doc,dict) and 'request' in doc,'RECOMMENDATION_REPORT_INVALID')
-    current=_build(doc['request'])
+    require(allow_refine or 'refinement' not in doc,'RECOMMENDATION_REFINE_DEPTH_EXCEEDED')
+    current=_refine(doc['refinement']['request']) if 'refinement' in doc else _build(doc['request'])
     require(fingerprint(doc)==fingerprint(current),'RECOMMENDATION_REPORT_NOT_REPRODUCIBLE')
     return doc
+
+
+def _refine(request):
+    from editing_runtime import exact_keys, require, fingerprint, source
+    fields=['operation','action','recommendation','feedback','observations']
+    exact_keys(request,fields,fields)
+    require(request['operation']=='creation-recommendation' and request['action']=='refine','RECOMMENDATION_ACTION_REQUIRED')
+    base=_bound_report(request['recommendation'],allow_refine=False)
+    feedback=_read_bound_json(request['feedback'])
+    require(isinstance(feedback,dict),'RECOMMENDATION_FEEDBACK_INVALID')
+    ratings=feedback.get('ratings');actor=feedback.get('actor_kind')
+    require(actor in ['agent-observation','user-reported'] and isinstance(ratings,list) and 1<=len(ratings)<=3,'RECOMMENDATION_FEEDBACK_INVALID')
+    expected={'schema':'creation-recommendation-feedback/1','recommendation':request['recommendation'],
+        'base_version':base['base_version'],'base_document_sha256':base['base_document_sha256'],
+        'actor_kind':actor,'ratings':ratings,'identity_verified':False,
+        'scope':'Unverified attributed feedback, not proof a preview was watched, not user authorization or learned preference',
+        'adopted':False,'ranking_updated':False}
+    require(fingerprint(feedback)==fingerprint(expected),'RECOMMENDATION_FEEDBACK_BINDING_MISMATCH')
+    options={x['id']:x for x in base['options']};seen=set();directions=set();anchors=[];unsupported=False
+    observations=request['observations']
+    require(isinstance(observations,list) and len(observations)==len(ratings),'RECOMMENDATION_OBSERVATION_REQUIRED')
+    for rating,observation in zip(ratings,observations):
+        exact_keys(rating,['id','option_sha256','dimension','verdict','reason'],['id','option_sha256','dimension','verdict','reason'])
+        ident=rating['id'];require(isinstance(ident,str) and ident in options and ident not in seen,'RECOMMENDATION_OPTION_UNKNOWN_OR_DUPLICATE');seen.add(ident)
+        option=options[ident]
+        require(rating['option_sha256']==option['option_sha256'],'RECOMMENDATION_RECIPE_BINDING_MISMATCH')
+        require(rating['dimension'] in ['readability','occlusion','style-fit','step-coverage'] and rating['verdict'] in ['prefer','avoid','undecided'] and isinstance(rating['reason'],str) and rating['reason'].strip(),'RECOMMENDATION_FEEDBACK_INVALID')
+        exact_keys(observation,['id','evidence','statement','problem'],['id','evidence','statement','problem'])
+        require(observation['id']==ident and isinstance(observation['statement'],str) and observation['statement'].strip(),'RECOMMENDATION_OBSERVATION_REQUIRED')
+        source(observation['evidence'])
+        problem=observation['problem']
+        require(problem in ['too-small','too-large','occludes-ui','prefer-current','unknown'],'RECOMMENDATION_PROBLEM_INVALID')
+        valid_problem=((problem in ['too-small','too-large'] and rating['dimension']=='readability' and rating['verdict']=='avoid') or (problem=='occludes-ui' and rating['dimension']=='occlusion' and rating['verdict']=='avoid') or (problem=='prefer-current' and rating['verdict']=='prefer' and rating['dimension'] in ['readability','style-fit','occlusion']))
+        if not valid_problem or option['execution']!='caption-presentation-only' or rating['verdict']=='undecided' or rating['dimension']=='step-coverage' or (rating['dimension']=='style-fit' and rating['verdict']=='avoid'):
+            unsupported=True;continue
+        anchors.append(option['recipe']['parameters']['caption_style']['font_size'])
+        if rating['verdict']=='avoid':directions.add(1 if problem=='too-small' else -1)
+        else:directions.add(0)
+    report=copy.deepcopy(base);report['options']=[];report['issues']=[]
+    if unsupported or len(directions)!=1 or len(set(anchors))!=1:
+        report['issues'].append({'code':'FEEDBACK_AMBIGUOUS_OR_UNSUPPORTED','reason':'Mixed directions, different anchors, undecided or unsupported dimensions do not imply a safe optimization.'})
+    else:
+        anchor=anchors[0];direction=next(iter(directions));step=max(1,int(math.floor(anchor*.15+.5)))
+        limits=base['request']['brief']['constraints'];lo=limits['min_font_size'];hi=min(limits['max_font_size'],base['font_proposal_ceiling_pixels'])
+        proposed=[anchor,anchor+step*direction] if direction else [anchor,anchor-step,anchor+step]
+        sizes=sorted(set(n for n in proposed if lo<=n<=hi))
+        if len(sizes)<2:report['issues'].append({'code':'REFINEMENT_BOUND_REACHED','reason':'No distinct bounded comparison remains; constraints are not relaxed.'})
+        else:
+            template=options[ratings[0]['id']]
+            for size in sizes:
+                item=copy.deepcopy(template);item.pop('option_sha256',None)
+                item['id']=f'caption-{size}';item['recipe']['id']=f"{item['recipe']['style']['family']}-caption-{size}"
+                item['recipe']['version']='feedback-hypothesis-1';item['recipe']['parameters']['caption_style']['font_size']=size
+                item['recipe_sha256']=fingerprint(item['recipe']);item['score']=(-abs(size-anchor) if direction==0 else (size-anchor)*direction)
+                item['reason']=f'Explicit attributed feedback proposes direction {direction} from {anchor}px; retain anchor for comparison, not proven improvement.'
+                item['option_sha256']=fingerprint(item);report['options'].append(item)
+            report['options'].sort(key=lambda x:(-x['score'],x['id']))
+    report['status']='SUGGESTIONS_ONLY' if report['options'] else 'NO_EXECUTABLE_RECOMMENDATION'
+    report['ranking_policy']='feedback-hypotheses-v1; attributed observation, not authenticated preference or training'
+    report['refinement']={'request':copy.deepcopy(request),'previous_options':[{'id':x['id'],'option_sha256':x['option_sha256']} for x in base['options']],
+        'identity_verified':False,'evidence_meaning':'File identity and attributed statement only; not proof of viewing, correctness, authorization or aesthetic quality',
+        'automatic_adoption':False,'training_performed':False,'round_limit':1}
+    _verify_bindings(report)
+    return report
 
 
 def execute(request,directory,tools):
     from editing_runtime import exact_keys, require, fingerprint, write_json, source
     action=request.get('action')
+    if action=='refine':
+        report=_refine(request);_verify_bindings(report);write_json(directory/'recommendation.json',report);return report
     if action=='recommend':
         report=_build(request);_verify_bindings(report);write_json(directory/'recommendation.json',report);return report
     require(request.get('operation')=='creation-recommendation','RECOMMENDATION_OPERATION_REQUIRED')

@@ -41,3 +41,43 @@ dimension=readability/occlusion/style-fit/step-coverage；verdict=prefer/avoid/u
 ## 证据范围
 
 规则/竞态/来源/假反馈负例可由确定性测试验证；真实下游预览另按现有操作验收。技术成功不能扩展为完整看听、叙事风格、用户偏好或全库风格认证。
+
+## One explicit feedback refinement round
+
+`action: refine` accepts exactly `operation`, `action`, `recommendation` (original
+report path/SHA), `feedback` (feedback.json path/SHA), and `observations`. Each
+observation corresponds in order to one feedback rating and has `id`, `evidence`
+(path/SHA), nonempty `statement`, and `problem`. Allowed problems are `too-small`,
+`too-large`, `occludes-ui`, `prefer-current`, and `unknown`.
+
+This is attributed, explicit problem correction, not authenticated user preference,
+training or autonomous aesthetic learning. A hash proves file identity, not that
+someone watched a preview or that the evidence supports the statement. Arbitrary
+observation evidence is not treated as a renderer receipt or as verified viewing.
+Feedback must reproduce the original feedback schema and bind the exact original
+recommendation, Work document/head and option hashes. Unauthenticated but
+self-consistent supplied feedback cannot establish user identity or authorization.
+
+Only existing caption-presentation options are refinable. `readability/avoid`
+requires `too-small` (grow) or `too-large` (shrink); `occlusion/avoid` requires
+`occludes-ui` (shrink). `prefer` with `prefer-current` anchors comparisons around
+the selected size for readability, occlusion or style-fit. Vague avoid, unknown,
+undecided, unsupported dimensions, conflicting directions or different anchors
+produce no new options. No automatic cause is inferred from a dislike.
+
+Step size is rounded 15% of the anchor (minimum 1px). Directional correction keeps
+the original anchor and proposes one step; preservation compares the anchor with
+one step either way. Candidates stay within the original font bounds and canvas
+ceiling. If fewer than two distinct bounded options remain, refinement reports
+`REFINEMENT_BOUND_REACHED`; it never loosens constraints. Layout remains UNKNOWN,
+render NOT_RUN, and effect validation NOT_PERFORMED. In particular shrinking text
+is not proof that UI occlusion is fixed.
+
+The output `recommendation.json` retains original context and records the original
+option identities, all input references, observations and explicit change reasons
+under `refinement`. Existing `select` can prepare the same scoped preview request
+from it. Consumption recomputes the refined report, checking original inputs and
+current Work again. No Work, original recommendation, feedback or content is
+modified. One refinement round is supported; refining an already refined report
+is rejected explicitly. Evidence and original report/feedback are rechecked before
+publication, including when consuming the refined recommendation.

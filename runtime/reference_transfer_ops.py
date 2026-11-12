@@ -4,6 +4,43 @@ import tempfile
 from pathlib import Path
 
 
+def result_first_draft(request, item, state, refs, tools):
+    """Preflight only. Full proof/scope validation remains the existing compiler's job."""
+    from editing_runtime import exact_keys, require, source, span
+    require(request['scene']=='software' and item['decision']=='adapt','REFERENCE_RESULT_FIRST_ADAPT_SOFTWARE_ONLY')
+    obs=item['observation'];sequence=obs.get('sequence')
+    require(isinstance(sequence,list) and 2<=len(sequence)<=8,'REFERENCE_ORDER_OBSERVATIONS_REQUIRED')
+    require(isinstance(obs.get('unknowns'),list) and all(isinstance(x,str) and x.strip() for x in obs['unknowns']),
+            'REFERENCE_UNKNOWNS_REQUIRED')
+    last=obs['start'];roles=[]
+    for event in sequence:
+        fields=['role','start','end','evidence','description']
+        exact_keys(event,fields,fields)
+        require(event['role'] in ['result-preview','process'],'REFERENCE_ORDER_ROLE_INVALID')
+        a,b=span(event['start'],event['end'],obs['end'])
+        require(a>=last,'REFERENCE_ORDER_INTERVALS_INVALID');last=b;roles.append(event['role'])
+        require(isinstance(event['description'],str) and event['description'].strip(),'REFERENCE_ORDER_DESCRIPTION_REQUIRED')
+        source(event['evidence']);refs.append(event['evidence'])
+    require(roles[0]=='result-preview' and all(x=='process' for x in roles[1:]),'REFERENCE_RESULT_BEFORE_PROCESS_REQUIRED')
+    params=item['parameters'];fields=['mechanism_card','tutorial','preview','shift_clip_ids','scope']
+    exact_keys(params,fields,fields)
+    draft={'operation':'result-preview-compile','store':request['store'],'expected_version':state['version'],**copy.deepcopy(params)}
+    # The authoritative compiler validates target source, original clips, labels,
+    # scope and protection. Temporary candidate/proof files are not published.
+    import result_preview_ops
+    with tempfile.TemporaryDirectory(prefix='reference-result-first-') as tmp:
+        validation=result_preview_ops.execute(draft,Path(tmp),tools)
+    refs.append(params['mechanism_card'])
+    for step in params['tutorial']['steps']:
+        for role in ['before','action','result']:refs.append(step[role]['evidence'])
+    doc=state['document'];refs.extend(doc['plan']['sources'].values())
+    if doc['caption_style']:refs.append(doc['caption_style']['font'])
+    if 'evidence_protection' in doc:
+        for unit in doc['evidence_protection']['units']:refs.extend([unit['source'],unit['evidence']])
+    return draft,validation
+
+
+
 def execute(request, directory, tools):
     from editing_runtime import exact_keys, require, source, span, fingerprint, write_json
     from work_ops import connect, load
@@ -35,7 +72,7 @@ def execute(request, directory, tools):
             require(item['decision']=='omit','REFERENCE_UNOBSERVED_TRANSFER_FORBIDDEN')
         else:
             keys=['status','start','end','method','evidence','description']
-            exact_keys(obs,keys,keys)
+            exact_keys(obs,keys+(['sequence','unknowns'] if item['axis']=='narrative' and item['mechanism']=='result-first' else []),keys)
             require(obs['status']=='observed' and obs['method'] in ['visual-review','audiovisual-review'],
                     'REFERENCE_OBSERVATION_METHOD_REQUIRED')
             span(obs['start'],obs['end'],media['duration'])
@@ -45,12 +82,14 @@ def execute(request, directory, tools):
         if item['decision']=='omit':
             require(item['parameters']=={},'REFERENCE_OMITTED_PARAMETERS_FORBIDDEN')
         else:
-            require(item['axis']=='audiovisual' and item['mechanism']=='caption-presentation',
+            require((item['axis']=='audiovisual' and item['mechanism']=='caption-presentation') or (item['axis']=='narrative' and item['mechanism']=='result-first'),
                     'REFERENCE_TRANSFER_MECHANISM_UNSUPPORTED')
             selected.append(item)
     require(len(selected)<=1,'REFERENCE_MULTIPLE_TRANSFERS_UNSUPPORTED')
-    draft=None
-    if selected:
+    draft=None; narrative_validation=None
+    if selected and selected[0]['mechanism']=='result-first':
+        draft,narrative_validation=result_first_draft(request,selected[0],state,refs,tools)
+    elif selected:
         item=selected[0]
         # Reuse the existing caption-only preparation boundary, not the renderer.
         params=item['parameters']
@@ -72,11 +111,13 @@ def execute(request, directory, tools):
     report={'schema':'reference-transfer/1','scene':request['scene'],'reference':ref,'items':copy.deepcopy(items),
             'base_version':state['version'],'base_document_sha256':state['document_sha256'],
             'request_sha256':fingerprint(request),'status':'READY_FOR_DOWNSTREAM_VALIDATION' if draft else 'NO_TRANSFER_SELECTED',
-            'draft_request':draft,'executed':False,'committed':False,'downstream_validation':'NOT_RUN',
+            'draft_request':draft,'executed':narrative_validation is not None,'execution_kind':'TEMPORARY_COMPILER_VALIDATION_ONLY' if narrative_validation is not None else 'PREPARATION_ONLY',
+            'rendered':False,'applied_to_work':False,'committed':False,'downstream_validation':'COMPILER_VALIDATED_RECHECK_BEFORE_USE' if narrative_validation is not None else 'NOT_RUN',
+            'temporary_compiler_result':narrative_validation,
             'observation_truth':'Caller-declared intervals and artifact identity only; content, watching and listening not certified',
-            'style_validation':'NOT_PERFORMED','narrative_transfer':'NOT_SUPPORTED',
+            'style_validation':'NOT_PERFORMED','narrative_transfer':'EXPLICIT_RESULT_FIRST_DRAFT_ONLY' if draft and draft['operation']=='result-preview-compile' else 'NOT_SUPPORTED',
             'reference_media_in_output':False,'execution_guard':{'store':request['store'],'expected_version':state['version'],
-            'require_fresh_identity_and_work_check':True,'note':'Prepared request is only caption presentation. Selection is not user authorization, aesthetic acceptance or whole-style transfer.'}}
+            'require_fresh_identity_and_work_check':True,'note':'Prepared request is one explicit supported mechanism; downstream compiler and scope checks remain required. Reference order observations never prove target causality. Selection is not user authorization, aesthetic acceptance or whole-style transfer.'}}
     if draft is not None:
         report['prepared_request_sha256']=fingerprint(draft)
         write_json(directory/'prepared-request.json',draft)

@@ -1,6 +1,6 @@
 # Reference transfer preparation / 1
 
-`reference-transfer-prepare` only prepares a caption-presentation request for current Work. It neither observes a reference automatically nor applies, renders or commits an edit. The reference is not inserted in output.
+`reference-transfer-prepare` prepares one supported presentation or result-first request for current Work. It does not observe a reference automatically, render or commit an edit. Caption preparation does not compile; the result-first bridge runs the existing compiler in a disposable directory, explicitly reporting that validation execution. The reference is not inserted in output.
 
 ## Request
 
@@ -11,9 +11,9 @@ Each item explicitly supplies `id`, `axis` (`narrative` or `audiovisual`), `mech
 - Observed: `{status: "observed", start, end, method, evidence, description}`. Intervals must lie within the probed reference. Method is visual-review or audiovisual-review. Evidence is a local path + SHA. **This checks identity and declared range only, never certifies observation content or actual watching/listening.** The caller must truthfully record what was inspected. A screenshot or text file hash is not a truth certificate.
 - Unobserved: `{status: "unobserved"}`; decision must be omit. Audio mechanisms cannot be adopted through a visual declaration.
 - Omitted items require empty parameters, retain their reason and do not create downstream actions.
-- At most one selected item is supported: axis audiovisual, mechanism caption-presentation. Both adopt and adapt require explicit target values; adopt does not copy or measure reference pixels. Narrative mechanisms, music, transitions and result-preview adoption are unsupported, not silently transformed into captions.
+- At most one selected item is supported. Caption path: axis audiovisual, mechanism caption-presentation. Both adopt and adapt require explicit target values; adopt does not copy or measure reference pixels. Other mechanisms are not silently transformed into captions. The separately bounded narrative result-first adaptation is specified below.
 
-Selected parameters contain only `variants`, using the existing creation-brief caption-presentation contract: 2–4 recipes with canonical SHA, explicit font size/margin/color, fixed current captions and freeze scopes. This reuses its validator and produces `style-recipe-preview`. No media processing is performed by preparation other than probing the reference.
+Selected parameters contain only `variants`, using the existing creation-brief caption-presentation contract: 2–4 recipes with canonical SHA, explicit font size/margin/color, fixed current captions and freeze scopes. This reuses its validator and produces `style-recipe-preview`. Caption preparation only probes the reference; result-first additionally performs existing target compiler validation, but neither path renders.
 
 ## Binding and outputs
 
@@ -23,4 +23,19 @@ Reference/evidence/card identities are checked again before publication, as is c
 
 ## Explicitly unfinished
 
-No automatic scene/style recommendation, reference aesthetic scoring, whole-style certification, acoustic observation, causal inference or narrative/result-preview bridge. No reference media copying or license grant; source/use permission remains the caller's responsibility. A real reference observation, target render, layout check and actual viewing/listening remain distinct acceptance steps. This slice tests engineering preparation only.
+No automatic scene/style recommendation, reference aesthetic scoring, whole-style certification, acoustic observation, causal inference or general narrative transfer. No reference media copying or license grant; source/use permission remains the caller's responsibility. A real reference observation, target render, layout check and actual viewing/listening remain distinct acceptance steps. Engineering validation is distinct from target viewing/listening acceptance.
+
+## Result-first adaptation bridge
+
+Select exactly one `axis: narrative`, `mechanism: result-first`, `decision: adapt` item, with target `scene: software`. `adopt` is deliberately unsupported: reference order cannot automatically certify target meaning. Do not combine a caption transfer in the same request. Other items may be explicitly omitted.
+
+In addition to the normal observed fields, observation requires:
+
+- `sequence`: 2–8 declared observed intervals, each `{role,start,end,evidence,description}`. First role is `result-preview`, all following roles `process`; intervals are positive, chronological, non-overlapping and contained in the outer observation span. Each evidence identity is rechecked. One timestamp, one frame or one interval does not supply narrative ordering evidence.
+- `unknowns`: explicit list of remaining unknowns. Empty means no unknowns were supplied, not that everything was verified. Visual review never certifies listening; runtime still marks observation truth as caller declaration only.
+
+Parameters are exactly the existing result-preview-compile fields `mechanism_card,tutorial,preview,shift_clip_ids,scope`. They refer to the **target Work**, never the reference media. The authoritative compiler runs in a temporary directory: target before/action/result windows, all-original-clips preservation, fixed visible preview/return labels, source/frame constraints, current Work identity, and persistent protection scope and maps all retain their original validation. Independent audio/visual layers and unsupported retiming remain rejected. Never remove protections to enable transfer. Temporary candidates/proofs are discarded; only a ready request and validation summary are published.
+
+Report `executed=true` means `execution_kind=TEMPORARY_COMPILER_VALIDATION_ONLY`, not rendering or adoption. `rendered=false`, `applied_to_work=false`, `committed=false`. `downstream_validation=COMPILER_VALIDATED_RECHECK_BEFORE_USE` requires compiling again against the current target when actually using the prepared request. Caption-path execution semantics are unchanged. The nested compiler still correctly states `reference_video_adaptation=NOT_PERFORMED`: it knows only the target mechanism, not the outer caller observation. Neither statement grants aesthetic/causal/whole-style acceptance.
+
+Final reference, per-event observation evidence, target source/tutorial evidence/card/font/protection identities and Work head are rechecked before publication. Reference bytes are not copied into target. Any later change requires fresh validation.

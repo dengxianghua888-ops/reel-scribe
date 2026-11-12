@@ -3,8 +3,13 @@
 This internal optimization does not introduce a global cache or grant QA approval.
 It is available only inside a locked `work-batch-render` run, from an already
 successful native (not itself reused) donor job in that batch and Work version.
-Only documents identical except `caption_style` and `style_bindings` qualify;
-existing captions must be nonempty and independent audio/visual layers absent.
+Only documents identical except `caption_style`, `style_bindings`, existing audio
+track `gain_db`, and existing visual layer `rect`/`opacity`/`z` qualify. Layer IDs,
+parameter types, sources, source windows, anchors, offsets and durations must
+remain identical. No layer insertion/removal or source/timing change is eligible;
+unknown field differences fail closed. Captions need not be present. Each
+recipient independently reruns its audio mix, visual composition and captions
+when present; none of those downstream artifacts are reused.
 The complete plan, explicit audio backend and source-consumption request, runtime
 files, tools, source contents, candidate identity and current head remain bound.
 

@@ -19,12 +19,26 @@ def provider(callback):
 
 
 def compatible(left, right):
-    if not left.get('captions') or not right.get('captions'):
-        return False
-    if any(d.get(k) for d in (left, right) for k in ('audio_tracks', 'visual_layers')):
-        return False
+    """Only post-timeline presentation parameters may differ; never layer identity."""
+    allowed = {'audio_tracks': {'gain_db'}, 'visual_layers': {'rect', 'opacity', 'z'}}
+    def same_type(a, b):
+        return type(a) is type(b) and (not isinstance(a, list) or
+            len(a) == len(b) and all(same_type(x, y) for x, y in zip(a, b)))
+    for field, mutable in allowed.items():
+        before, after = left.get(field, {}), right.get(field, {})
+        if not isinstance(before, dict) or not isinstance(after, dict) or before.keys() != after.keys():
+            return False
+        for key, value in before.items():
+            other = after[key]
+            if not isinstance(value, dict) or not isinstance(other, dict) or value.keys() != other.keys():
+                return False
+            if any(value[k] != other[k] for k in value if k not in mutable):
+                return False
+            if any(not same_type(value[k], other[k]) for k in mutable if k in value):
+                return False
+    excluded = {'caption_style', 'style_bindings', *allowed}
     def core(d):
-        return {k: v for k, v in d.items() if k not in ('caption_style', 'style_bindings')}
+        return {k: v for k, v in d.items() if k not in excluded}
     return core(left) == core(right)
 
 

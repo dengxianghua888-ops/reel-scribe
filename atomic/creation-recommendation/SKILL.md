@@ -10,3 +10,12 @@ description: 根据显式场景、目标、字号约束和当前Work确定性排
 recommend给适用理由、限制、真实卡片身份和可执行范围；字幕建议仅字体尺寸比较，不是多种叙事风格。learn-steps有明确步骤且支持教程编译器时可准备校验；缺词对齐/决定的speech-tighten列具体下一步，narrative-impact不生成剪辑请求。
 
 select必须明确选择候选，输出标准style-recipe-preview或tutorial-plan-compile请求，仍需下游校验。feedback按具体readability/occlusion/style-fit/step-coverage维度记录，绑定推荐及Work/选项身份，不认证用户身份、不自动学习、应用或授权。
+
+### Explicit feedback correction
+
+Use `refine` only after collecting an explicit problem and referenced observation
+for each rating. Never infer “too small” from “hard to read”: ask the upstream
+editor to distinguish size, wrapping and occlusion. Bind original recommendation,
+feedback and observation file SHA identities. Output is another bounded hypothesis
+set, selectable for preview, not an applied improvement. One round only; unknown
+or conflicting observations yield no candidate. See the contract for exact fields.

@@ -130,3 +130,90 @@ def test_report_unknown_added_field_rejected(case):
     dest=out.parent/'forged';dest.mkdir()
     with pytest.raises(rt.ContractError,match='NOT_REPRODUCIBLE'):
         mod.execute({'operation':'creation-recommendation','action':'select','recommendation':ref,'selections':selected(r)},dest,tools)
+
+
+def refinement(case,problem='too-small',dimension='readability',verdict='avoid'):
+    _,out,tools,_=case;r,ref=recommend(case)
+    item=r['options'][1]
+    rating={'id':item['id'],'option_sha256':item['option_sha256'],'dimension':dimension,'verdict':verdict,'reason':'Explicit finite observation'}
+    folder=out.parent/'feedback';folder.mkdir()
+    mod.execute({'operation':'creation-recommendation','action':'feedback','recommendation':ref,'actor_kind':'agent-observation','ratings':[rating]},folder,tools)
+    evidence=out.parent/'frame.txt';evidence.write_text('test evidence, not real rendered image')
+    q={'operation':'creation-recommendation','action':'refine','recommendation':ref,'feedback':{'path':str(folder/'feedback.json'),'sha256':rt.sha256(folder/'feedback.json')},
+       'observations':[{'id':item['id'],'evidence':{'path':str(evidence),'sha256':rt.sha256(evidence)},'statement':'Explicit attributed observation only','problem':problem}]}
+    dest=out.parent/'refine';dest.mkdir()
+    return q,dest,tools
+
+@pytest.mark.parametrize('problem,dimension,verdict,sizes',[
+ ('too-small','readability','avoid',[33,29]),
+ ('too-large','readability','avoid',[25,29]),
+ ('occludes-ui','occlusion','avoid',[25,29]),
+ ('prefer-current','style-fit','prefer',[29,25,33]),
+])
+def test_refine_explicit_problem_and_select(case,problem,dimension,verdict,sizes):
+    q,out,tools=refinement(case,problem,dimension,verdict);r=mod.execute(q,out,tools)
+    assert [x['recipe']['parameters']['caption_style']['font_size'] for x in r['options']]==sizes
+    dest=out.parent/'refine-select';dest.mkdir()
+    result=mod.execute({'operation':'creation-recommendation','action':'select','recommendation':{'path':str(out/'recommendation.json'),'sha256':rt.sha256(out/'recommendation.json')},'selections':selected(r)},dest,tools)
+    assert result['prepared_request']['operation']=='style-recipe-preview'
+    assert not result['committed'] and not r['refinement']['identity_verified']
+    assert all(x['scope']['freeze_duration'] for x in result['prepared_request']['variants'])
+
+@pytest.mark.parametrize('problem,dimension,verdict',[
+ ('unknown','readability','avoid'),('too-small','occlusion','avoid'),('prefer-current','style-fit','undecided')])
+def test_refine_ambiguous_no_options(case,problem,dimension,verdict):
+    q,out,tools=refinement(case,problem,dimension,verdict);r=mod.execute(q,out,tools)
+    assert not r['options'] and r['issues'][0]['code']=='FEEDBACK_AMBIGUOUS_OR_UNSUPPORTED'
+
+@pytest.mark.parametrize('target',['feedback','evidence'])
+def test_refine_changed_input_bytes_rejected(case,target):
+    q,out,tools=refinement(case)
+    ref=q['feedback'] if target=='feedback' else q['observations'][0]['evidence']
+    Path(ref['path']).write_text('{}')
+    with pytest.raises(rt.ContractError):mod.execute(q,out,tools)
+    assert not (out/'recommendation.json').exists()
+
+def test_refine_feedback_wrong_option_even_rehashed(case):
+    q,out,tools=refinement(case);path=Path(q['feedback']['path']);doc=json.loads(path.read_text());doc['ratings'][0]['option_sha256']='0'*64
+    path.write_text(json.dumps(doc));q['feedback']['sha256']=rt.sha256(path)
+    with pytest.raises(rt.ContractError,match='RECIPE_BINDING'):mod.execute(q,out,tools)
+
+def test_refine_stale_and_no_writes(case,monkeypatch):
+    q,out,tools=refinement(case);original=mod._state
+    def stale(store):
+        result=original(store);result['version']='stale';return result
+    monkeypatch.setattr(mod,'_state',stale)
+    with pytest.raises(rt.ContractError,match='WORK_VERSION_CONFLICT'):mod.execute(q,out,tools)
+    assert not (out/'recommendation.json').exists()
+
+def test_refine_bound_never_relaxed(case):
+    case[0]['brief']['constraints']['max_font_size']=29
+    q,out,tools=refinement(case)
+    # Select largest constrained anchor and request growth.
+    report=json.loads(Path(q['recommendation']['path']).read_text());item=report['options'][0]
+    path=Path(q['feedback']['path']);feedback=json.loads(path.read_text());feedback['ratings'][0].update(id=item['id'],option_sha256=item['option_sha256'])
+    path.write_text(json.dumps(feedback));q['feedback']['sha256']=rt.sha256(path);q['observations'][0]['id']=item['id']
+    result=mod.execute(q,out,tools)
+    assert not result['options'] and result['issues'][0]['code']=='REFINEMENT_BOUND_REACHED'
+
+def test_refine_second_round_rejected(case):
+    q,out,tools=refinement(case);r=mod.execute(q,out,tools)
+    q['recommendation']={'path':str(out/'recommendation.json'),'sha256':rt.sha256(out/'recommendation.json')}
+    dest=out.parent/'round2';dest.mkdir()
+    with pytest.raises(rt.ContractError,match='DEPTH_EXCEEDED'):mod.execute(q,dest,tools)
+
+def test_refine_conflicting_direction_no_options(case):
+    q,out,tools=refinement(case)
+    report=json.loads(Path(q['recommendation']['path']).read_text());item=report['options'][0]
+    path=Path(q['feedback']['path']);feedback=json.loads(path.read_text());feedback['ratings'].append({'id':item['id'],'option_sha256':item['option_sha256'],'dimension':'occlusion','verdict':'avoid','reason':'Different direction'})
+    path.write_text(json.dumps(feedback));q['feedback']['sha256']=rt.sha256(path)
+    observation=copy.deepcopy(q['observations'][0]);observation.update(id=item['id'],problem='occludes-ui');q['observations'].append(observation)
+    assert not mod.execute(q,out,tools)['options']
+
+def test_refine_final_evidence_recheck(case,monkeypatch):
+    q,out,tools=refinement(case);original=mod._refine
+    def mutate(request):
+        result=original(request);Path(q['observations'][0]['evidence']['path']).write_text('changed after calculation');return result
+    monkeypatch.setattr(mod,'_refine',mutate)
+    with pytest.raises(rt.ContractError):mod.execute(q,out,tools)
+    assert not (out/'recommendation.json').exists()

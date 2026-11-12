@@ -108,3 +108,86 @@ def test_changed_card_does_not_publish(reference,monkeypatch):
  recipe['expected_recipe_sha256']=rt.fingerprint(recipe['recipe'])
  with pytest.raises(rt.ContractError,match='SOURCE_HASH_MISMATCH'):mod.execute(q,out,tools)
  assert not (out/'prepared-request.json').exists() and not (out/'reference-transfer.json').exists()
+
+@pytest.fixture
+def narrative(work_case):
+ q,out,tools,doc=work_case
+ ref=copy.deepcopy(doc['plan']['sources']['s'])
+ event=lambda role,a,b:{'role':role,'start':a,'end':b,'evidence':ref,'description':'Synthetic declared sequence, not real observation'}
+ item={'id':'order','axis':'narrative','mechanism':'result-first','decision':'adapt','reason':'Explicit target preview, not target causality',
+ 'observation':{'status':'observed','start':0,'end':1,'method':'visual-review','evidence':ref,'description':'Synthetic two-window declaration',
+ 'sequence':[event('result-preview',0,.2),event('process',.3,.8)],'unknowns':['No listening or semantic certification']},
+ 'parameters':{k:copy.deepcopy(q[k]) for k in ['mechanism_card','tutorial','preview','shift_clip_ids','scope']}}
+ return {'operation':'reference-transfer-prepare','scene':'software','store':q['store'],'expected_version':q['expected_version'],'reference':ref,'items':[item]},out,tools,doc
+
+
+def test_result_first_uses_existing_compiler_without_publishing_candidate(narrative):
+ q,out,tools,doc=narrative;r=mod.execute(q,out,tools)
+ assert r['draft_request']['operation']=='result-preview-compile'
+ assert r['executed'] and r['execution_kind']=='TEMPORARY_COMPILER_VALIDATION_ONLY'
+ assert not r['rendered'] and not r['applied_to_work']
+ assert r['temporary_compiler_result']['preserved_clip_ids']==['full']
+ assert not (out/'candidate.json').exists()
+ with work_ops.connect(q['store']) as db:state=work_ops.load(db)
+ assert state['document']==doc and state['version']==q['expected_version']
+
+@pytest.mark.parametrize('mutate,error',[
+ (lambda q:q.update(scene='film'),'ADAPT_SOFTWARE_ONLY'),
+ (lambda q:q['items'][0].update(decision='adopt'),'ADAPT_SOFTWARE_ONLY'),
+ (lambda q:q['items'][0]['observation'].pop('sequence'),'ORDER_OBSERVATIONS_REQUIRED'),
+ (lambda q:q['items'][0]['observation']['sequence'].pop(),'ORDER_OBSERVATIONS_REQUIRED'),
+ (lambda q:q['items'][0]['observation']['sequence'][0].update(end=0),'SOURCE_RANGE_INVALID'),
+ (lambda q:q['items'][0]['observation']['sequence'][1].update(start=.1),'ORDER_INTERVALS_INVALID'),
+ (lambda q:q['items'][0]['observation']['sequence'][0].update(role='process'),'RESULT_BEFORE_PROCESS_REQUIRED'),
+ (lambda q:q['items'][0]['observation'].pop('unknowns'),'UNKNOWNS_REQUIRED'),
+ (lambda q:q['items'][0]['parameters']['preview'].update(label='操作成功'),'VISIBLE_LABEL_REQUIRED'),
+ (lambda q:q['items'][0]['parameters']['preview'].update(start=.4),'OUTSIDE_RESULT'),
+ (lambda q:q['items'][0]['parameters'].update(shift_clip_ids=[]),'EXPLICIT_SHIFT_REQUIRED'),
+ (lambda q:q['items'][0]['parameters']['scope'].update(freeze_duration=True),'WORK_DURATION_FROZEN'),
+])
+def test_result_first_rejects_invalid_sequence_or_target(narrative,mutate,error):
+ q,out,tools,_=narrative;mutate(q)
+ with pytest.raises(rt.ContractError,match=error):mod.execute(q,out,tools)
+ assert not (out/'prepared-request.json').exists() and not (out/'candidate.json').exists()
+
+
+def test_result_first_preserves_persistent_protection(narrative,work_case):
+ from test_result_preview import protected_case
+ doc=protected_case(work_case)
+ q,out,tools,_=narrative;q['expected_version']=work_case[0]['expected_version'];q['store']=work_case[0]['store']
+ q['items'][0]['parameters']['scope']['evidence_mapping']=True
+ r=mod.execute(q,out,tools)
+ assert r['temporary_compiler_result']['protection_shift']['original_carriers_preserved']
+ with work_ops.connect(q['store']) as db:assert work_ops.load(db)['document']==doc
+
+
+def test_result_first_cannot_disable_protection(narrative,work_case):
+ from test_result_preview import protected_case
+ protected_case(work_case)
+ q,out,tools,_=narrative;q['expected_version']=work_case[0]['expected_version'];q['store']=work_case[0]['store']
+ with pytest.raises(rt.ContractError,match='PROTECTION_SHIFT_SCOPE_REQUIRED'):mod.execute(q,out,tools)
+ assert not (out/'prepared-request.json').exists()
+
+
+def test_result_first_reference_change_after_compile_no_publication(narrative,monkeypatch):
+ import result_preview_ops
+ q,out,tools,_=narrative;original=result_preview_ops.execute
+ def changed(*a,**k):
+  result=original(*a,**k);Path(q['reference']['path']).write_bytes(b'changed');return result
+ monkeypatch.setattr(result_preview_ops,'execute',changed)
+ with pytest.raises(rt.ContractError,match='SOURCE_HASH_MISMATCH'):mod.execute(q,out,tools)
+ assert list(out.iterdir())==[]
+
+
+def test_result_first_final_head_change_no_publication(narrative,monkeypatch):
+ import result_preview_ops
+ q,out,tools,_=narrative;original=result_preview_ops.execute;load=work_ops.load;armed=[]
+ def compiled(*a,**k):
+  result=original(*a,**k);armed.append(True);return result
+ def stale(db):
+  state=load(db)
+  if armed:state['version']='0'*64
+  return state
+ monkeypatch.setattr(result_preview_ops,'execute',compiled);monkeypatch.setattr(work_ops,'load',stale)
+ with pytest.raises(rt.ContractError,match='WORK_VERSION_CONFLICT'):mod.execute(q,out,tools)
+ assert list(out.iterdir())==[]
