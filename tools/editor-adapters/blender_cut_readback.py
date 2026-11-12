@@ -121,7 +121,7 @@ def project(root, observed, media_probe=imp.probe, *, extension_scope=None):
     raw=(root/'timeline.otio').read_bytes()
     require(hashlib.sha256(raw).hexdigest()==seal['files']['timeline.otio']['sha256'],'PACKAGE_CHANGED_DURING_READBACK')
     timeline=json.loads(raw,object_pairs_hook=imp.unique)
-    clips={c['name']:c for t in timeline['tracks']['children'] for c in t['children']}
+    clips={c['name']:c for t in timeline['tracks']['children'] for c in t['children'] if c['OTIO_SCHEMA']=='Clip.1'}
     resources=imp.read(root/'media-manifest.json')['resources']
     probes={}
 
@@ -130,6 +130,9 @@ def project(root, observed, media_probe=imp.probe, *, extension_scope=None):
         old=expected[row['id']]
         require(all(row[k]==old[k] for k in ('kind','path','channel')), 'HOST_RESOURCE_OR_TRACK_CHANGED')
         require(all(type(row[k]) is int for k in ('target','offset','length')) and row['target']>=1 and row['offset']>=0 and row['length']>0,'HOST_INVALID_WINDOW')
+        resource_id=clips[row['id']]['media_reference']['metadata']['recap']['resource_id']
+        if resources[resource_id].get('kind')=='narration':
+            require(row['offset']==old['offset'] and row['length']==old['length'], 'HOST_NARRATION_EDIT_UNSUPPORTED')
         inside=old['offset']<=row['offset'] and row['offset']+row['length']<=old['offset']+old['length']
         if not inside:
             require(row['id'] in declarations,'HOST_WINDOW_EXTENSION_UNSUPPORTED')
@@ -153,17 +156,47 @@ def project(root, observed, media_probe=imp.probe, *, extension_scope=None):
     paired=set()
     end=1
     for track in timeline['tracks']['children']:
-        cursor=1
+        cursor=1; children=[]; gap=None
         for clip in track['children']:
+            if clip['OTIO_SCHEMA']=='Gap.1':
+                require(track['kind']=='Audio' and gap is None, 'HOST_GAP_UNSUPPORTED')
+                gap=clip
+                continue
             require(clip['OTIO_SCHEMA']=='Clip.1','HOST_GAP_UNSUPPORTED')
             row=actual[clip['name']]
-            require(row['target']==cursor,'HOST_GAP_OVERLAP_OR_REORDER_UNSUPPORTED')
             meta=clip['metadata']['recap']
             if track['kind']=='Audio':
-                require(meta.get('linked_video_instance') in actual,'HOST_AUDIO_PAIR_REQUIRED')
-                picture=actual[meta['linked_video_instance']]
-                paired.update([row['id'],picture['id']])
-                require(picture['kind']=='Video' and all(row[k]==picture[k] for k in ('path','target','offset','length')), 'HOST_AUDIO_VIDEO_DESYNC')
+                rid=clip['media_reference']['metadata']['recap']['resource_id']
+                if resources[rid].get('kind')=='narration':
+                    # Permit only ripple movement with this segment's unchanged
+                    # picture. No trim, independent move, replacement or retime.
+                    sid=meta.get('segment_id')
+                    require(isinstance(sid,str) and bool(sid), 'HOST_NARRATION_SEGMENT_REQUIRED')
+                    pictures=[actual[iid] for iid,c in clips.items() if actual[iid]['kind']=='Video'
+                              and c['metadata']['recap'].get('segment_id')==sid]
+                    require(bool(pictures), 'HOST_NARRATION_PICTURE_REQUIRED')
+                    position=row['target']
+                    for picture in pictures:
+                        prior=expected[picture['id']]
+                        require(picture['offset']==prior['offset'] and picture['length']==prior['length']
+                                and picture['target']==position, 'HOST_NARRATION_PICTURE_CHANGED')
+                        position+=picture['length']
+                    require(position==row['target']+row['length'], 'HOST_NARRATION_PICTURE_DURATION')
+                else:
+                    require(meta.get('linked_video_instance') in actual,'HOST_AUDIO_PAIR_REQUIRED')
+                    picture=actual[meta['linked_video_instance']]
+                    paired.update([row['id'],picture['id']])
+                    require(picture['kind']=='Video' and all(row[k]==picture[k] for k in ('path','target','offset','length')), 'HOST_AUDIO_VIDEO_DESYNC')
+            # Existing explicit audio gaps may change only to the already
+            # validated picture-derived target. Never invent or remove gaps.
+            if gap is not None:
+                require(row['target']>cursor, 'HOST_GAP_COLLAPSED_OR_OVERLAPPED')
+                rate=imp.number(gap['source_range']['duration']['rate'])
+                units=Fraction(row['target']-cursor,base['fps'])*rate
+                require(units.denominator==1,'HOST_AUDIO_SUBSAMPLE_UNSUPPORTED')
+                gap['source_range']['duration']['value']=int(units)
+                children.append(gap);gap=None;cursor=row['target']
+            require(row['target']==cursor,'HOST_GAP_OVERLAP_OR_REORDER_UNSUPPORTED')
             for field,value in [('source_start',row['offset']),('duration',row['length']),('target_start',row['target']-1)]:
                 meta[field]={'numerator':value,'denominator':base['fps']}
             rate=imp.number(clip['source_range']['start_time']['rate'])
@@ -173,7 +206,9 @@ def project(root, observed, media_probe=imp.probe, *, extension_scope=None):
             duration_units=Fraction(row['length'],base['fps'])*rate
             require(start_units.denominator==duration_units.denominator==1,'HOST_AUDIO_SUBSAMPLE_UNSUPPORTED')
             clip['source_range']={'OTIO_SCHEMA':'TimeRange.1','start_time':{'OTIO_SCHEMA':'RationalTime.1','value':int(start_units),'rate':float(rate)},'duration':{'OTIO_SCHEMA':'RationalTime.1','value':int(duration_units),'rate':float(rate)}}
-            cursor+=row['length']
+            children.append(clip);cursor+=row['length']
+        require(gap is None,'HOST_TRAILING_GAP_UNSUPPORTED')
+        track['children']=children
         end=max(end,cursor)
     require(extended<=paired,'HOST_EXTENSION_AUDIO_VIDEO_PAIR_REQUIRED')
     require(observed['frame_end']==end-1,'HOST_RENDER_RANGE_CHANGED')

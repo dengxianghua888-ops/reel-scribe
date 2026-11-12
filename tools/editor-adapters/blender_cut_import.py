@@ -157,20 +157,44 @@ def validate(root, media_probe=probe):
             meta = metadata(ref, 'resource_id sha256'); resource = resources[meta['resource_id']]
             require(resource['package_path'] == url and resource['sha256'] == meta['sha256'] == manifest['files'][url]['sha256'], 'MEDIA_IDENTITY')
             facts = resource['facts']
-            require(facts['start_time'] == 0 and facts['cfr'] is True and number(facts['fps']) == fps, 'MEDIA_CLOCK_UNSUPPORTED')
-            require(facts['width'] == profile['width'] and facts['height'] == profile['height'], 'MEDIA_GEOMETRY')
-            require(offset + length <= facts['frame_count'], 'SOURCE_OVERRUN')
             if url not in cached: cached[url] = media_probe(path)
             streams = cached[url]
             videos = [s for s in streams if s['codec_type'] == 'video']
             audios = [s for s in streams if s['codec_type'] == 'audio']
-            require(len(videos) == 1 and len(audios) <= 1, 'STREAM_SELECTION_UNSUPPORTED')
-            video = videos[0]
-            require(Fraction(video['avg_frame_rate']) == fps and Fraction(video['r_frame_rate']) == fps and Fraction(video.get('start_time', '0')) == 0, 'PROBED_VIDEO_CLOCK')
-            require((video['width'], video['height']) == (profile['width'], profile['height']), 'PROBED_GEOMETRY')
-            if track['kind'] == 'Audio':
-                require(len(audios) == 1 and Fraction(audios[0].get('start_time', '0')) == 0, 'PROBED_AUDIO_CLOCK')
-                require((start + duration) * facts['sample_rate'] <= facts['duration_samples'], 'AUDIO_OVERRUN')
+            narration = resource.get('kind') == 'narration'
+            if narration:
+                # Only explicit standalone PCM narration. It has no invented
+                # video geometry/fps and must never be inserted as picture.
+                require(track['kind'] == 'Audio' and metadata(track, 'track_id role').get('role') == 'narration', 'NARRATION_TRACK_ROLE')
+                require(meta['resource_id'].startswith('narration:') and not clip['metadata']['recap'].get('linked_video_instance'), 'NARRATION_RESOURCE_ROLE')
+                require(len(streams) == 1 and not videos and len(audios) == 1, 'NARRATION_STREAM_SELECTION')
+                audio = audios[0]
+                require(audio.get('codec_name') == 'pcm_s16le', 'NARRATION_CODEC_UNSUPPORTED')
+                rate, channels, count = facts.get('sample_rate'), facts.get('channels'), facts.get('duration_samples')
+                require(type(rate) is int and rate > 0 and type(channels) is int and channels in (1, 2)
+                        and type(count) is int and count > 0 and type(facts.get('audio_stream_index')) is int
+                        and facts['audio_stream_index'] == 0, 'NARRATION_AUDIO_FACTS')
+                require(str(audio.get('sample_rate')) == str(rate) and audio.get('channels') == channels
+                        and audio.get('index') == 0 and Fraction(audio.get('start_time', '0')) == 0, 'NARRATION_PROBED_CLOCK')
+                require(type(audio.get('duration_ts')) is int and audio['duration_ts'] > 0
+                        and Fraction(audio.get('time_base', '0')) > 0
+                        and audio['duration_ts'] * Fraction(audio['time_base']) * rate == count, 'NARRATION_SAMPLE_COUNT')
+                require((start * rate).denominator == 1 and (duration * rate).denominator == 1
+                        and (cursor * rate).denominator == 1, 'NARRATION_SUBSAMPLE')
+                require((start + duration) * rate <= count, 'NARRATION_AUDIO_OVERRUN')
+            else:
+                require(resource.get('kind', 'source') == 'source', 'RESOURCE_KIND_UNSUPPORTED')
+                require(metadata(track, 'track_id role').get('role') != 'narration', 'NARRATION_RESOURCE_ROLE')
+                require(facts['start_time'] == 0 and facts['cfr'] is True and number(facts['fps']) == fps, 'MEDIA_CLOCK_UNSUPPORTED')
+                require(facts['width'] == profile['width'] and facts['height'] == profile['height'], 'MEDIA_GEOMETRY')
+                require(offset + length <= facts['frame_count'], 'SOURCE_OVERRUN')
+                require(len(videos) == 1 and len(audios) <= 1, 'STREAM_SELECTION_UNSUPPORTED')
+                video = videos[0]
+                require(Fraction(video['avg_frame_rate']) == fps and Fraction(video['r_frame_rate']) == fps and Fraction(video.get('start_time', '0')) == 0, 'PROBED_VIDEO_CLOCK')
+                require((video['width'], video['height']) == (profile['width'], profile['height']), 'PROBED_GEOMETRY')
+                if track['kind'] == 'Audio':
+                    require(len(audios) == 1 and Fraction(audios[0].get('start_time', '0')) == 0, 'PROBED_AUDIO_CLOCK')
+                    require((start + duration) * facts['sample_rate'] <= facts['duration_samples'], 'AUDIO_OVERRUN')
             recap = clip['metadata']['recap']
             require(number(recap['speed']) == 1 and number(recap['source_start']) == start and number(recap['duration']) == duration and number(recap['target_start']) == cursor, 'METADATA_WINDOW_MISMATCH')
             plan.append(dict(name=clip['name'], kind=track['kind'], path=str(path), channel=channel, target=target, offset=offset, length=length))
