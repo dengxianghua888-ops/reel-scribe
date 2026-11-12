@@ -124,3 +124,7 @@ flowchart LR
 欢迎在 [Issues](https://github.com/dengxianghua888-ops/reel-scribe/issues) 分享实际剪辑需求、适配经验或可复现问题。如果这套方法对你有用，可以 Star 收藏；订阅版本更新请使用 Watch → Releases。
 
 **许可：** 影视解说制作子集沿用 MIT；通用库及部分参考材料有独立使用条件，商用或再分发前请查看[许可与来源说明](LICENSES.md)。
+
+## 显式风格包装与受控修改（实验性）
+
+新增 [包装配方编译](atomic/style-recipe-compile/SKILL.md) 与 [修改影响检查](atomic/revision-impact-inspect/SKILL.md)，复用现有 Work 候选、范围保护、预览与版本提交。前者只把已确定的字幕参数和指定音轨增益落实为文档操作，后者说明处理依赖及复验影响；都不自动执行渲染或继承真实效果验收。迭代范围与后续里程碑见[实施说明](docs/product-iteration-20261112.md)。

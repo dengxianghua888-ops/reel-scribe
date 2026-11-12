@@ -1,0 +1,21 @@
+{
+  "schema": "style-recipe/1",
+  "id": "faithful-clean-caption-neutral",
+  "version": "0.1.0",
+  "style": {
+    "family": "原貌与亲近",
+    "style_id": "faithful-clean",
+    "version": "0.1.0",
+    "card": {
+      "path": "/absolute/checkout/styles/speech/faithful-clean.md",
+      "sha256": "7cd361368644fd7d20c572a8012d444e0d0ba7a07df0af3ccbd8635843659709"
+    }
+  },
+  "parameters": {
+    "caption_style": {
+      "font_size": 42,
+      "margin_v": 72,
+      "color_rgb": "FFFFFF"
+    }
+  }
+}

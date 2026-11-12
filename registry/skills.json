@@ -642,6 +642,20 @@
         "generation and actual editing tools are supplied by the running Agent; no provider is required for PLAN",
         "full viewing/listening, independent content outcomes and native host compatibility remain unvalidated"
       ]
+    },
+    {
+      "id": "style-recipe-compile",
+      "layer": "atomic",
+      "entry": "atomic/style-recipe-compile/SKILL.md",
+      "description": "将摘要绑定的显式字幕与音轨包装配方编译为受范围保护的作品候选；不自动选择内容、不渲染、不把风格卡当已验证效果。",
+      "status": "experimental"
+    },
+    {
+      "id": "revision-impact-inspect",
+      "layer": "atomic",
+      "entry": "atomic/revision-impact-inspect/SKILL.md",
+      "description": "只读比较受范围约束的作品候选，列出阶段输入变化与版本绑定的复验项；不执行缓存复用、不继承旧版本验收。",
+      "status": "experimental"
     }
   ]
 }

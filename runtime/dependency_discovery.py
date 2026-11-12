@@ -45,6 +45,8 @@ ATOMIC_REQUIREMENTS = {
     'screen-focus': ('ffmpeg', 'ffprobe'),
     'tutorial-plan-compile': ('ffprobe',),
     'timeline-revise': ('ffprobe',),
+    'style-recipe-compile': ('ffprobe',),
+    'revision-impact-inspect': ('ffprobe',),
     'work-render': ('sqlite', 'ffmpeg', 'ffprobe'),
     'work-version': ('sqlite',),
     'sync-offset-measure': ('ffprobe',),
