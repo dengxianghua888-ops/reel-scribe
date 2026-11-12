@@ -71,8 +71,15 @@ def validate_document(doc,tools):
             start=float(Fraction(envelope_sample_count(precise_start),48000))
             envelope_sample_count(a);envelope_sample_count(b)
             tracks[-1]['output_start']=start
-            require(not doc['style_bindings'],'AUDIO_ENVELOPE_STYLE_BINDING_UNSUPPORTED')
+            if doc['style_bindings']:
+                from style_recipe_ops import validate_envelope_binding
+                validate_envelope_binding(doc)
             tracks[-1]['envelope']=track['envelope']
+    if any(isinstance(b,dict) and isinstance(b.get('parameters'),dict) and
+           isinstance(b['parameters'].get('presentation'),dict) and 'audio_envelope' in b['parameters']['presentation']
+           for b in doc['style_bindings'].values()):
+        from style_recipe_ops import validate_envelope_binding
+        validate_envelope_binding(doc)
     for key,binding in doc['style_bindings'].items():
         require(key=='*' or key in clips,'STYLE_ANCHOR_MISSING: '+key)
         exact_keys(binding,['family','style_id','version','card','parameters'],['family','style_id','version','card','parameters'])

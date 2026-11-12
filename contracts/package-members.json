@@ -86,6 +86,8 @@
     "contracts/work-contract.md",
     "docs/announcement.zh-CN.md",
     "docs/blender-saved-cut-readback-20261112.md",
+    "docs/bound-audio-envelope-20261113.md",
+    "docs/bound-audio-envelope-design-20261113.md",
     "docs/bound-undo-artifact-chain-20261112.md",
     "docs/controller-interruption-recovery-20261113.md",
     "docs/cue-presentation-20261112.md",

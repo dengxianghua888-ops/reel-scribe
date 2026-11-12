@@ -73,3 +73,9 @@
 `*`表示这一份完整配方声明的记录位置，不表示所有cue都用了同一有效样式：`caption_style`只记录默认，`caption_overrides`逐ID记录覆盖；报告`caption_target_ids`为本次目标。未选cue和其它内容保持，新的配方ID/摘要记录这一完整映射，不认证整套风格有效。
 
 有layout_constraints时，使用所有cue合并默认与覆盖后的完整候选检查，不只检查目标cue。任一安全带/保护区检查失败，不发布candidate。无约束时仍明确UNKNOWN，不宣称可读或不遮挡。实际字体、画面、听看与最终采用仍需独立验证。旧无override、无现存cue绑定的配方调用保持兼容。
+
+## 已绑定作品的独立音轨首尾淡变
+
+`parameters.audio_envelope` 为非空 `{已有音轨ID: envelope}`，能力 `audio-track-envelope`。包络沿用 Work 的48kHz样本级 `tri/qsin` 结构、端点对齐和持久保护拒绝；仅编译候选，不自动采用、不认证听感。已有绑定限定唯一可重建摘要并逐项符合当前值的 `*` 编译配方。必须保留旧参数与 layout_constraints，不支持未知、多重或失真绑定；未选映射不得改变。显式 cue 修改可原值携带包络但不得顺带改变。
+
+局部撤销须显式 binding_resolution，派生新配方并保留其它映射和布局。原先缺省包络时恢复缺省并移除对应配方映射，不用 null 冒充无包络；若派生配方完全为空仍拒绝。后改非映射 gain/notes 保留；同字段冲突、源/锚点变化及 scope 不足拒绝。仅删除实际包络但保留原映射也拒绝，不留下失真风格声明。

@@ -88,8 +88,6 @@ def prepare(db, current, request, tools, *, directory=None):
             require(identities[0] == identities[1] == identities[2], 'UNDO_AUDIO_IDENTITY_CONFLICT')
         presence=[path[-1] in v for v in containers]
         old, edited, now = [v.get(path[-1]) for v in containers]
-        if path[-1]=='envelope':
-            require(not candidate['style_bindings'],'AUDIO_ENVELOPE_STYLE_BINDING_UNSUPPORTED')
         # Canonical comparison preserves types as well as values (1 is not true).
         eq = lambda a, b: fingerprint(a) == fingerprint(b)
         require(eq(now, edited) or eq(now, old), 'UNDO_FIELD_CONFLICT: ' + '.'.join(path))
@@ -100,6 +98,7 @@ def prepare(db, current, request, tools, *, directory=None):
         if presence[0]:target[path[-1]] = copy.deepcopy(old)
         else:target.pop(path[-1],None)
         records.append({'selection': selection, 'before': old, 'after': edited, 'current': now,
+                        'presence':dict(zip(['before','after','current'],presence)),
                         'status': 'RESTORE_BEFORE' if changed else 'ALREADY_RESTORED'})
     # Resolve inherited appearance after ALL selected fields, independent of order.
     for record in records:
@@ -150,7 +149,7 @@ def resolve_binding(current, candidate, records, resolution, tools, directory):
         expected['parameters']['layout_constraints'] = copy.deepcopy(recipe['layout_constraints'])
     require(fingerprint(current['style_bindings']) == fingerprint({'*': expected}), 'UNDO_BINDING_RECIPE_MISMATCH')
     parameters = recipe['parameters']
-    exact_keys(parameters, ['caption_style', 'audio_gain_db', 'caption_overrides'])
+    exact_keys(parameters, ['caption_style', 'audio_gain_db', 'caption_overrides', 'audio_envelope'])
     require(bool(parameters), 'UNDO_RECIPE_PARAMETERS_REQUIRED')
     if 'caption_style' in parameters:
         values = parameters['caption_style']
@@ -172,6 +171,9 @@ def resolve_binding(current, candidate, records, resolution, tools, directory):
             require(bool(values), 'UNDO_RECIPE_PARAMETERS_REQUIRED')
             stored=current['captions'][cid].get('style_override',{})
             require(all(k in stored and fingerprint(stored[k])==fingerprint(v) for k,v in values.items()), 'UNDO_BINDING_ALREADY_DIVERGED')
+    if 'audio_envelope' in parameters or any('envelope' in t for t in current['audio_tracks'].values()):
+        from style_recipe_ops import validate_envelope_binding
+        validate_envelope_binding(current)
     derived = copy.deepcopy(recipe)
     for key, target in [('id', 'derived_recipe_id'), ('version', 'derived_recipe_version')]:
         require(isinstance(resolution[target], str) and resolution[target].strip(), 'UNDO_DERIVED_RECIPE_ID_REQUIRED')
@@ -187,6 +189,13 @@ def resolve_binding(current, candidate, records, resolution, tools, directory):
             else:values.pop(key)
             if not values:derived['parameters']['caption_overrides'].pop(cid)
             if not derived['parameters']['caption_overrides']:derived['parameters'].pop('caption_overrides')
+            continue
+        if selection['kind']=='audio_track' and selection['field']=='envelope':
+            key=selection['id']
+            require(key in parameters.get('audio_envelope',{}),'UNDO_SELECTED_FIELD_NOT_RECIPE_MAPPED')
+            if not record['presence']['before']:derived['parameters']['audio_envelope'].pop(key)
+            else:derived['parameters']['audio_envelope'][key]=copy.deepcopy(record['before'])
+            if not derived['parameters']['audio_envelope']:derived['parameters'].pop('audio_envelope')
             continue
         group = 'caption_style' if selection['kind'] == 'caption_style' else 'audio_gain_db'
         key = selection['field'] if group == 'caption_style' else selection['id']
