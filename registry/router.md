@@ -164,3 +164,5 @@
 ## 教程产物检查
 
 已明确教程步骤、产物文件身份与检查窗口，用[tutorial-artifact-check](../atomic/tutorial-artifact-check/SKILL.md)核验文件与声明映射链。文件缺失单独报告；截图或文件哈希不认证操作因果、后台保存、重新打开或观察者身份。判断操作是否真正成功仍由教程复杂层依据实际独立结果完成，不新增统一发布门槛。
+
+- 明确“参考 A 结果先行 + 参考 B 字幕呈现”时，`reference-transfer-prepare` 可选 `result-first-then-caption` 组合模式，按阶段重绑后输出原基线候选；仅两种既有机制，不自动合并scope、不插入参考正文、不自动采用。详见[参考迁移合同](../contracts/reference-transfer-contract.md)。

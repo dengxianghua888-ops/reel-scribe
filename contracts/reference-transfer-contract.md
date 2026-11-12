@@ -49,3 +49,21 @@ Requests are unchanged. Output schema `reference-transfer/2` replaces the ambigu
 - `reference_output_presence=NOT_EVALUATED`: neither a match nor no match determines future output presence. Crops, transcodes and other derived content may have different hashes. This preparation does not render/analyze output or grant a license.
 
 Same-source reference is allowed, but cannot serve as evidence of independent reference research or material absence from a future output.
+
+## Opt-in two-reference composition (bounded)
+
+The original request and its at-most-one-selected-item rule are unchanged. A separate exact request shape opts into compilation, not merely preparation:
+
+`operation: reference-transfer-prepare`, `composition: result-first-then-caption`, `store`, `expected_version`, `scene: software`, `stages`, `selected_caption_variant_id`, `final_scope`.
+
+`stages` is exactly two objects `{reference, items}`. Each has exactly one observed `adapt` item: first `narrative/result-first`, then `audiovisual/caption-presentation`, with their existing observation and parameter contracts. The reference byte identities must differ; different SHA does not prove editorial independence or licensing. The caller retains the obligation to use genuine independently observed references. First-stage target parameters remain the existing result-preview contract. Second-stage parameters retain the existing 2–4 explicit caption variants, with one caller-selected ID. This initial combination accepts global caption style only, not audio, cue-specific overrides, new text, font or timing edits.
+
+Compilation order is deliberate:
+
+1. Validate reference A and compile its target result-preview via existing proof/scope/Work checks.
+2. Bind a temporary Work to that exact intermediate document. Validate reference B and its caption-only scopes against this new clip set, including the preview clip. No stale original clip freeze list is silently expanded.
+3. Compile the selected recipe against the intermediate document digest. Require every field other than caption style/binding to remain identical.
+4. Validate the combined final candidate against the **original** document/version and caller's explicit `final_scope`. Stage scopes are not automatically unioned; final authorization must cover both intended changes and all original locks/protection still apply.
+5. Recheck reference/evidence/card/source identities and original Work before publishing an ordinary `candidate.json` for normal preview/adoption. No Work commit or media render occurs. No external reference source is imported, but the preview repeats an existing target source window, which may itself match either reference. Source identity matches in the target/candidate are reported separately and do not certify output consumption.
+
+`reference-composition/1` is a distinct result schema. It publishes `intermediate-document.json`, stage input/output document digests, original-base candidate and final diff. Internal temporary store paths/versions and executable requests are not exported. Generated layout masks/ASS (including padded evidence and copied font) and protection maps are preserved under the operation output; referenced hashes are checked before/after exclusive copying without following symbolic links. A copy failure does not publish a successful final candidate. Intermediate documents are diagnostic immutable bytes, not a new Work authority. A failed stage publishes no final candidate. Observation truth, whole-style quality, listening, and reference presence in the eventual output remain unverified. Final adoption must still recheck current Work, source bytes and scope.
