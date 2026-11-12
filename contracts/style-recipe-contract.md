@@ -7,8 +7,8 @@
 - `operation`: `style-recipe-compile`
 - `document`、`expected_document_sha256`、`base_version`：当前 Work 文档及其绑定身份。
 - `recipe`、`expected_recipe_sha256`：下面的配方和完整配方 `fingerprint`。配方 ID 和 version 由作者声明，摘要绑定实际字段；修改任一字段须重新生成摘要。
-- `capabilities`：调用者明确声明的目标能力，允许 `caption-style`、`audio-track-gain`，不得重复。不是运行时探测或真实宿主能力证明。
-- `scope`：与 `timeline-revise` 完全相同的明确授权范围。字幕变化需要 `caption_style: true`；每个修改音轨 ID 需在 `audio_ids`；全局风格绑定 `*` 需在 `style_keys`。不要为方便放开其他范围。
+- `capabilities`：调用者明确声明的目标能力，允许 `caption-style`、`audio-track-gain`、`caption-cue-style`，不得重复。不是运行时探测或真实宿主能力证明。
+- `scope`：与 `timeline-revise` 完全相同的明确授权范围。全局默认字幕变化需要 `caption_style: true`，局部覆盖需对应 `caption_ids`（见下节）；每个修改音轨 ID 需在 `audio_ids`；全局风格绑定 `*` 需在 `style_keys`。不要为方便放开其他范围。
 
 配方结构：
 
@@ -61,3 +61,15 @@
 证据在 `layout/layout-report.json`，绑定候选文档/约束/字体/renderer、每 cue 时间与文字摘要、原尺寸和扩展 alpha PNG、ASS 及实际范围。缺工具或无法证明等价时拒绝该约束调用，不伪造通过。正常无约束编译不会增加 mask 工作量。
 
 资源上限：画布每边≤1920、cue≤256、每cue文字≤256码点、整次扩大mask总像素≤2亿；超限明确拒绝，不能静默抽样。字体仅拷贝一次，逐cue处理，raw临时帧转换成可复核的无损alpha PNG后移除，避免长期积累巨型raw文件。显示性能、专名/否定语义、声文对齐仍需独立验收。
+
+## 显式单条字幕呈现覆盖
+
+`parameters.caption_overrides` 为非空 `{caption_id: {font_size,color_rgb,margin_v}}`，每条也非空，能力为 `caption-cue-style`。只允许已有cue，不改文字、时间、clip、字体或font_family。字段须满足底层 `style_override` 的整数、色值与画布边界规则；不推断哪个字幕应被选中。
+
+此入口严格局部：`scope.caption_ids` 必须显式列本次目标，且均在参数映射中；`scope.caption_style=false`，`style_keys=['*']` 仍需授权。不支持同时改变全局默认或音轨增益。已有全局/音轨映射可原值携带以保全绑定，但不能借此修改；不得扩大scope来偷偷编辑未选字幕。
+
+有既有编译绑定时，仅支持唯一`*`、同style/card与未失真的映射。新配方必须保留旧全局/音轨参数、非目标cue映射及原layout_constraints；目标cue也不能删除既有覆盖字段。丢字段、约束变化、已有值与绑定不符或不兼容绑定均拒绝。当前绑定已有cue映射时，全局-only配方也不能把它静默替换掉。
+
+`*`表示这一份完整配方声明的记录位置，不表示所有cue都用了同一有效样式：`caption_style`只记录默认，`caption_overrides`逐ID记录覆盖；报告`caption_target_ids`为本次目标。未选cue和其它内容保持，新的配方ID/摘要记录这一完整映射，不认证整套风格有效。
+
+有layout_constraints时，使用所有cue合并默认与覆盖后的完整候选检查，不只检查目标cue。任一安全带/保护区检查失败，不发布candidate。无约束时仍明确UNKNOWN，不宣称可读或不遮挡。实际字体、画面、听看与最终采用仍需独立验证。旧无override、无现存cue绑定的配方调用保持兼容。

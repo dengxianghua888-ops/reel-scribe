@@ -42,7 +42,10 @@ def analyze(base, candidate, scope, tools, *, expected_base_sha256,
         text_changed = any(base['captions'].get(key, {}).get('text') !=
                            candidate['captions'].get(key, {}).get('text')
                            for key in diff['captions'])
-        affect('caption-text' if text_changed else 'caption-placement',
+        presentation_only = all(key in base['captions'] and key in candidate['captions'] and
+            {k:v for k,v in base['captions'][key].items() if k!='style_override'} ==
+            {k:v for k,v in candidate['captions'][key].items() if k!='style_override'} for key in diff['captions'])
+        affect('caption-text' if text_changed else 'caption-local-presentation' if presentation_only else 'caption-placement',
                ('caption-layout', 'visual-composition', 'render'))
     if diff['caption_style_changed']:
         affect('caption-presentation', ('caption-layout', 'visual-composition', 'render'))

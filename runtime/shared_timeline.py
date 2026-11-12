@@ -36,7 +36,24 @@ def compatible(left, right):
                 return False
             if any(not same_type(value[k], other[k]) for k in mutable if k in value):
                 return False
-    excluded = {'caption_style', 'style_bindings', *allowed}
+    # Only a validated finite cue-style map may be omitted from timeline identity.
+    def caption_core(document):
+        from editing_runtime import require
+        result = copy.deepcopy(document.get('captions', {}))
+        require(isinstance(result,dict), 'CAPTION_MAP_INVALID')
+        for cue in result.values():
+            require(isinstance(cue,dict), 'CAPTION_INVALID')
+            if 'style_override' not in cue:continue
+            from caption_style import validate_override
+            height=document['plan']['height']
+            require(type(height) is int and height>0, 'CAPTION_OVERRIDE_CANVAS_INVALID')
+            validate_override(cue['style_override'], height)
+            cue.pop('style_override')
+        return result
+    try:
+        if caption_core(left)!=caption_core(right):return False
+    except (ValueError,TypeError,KeyError):return False
+    excluded = {'captions', 'caption_style' , 'style_bindings', *allowed}
     def core(d):
         return {k: v for k, v in d.items() if k not in excluded}
     return core(left) == core(right)

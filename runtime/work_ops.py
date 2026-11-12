@@ -27,13 +27,19 @@ def validate_document(doc,tools):
         require(all(isinstance(k,str) and k for k in doc[field]),'RESOURCE_ID_REQUIRED')
     cues=[]
     for cid,cue in doc['captions'].items():
-        exact_keys(cue,['clip_id','start','end','text'],['clip_id','start','end','text'])
+        exact_keys(cue,['clip_id','start','end','text','style_override'],['clip_id','start','end','text'])
         require(cue['clip_id'] in clips,'CAPTION_ANCHOR_MISSING: '+cid)
         clip=clips[cue['clip_id']]
         # A complete sentence may legitimately span more than one picture clip.
         a,b=span(cue['start'],cue['end'],norm['duration']-clip['output_start'])
         require(isinstance(cue['text'],str) and cue['text'].strip(),'CUE_TEXT_REQUIRED')
         cues.append({'id':cid,'start':clip['output_start']+a,'end':clip['output_start']+b,'text':cue['text']})
+        if 'style_override' in cue:
+            from caption_style import effective_style, validate_override
+            from editing_runtime import fingerprint
+            override=validate_override(cue['style_override'],norm['height'])
+            effective=effective_style(doc['caption_style'],override,norm['height'])
+            cues[-1].update(style_override=override,effective_style_sha256=fingerprint(effective))
     cues.sort(key=lambda x:(x['start'],x['end']))
     require(all(a['end']<=b['start'] for a,b in zip(cues,cues[1:])),'OVERLAPPING_CAPTIONS')
     style=doc['caption_style']
@@ -546,7 +552,7 @@ def _render_document_bound(document,directory,tools,*,work_version,audio_backend
         current=directory/'visual/composited.mp4'
     if cues:
         invoke({'operation':'caption-burn','source':{'path':str(current),'sha256':sha256(current)},**doc['caption_style'],
-                'cues':[{k:v for k,v in c.items() if k!='id'} for c in cues]},'captions')
+                'cues':[{k:v for k,v in c.items() if k not in ['id','effective_style_sha256']} for c in cues]},'captions')
         current=directory/'captions/captioned.mp4'
     invoke({'operation':'media-qc','source':{'path':str(current),'sha256':sha256(current)},
             'expected':{'duration':norm['duration'],'duration_tolerance':0.1,'width':norm['width'],'height':norm['height'],'audio_required':True}},'qc')

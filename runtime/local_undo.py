@@ -25,6 +25,32 @@ def prepare(db, current, request, tools, *, directory=None):
     for selection in fields:
         require(isinstance(selection, dict), 'UNDO_FIELD_INVALID')
         kind = selection.get('kind')
+        if kind == 'caption_override':
+            exact_keys(selection, ['kind','id','field'], ['kind','id','field'])
+            cid, key = selection['id'], selection['field']
+            require(isinstance(cid,str) and cid and key in ['font_size','margin_v','color_rgb'], 'UNDO_FIELD_UNSUPPORTED')
+            path = ('captions',cid,'style_override',key)
+            require(path not in seen, 'UNDO_FIELD_DUPLICATE');seen.add(path)
+            cues = [state['document']['captions'].get(cid) for state in [before,after,current]]
+            require(all(isinstance(c,dict) for c in cues), 'UNDO_FIELD_MISSING')
+            identities = [{k:v for k,v in c.items() if k!='style_override'} for c in cues]
+            require(identities[0]==identities[1]==identities[2], 'UNDO_CAPTION_IDENTITY_CONFLICT')
+            cells = [{'present':key in c.get('style_override',{}),
+                      'value':c.get('style_override',{}).get(key)} for c in cues]
+            old, edited, now = cells
+            require(fingerprint(now) in [fingerprint(old),fingerprint(edited)], 'UNDO_FIELD_CONFLICT: '+'.'.join(path))
+            target = candidate['captions'][cid]
+            if old['present']:
+                target.setdefault('style_override',{})[key]=copy.deepcopy(old['value'])
+            elif 'style_override' in target:
+                target['style_override'].pop(key,None)
+                if not target['style_override']:target.pop('style_override')
+            records.append({'selection':selection,'before':old['value'],'after':edited['value'],'current':now['value'],
+                'presence':{'before':old['present'],'after':edited['present'],'current':now['present']},
+                'restored_effective_value':target.get('style_override',{}).get(key,current['document']['caption_style'][key]),
+                'inheritance':'current-global-not-historical-appearance' if not old['present'] else 'explicit-override',
+                'status':'ALREADY_RESTORED' if fingerprint(old)==fingerprint(now) else 'RESTORE_BEFORE'})
+            continue
         if kind == 'caption_style':
             exact_keys(selection, ['kind', 'field'], ['kind', 'field'])
             key = selection['field']
@@ -71,6 +97,11 @@ def prepare(db, current, request, tools, *, directory=None):
         target[path[-1]] = copy.deepcopy(old)
         records.append({'selection': selection, 'before': old, 'after': edited, 'current': now,
                         'status': 'RESTORE_BEFORE' if changed else 'ALREADY_RESTORED'})
+    # Resolve inherited appearance after ALL selected fields, independent of order.
+    for record in records:
+        selection=record['selection']
+        if selection['kind']=='caption_override':
+            record['restored_effective_value']=candidate['captions'][selection['id']].get('style_override',{}).get(selection['field'],candidate['caption_style'][selection['field']])
     changed = fingerprint(candidate) != current['document_sha256']
     # A recipe's parameters/constraints cannot silently remain an endorsement of
     # altered values. Binding changes require a separate explicit operation.
@@ -115,7 +146,7 @@ def resolve_binding(current, candidate, records, resolution, tools, directory):
         expected['parameters']['layout_constraints'] = copy.deepcopy(recipe['layout_constraints'])
     require(fingerprint(current['style_bindings']) == fingerprint({'*': expected}), 'UNDO_BINDING_RECIPE_MISMATCH')
     parameters = recipe['parameters']
-    exact_keys(parameters, ['caption_style', 'audio_gain_db'])
+    exact_keys(parameters, ['caption_style', 'audio_gain_db', 'caption_overrides'])
     require(bool(parameters), 'UNDO_RECIPE_PARAMETERS_REQUIRED')
     if 'caption_style' in parameters:
         values = parameters['caption_style']
@@ -128,6 +159,15 @@ def resolve_binding(current, candidate, records, resolution, tools, directory):
         require(isinstance(values, dict) and bool(values), 'UNDO_RECIPE_PARAMETERS_REQUIRED')
         require(all(isinstance(k, str) and k in current['audio_tracks'] and
                     current['audio_tracks'][k]['gain_db'] == number(v, 'gain_db') for k, v in values.items()), 'UNDO_BINDING_ALREADY_DIVERGED')
+    if 'caption_overrides' in parameters:
+        overrides = parameters['caption_overrides']
+        require(isinstance(overrides,dict) and bool(overrides), 'UNDO_RECIPE_PARAMETERS_REQUIRED')
+        for cid, values in overrides.items():
+            require(isinstance(cid,str) and cid in current['captions'], 'UNDO_BINDING_ALREADY_DIVERGED')
+            exact_keys(values, ['font_size','margin_v','color_rgb'])
+            require(bool(values), 'UNDO_RECIPE_PARAMETERS_REQUIRED')
+            stored=current['captions'][cid].get('style_override',{})
+            require(all(k in stored and fingerprint(stored[k])==fingerprint(v) for k,v in values.items()), 'UNDO_BINDING_ALREADY_DIVERGED')
     derived = copy.deepcopy(recipe)
     for key, target in [('id', 'derived_recipe_id'), ('version', 'derived_recipe_version')]:
         require(isinstance(resolution[target], str) and resolution[target].strip(), 'UNDO_DERIVED_RECIPE_ID_REQUIRED')
@@ -135,10 +175,20 @@ def resolve_binding(current, candidate, records, resolution, tools, directory):
     require((derived['id'], derived['version']) != (recipe['id'], recipe['version']), 'UNDO_DERIVED_RECIPE_ID_MUST_CHANGE')
     for record in records:
         selection = record['selection']
+        if selection['kind']=='caption_override':
+            cid,key=selection['id'],selection['field']
+            require(cid in parameters.get('caption_overrides',{}) and key in parameters['caption_overrides'][cid], 'UNDO_SELECTED_FIELD_NOT_RECIPE_MAPPED')
+            values=derived['parameters']['caption_overrides'][cid]
+            if record['presence']['before']:values[key]=copy.deepcopy(record['before'])
+            else:values.pop(key)
+            if not values:derived['parameters']['caption_overrides'].pop(cid)
+            if not derived['parameters']['caption_overrides']:derived['parameters'].pop('caption_overrides')
+            continue
         group = 'caption_style' if selection['kind'] == 'caption_style' else 'audio_gain_db'
         key = selection['field'] if group == 'caption_style' else selection['id']
         require(group in parameters and key in parameters[group], 'UNDO_SELECTED_FIELD_NOT_RECIPE_MAPPED')
         derived['parameters'][group][key] = copy.deepcopy(record['before'])
+    require(bool(derived['parameters']), 'UNDO_EMPTY_DERIVED_RECIPE_UNSUPPORTED')
     binding = copy.deepcopy(expected)
     binding['parameters'].update(recipe_id=derived['id'], recipe_version=derived['version'],
                                  recipe_sha256=fingerprint(derived), presentation=copy.deepcopy(derived['parameters']))

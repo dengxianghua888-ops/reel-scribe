@@ -79,7 +79,7 @@ timeline-render 产生新的剪辑时间轴，不自动继承输入容器中未�
 
 ## 字幕与局部修改
 
-字幕 cue 包含 `id/source_id/start/end/text`。`reject-partial` 阻止原句被切成半句字幕；`clip` 仅在调用方明确要求时裁切显示时间，并标记 partial，不自行改写句子。重复使用素材时字幕映射到每次实际使用的位置。caption-map 不烧录或识别；烧录由 caption-burn 完成，本地识别观察由 speech-transcribe-local 提供，其他云服务和独立强制对齐仍未接入。
+字幕 cue 包含 `id/source_id/start/end/text`，可选 `style_override` 仅允许与 caption-burn 相同的字号/颜色/边距字段并按目标画布校验；跨片段映射保留该对象，JSON 载有样式，SRT 不承载样式。`reject-partial` 阻止原句被切成半句字幕；`clip` 仅在调用方明确要求时裁切显示时间，并标记 partial，不自行改写句子。重复使用素材时字幕映射到每次实际使用的位置。caption-map 不烧录或识别；烧录由 caption-burn 完成，本地识别观察由 speech-transcribe-local 提供，其他云服务和独立强制对齐仍未接入。
 
 局部修改 `changes = [{clip_id, set:{start/end/gain_db/speed}}]`，只允许显式字段更新，不删除/重排/增添片段。`expected_revision` 是当前计划规范 JSON 的 SHA-256，通过 runtime.fingerprint 计算。冲突拒绝；未列入 allowed_clip_ids 的片段冻结。改变片段时长会使后续输出位置变化，即使源区间不变；若用户要求后段时间也不动，复杂层必须采用等时长替换或说明冲突，不能谎称仅改了局部内容。
 
@@ -87,7 +87,7 @@ timeline-render 产生新的剪辑时间轴，不自动继承输入容器中未�
 
 audio-mix 的每轨为 `{source,start,end,output_start,gain_db}`；原片音量由 base_gain_db 给定，可选 base_gain_windows 为有序不重叠的 `{start,end,gain_db}` 数组，按窗口设置绝对增益，精度为音频帧边界。超过画面范围拒绝，不自动拉伸或截断语音。混音不做主观对白避让，也不自动限幅或平滑增益；实际音量/峰值仍需检查。
 
-caption-burn 的 cues 使用输出时间，字段为 start/end/text；font 是带哈希的本地字体。color_rgb 使用六位十六进制 RGB，font_size/margin_v 按视频画布像素；当前底部居中、黑色 1px 描边。不支持的 ASS 控制字符拒绝而不改写。字体 fallback 与字形完整性必须检查实际输出。
+caption-burn 的 cues 使用输出时间，字段为 start/end/text，可选非空 style_override 仅允许 font_size、color_rgb、margin_v，未覆盖字段继承全局。字号与边距仍按实际画布校验，局部字体及任意 ASS 指令不支持；font 是带哈希的本地字体。color_rgb 使用六位十六进制 RGB，font_size/margin_v 按视频画布像素；当前底部居中、黑色 1px 描边。不支持的 ASS 控制字符拒绝而不改写。字体 fallback 与字形完整性必须检查实际输出。
 
 每个运行写 request.json 与 receipt.json，绑定代码版本/哈希、工具二进制哈希、请求指纹、实际产物哈希、成功或错误。SUCCEEDED 只说明该原子操作完成；技术 QC 即使全部通过也返回交付 DEGRADED，因为内容/画面/听检尚未完成。
 

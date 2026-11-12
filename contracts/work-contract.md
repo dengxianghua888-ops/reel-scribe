@@ -186,3 +186,32 @@ even when resolution was supplied. Multiple/clip bindings, custom compiler metad
 unknown parameters, absent original recipe, stale binding, unmapped selected fields
 and identity-changing audio edits remain unsupported. No render or commit is run;
 layout masks, when required, are an explicit local validation step only.
+
+#### Local cue override undo
+
+`prepare-local-undo.fields` additionally accepts
+`{kind:caption_override, id:<existing caption ID>, field:font_size|margin_v|color_rgb}`.
+The caption ID must exist before, after and currently; its text, anchor, timing and
+other non-override fields must be identical. This is not permission to restore
+caption content or deleted cues. `scope.caption_ids` must include the selected ID;
+`caption_style:true` alone does not authorize a local override edit.
+
+The three-way comparison includes **field presence**, not only its value. Restoring
+a previously absent field removes that override; if no overrides remain, the
+`style_override` object is removed rather than storing an invalid empty map.
+A missing override means inheritance from the **final candidate's current global
+style**, not preservation of a historical visual appearance. The per-field report
+contains before/after/current `presence`, `inheritance`, and
+`restored_effective_value`, computed after every selected change so combined global
+and local undo is independent of selector order. Unselected overrides, other cues,
+later notes and protections remain unchanged. A third current value conflicts.
+
+Compatible explicit bound-recipe resolution also accepts the `caption_overrides`
+parameter map. The selected cue/field must be present in that original recipe,
+and all its declared overrides must still match current stored overrides. Undo
+removes only the selected recipe mapping when restoring absence, retaining other
+mapped values and original constraints. Empty cue/group maps are removed from the
+derived recipe; if this would leave no recipe parameters at all,
+`UNDO_EMPTY_DERIVED_RECIPE_UNSUPPORTED` rejects the action. It never silently clears
+the Work binding. Existing explicit derived identity, scope, layout revalidation,
+CAS and no-auto-commit rules continue to apply.

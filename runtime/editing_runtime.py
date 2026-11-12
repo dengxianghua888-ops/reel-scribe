@@ -810,9 +810,12 @@ def map_captions(request, directory, tools):
     require(isinstance(request['cues'], list), 'CUES_ARRAY_REQUIRED')
     ids, mapped = set(), []
     for cue in request['cues']:
-        exact_keys(cue, ['id', 'source_id', 'start', 'end', 'text'], ['id', 'source_id', 'start', 'end', 'text'])
+        exact_keys(cue, ['id', 'source_id', 'start', 'end', 'text', 'style_override'], ['id', 'source_id', 'start', 'end', 'text'])
         require(isinstance(cue['id'], str) and cue['id'] and cue['id'] not in ids, 'CUE_ID_DUPLICATE_OR_EMPTY')
         ids.add(cue['id'])
+        if 'style_override' in cue:
+            from caption_style import validate_override
+            validate_override(cue['style_override'],normalized['height'])
         require(isinstance(cue['text'], str) and cue['text'].strip(), 'CUE_TEXT_REQUIRED')
         require(cue['source_id'] in normalized['sources'], 'CUE_SOURCE_UNKNOWN')
         a, b = span(cue['start'], cue['end'], normalized['sources'][cue['source_id']]['media']['duration'])
@@ -830,6 +833,7 @@ def map_captions(request, directory, tools):
             require(start < end, 'CUE_LOST_TO_FRAME_QUANTIZATION')
             mapped.append({'id': cue['id'], 'clip_id': clip['id'], 'start': start,
                            'end': end, 'text': cue['text'], 'partial': partial})
+            if 'style_override' in cue:mapped[-1]['style_override']=copy.deepcopy(cue['style_override'])
     mapped.sort(key=lambda c: (c['start'], c['end']))
     write_json(directory / 'captions.json', {'schema': 'output-captions/1', 'plan_sha256': fingerprint(request['plan']), 'cues': mapped})
     def timestamp(seconds):
@@ -842,8 +846,10 @@ def map_captions(request, directory, tools):
         for i, cue in enumerate(mapped, 1):
             require(round(cue['end'] * 1000) > round(cue['start'] * 1000), 'CUE_TOO_SHORT_FOR_SRT')
             stream.write(f'{i}\n{timestamp(cue["start"])} --> {timestamp(cue["end"])}\n{cue["text"]}\n\n')
-    return {'mapped_cues': len(mapped), 'partial_cues': sum(x['partial'] for x in mapped),
+    result={'mapped_cues': len(mapped), 'partial_cues': sum(x['partial'] for x in mapped),
             'text_modified': False, 'semantic_accuracy': 'UNVERIFIED'}
+    if any('style_override' in cue for cue in mapped):result['local_presentation']='Preserved in captions.json only; SRT cannot represent style overrides; effective style requires downstream global style'
+    return result
 
 
 def patch_plan(request, directory, tools):
@@ -1005,13 +1011,23 @@ def caption_ass(request, width, height, duration, *, layout_padding=0):
     ass='[Script Info]\nScriptType: v4.00+\nPlayResX: '+str(width + 2*layout_padding)+'\nPlayResY: '+str(height + 2*layout_padding)+'\nWrapStyle: 0\n'
     ass+='[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n'
     ass+=f'Style: Default,{family},{size},&H00{rgb[4:6]}{rgb[2:4]}{rgb[0:2]},&H00000000,1,1,0,2,{20+layout_padding},{20+layout_padding},{margin+layout_padding},1\n'
+    local_names={}
+    for index,cue in enumerate(request['cues']):
+        exact_keys(cue,['start','end','text','style_override'],['start','end','text'])
+        if 'style_override' in cue:
+            from caption_style import effective_style
+            style=effective_style({k:request[k] for k in ['font_family','font_size','margin_v','color_rgb']},cue['style_override'],height)
+            local_size=number(style['font_size'],'font_size',1);local_margin=number(style['margin_v'],'margin_v',0);local_rgb=style['color_rgb']
+            require(local_size<=height and local_margin<height,'CAPTION_GEOMETRY_INVALID')
+            name=f'Cue{index:04d}';local_names[index]=name
+            ass+=f'Style: {name},{family},{local_size},&H00{local_rgb[4:6]}{local_rgb[2:4]}{local_rgb[0:2]},&H00000000,1,1,0,2,{20+layout_padding},{20+layout_padding},{local_margin+layout_padding},1\n'
     ass+='[Events]\nFormat: Layer, Start, End, Style, Text\n'
     previous_end=0
     def ts(value):
         centis=round(value*100); hours,centis=divmod(centis,360000); mins,centis=divmod(centis,6000); secs,centis=divmod(centis,100)
         return f'{hours}:{mins:02}:{secs:02}.{centis:02}'
-    for cue in request['cues']:
-        exact_keys(cue,['start','end','text'],['start','end','text'])
+    for index,cue in enumerate(request['cues']):
+        exact_keys(cue,['start','end','text','style_override'],['start','end','text'])
         a,b=span(cue['start'],cue['end'],duration)
         require(a >= previous_end,'OVERLAPPING_CAPTIONS');previous_end=b
         require(round(b*100)>round(a*100),'CUE_TOO_SHORT_FOR_ASS')
@@ -1019,7 +1035,7 @@ def caption_ass(request, width, height, duration, *, layout_padding=0):
         # ASS override syntax must not be accepted through ordinary text.
         require(not any(x in cue['text'] for x in ['{','}','\\','\r']),'ASS_CONTROL_CHARACTERS_UNSUPPORTED')
         text=cue['text'].replace('\n',r'\N')
-        ass+=f'Dialogue: 0,{ts(a)},{ts(b)},Default,{text}\n'
+        ass+=f'Dialogue: 0,{ts(a)},{ts(b)},{local_names.get(index,"Default")},{text}\n'
     return ass
 
 

@@ -54,18 +54,28 @@ def execute(request, directory, tools):
                 recipe=v['recipe'];require(isinstance(recipe,dict),'BRIEF_RECIPE_REQUIRED')
                 require(fingerprint(recipe)==v['expected_recipe_sha256'],'RECIPE_REVISION_CONFLICT')
                 rp=recipe.get('parameters')
-                require(isinstance(rp,dict) and set(rp)=={'caption_style'},'BRIEF_CAPTION_ONLY_PARAMETERS_REQUIRED')
-                require(isinstance(rp['caption_style'],dict) and rp['caption_style'] and
-                        set(rp['caption_style'])<= {'font_size','margin_v','color_rgb'},'BRIEF_CAPTION_PARAMETERS_UNSUPPORTED')
-                require(v['capabilities']==['caption-style'],'BRIEF_CAPTION_ONLY_CAPABILITY_REQUIRED')
+                require(isinstance(rp,dict),'BRIEF_CAPTION_ONLY_PARAMETERS_REQUIRED')
+                local='caption_overrides' in rp
+                if local:
+                    require(set(rp)<= {'caption_style','caption_overrides','audio_gain_db'},'BRIEF_CAPTION_ONLY_PARAMETERS_REQUIRED')
+                    from style_recipe_ops import cue_recipe_guard
+                    cue_recipe_guard(state['document'],recipe,v['scope'])
+                    from caption_style import validate_override
+                    for values in rp['caption_overrides'].values():validate_override(values,state['document']['plan']['height'])
+                    require(v['capabilities']==['caption-cue-style'],'BRIEF_CAPTION_ONLY_CAPABILITY_REQUIRED')
+                else:
+                    require(set(rp)=={'caption_style'},'BRIEF_CAPTION_ONLY_PARAMETERS_REQUIRED')
+                    require(isinstance(rp['caption_style'],dict) and rp['caption_style'] and
+                            set(rp['caption_style'])<= {'font_size','margin_v','color_rgb'},'BRIEF_CAPTION_PARAMETERS_UNSUPPORTED')
+                    require(v['capabilities']==['caption-style'],'BRIEF_CAPTION_ONLY_CAPABILITY_REQUIRED')
                 style=recipe.get('style');require(isinstance(style,dict) and 'card' in style,'BRIEF_STYLE_CARD_REQUIRED')
                 source(style['card'])
                 scope=v['scope']
                 required=['clip_ids','source_ids','caption_ids','audio_ids','style_keys','note_keys','output_fields','caption_style','freeze_positions','freeze_duration']
                 exact_keys(scope,required+['visual_ids','evidence_mapping'],required)
-                require(all(scope[k]==[] for k in ['clip_ids','source_ids','caption_ids','audio_ids','note_keys','output_fields']) and
+                require(all(scope[k]==[] for k in (['clip_ids','source_ids','audio_ids','note_keys','output_fields'] if local else ['clip_ids','source_ids','caption_ids','audio_ids','note_keys','output_fields'])) and
                         scope.get('visual_ids',[])==[] and scope.get('evidence_mapping',False) is False and
-                        scope['style_keys']==['*'] and scope['caption_style'] is True and scope['freeze_duration'] is True,
+                        scope['style_keys']==['*'] and scope['caption_style'] is (not local) and scope['freeze_duration'] is True,
                         'BRIEF_CAPTION_SCOPE_TOO_BROAD')
                 frozen=scope['freeze_positions'];clip_ids=[c['id'] for c in state['document']['plan']['clips']]
                 require(isinstance(frozen,list) and all(isinstance(x,str) for x in frozen) and

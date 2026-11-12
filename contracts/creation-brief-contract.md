@@ -64,3 +64,9 @@ speech_binding额外记录稿文件身份、源、允许源窗、上游timing、
 已有字幕、音轨、视觉层和持久保护不阻碍**独立计划准备**，也不被删除或修改；它们不是被独立计划自动继承。后续采用必须将已审核计划按显式scope合入最新Work，经timeline-revise核所有依赖/保护及CAS，不能直接替换Work.plan，更不能通过删掉保护来使采用成功。
 
 FLEURS等只有原文/整段录音和比例估时的素材可用于拒绝estimated负例，不能标为真实逐词剪辑正例。音频WAV本身也不满足当前执行计划的视频流要求；显式合成画面承载音频属于派生媒体，不自动提供词界。
+
+### 显式局部字幕配方准备
+
+caption-presentation 的variant可使用 `caption_overrides` 与唯一能力 `caption-cue-style`。必须由调用者在 `scope.caption_ids` 指定目标、`caption_style=false`；未选字幕不自动加入范围。沿用2–4个明确variant、冻结全部clip位置/总时长、无其它内容编辑的限制。只准备既有style-recipe-preview，不直接应用Work。
+
+若已有全局编译绑定，完整旧映射与约束必须原值携带；新cue配方只改变选择的cue覆盖。准备器先核绑定/目标/字段，真正全有效字幕布局与CAS仍由下游compiler/preview复核，准备成功不表示渲染、布局或风格效果通过。
