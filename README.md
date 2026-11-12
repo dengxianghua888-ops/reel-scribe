@@ -128,3 +128,5 @@ flowchart LR
 ## 显式风格包装与受控修改（实验性）
 
 新增 [包装配方编译](atomic/style-recipe-compile/SKILL.md) 与 [修改影响检查](atomic/revision-impact-inspect/SKILL.md)，复用现有 Work 候选、范围保护、预览与版本提交。前者只把已确定的字幕参数和指定音轨增益落实为文档操作，后者说明处理依赖及复验影响；都不自动执行渲染或继承真实效果验收。迭代范围与后续里程碑见[实施说明](docs/product-iteration-20261112.md)。
+
+需要比较明确包装方案时，可用 [同内容配方预览](atomic/style-recipe-preview/SKILL.md)生成候选视频及本地参数对照，复用现有批队列恢复机制。仅限已声明的字幕/音轨参数，不自动选择审美胜者，也不改正式作品头。

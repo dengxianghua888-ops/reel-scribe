@@ -124,10 +124,37 @@ def snapshot(db,manifest,queue=None):
     return {'schema':'batch-state/1','batch_id':manifest['batch_id'],'status':status,'jobs':rows,'attempts':queue['attempts'],'creative_quality':'NOT_RUN','native_editor':'NOT_RUN','scope':'Local explicit work exports. RENDERED is not semantic, listening, publishing or platform acceptance.'}
 
 
+def preview_document(spec, state, tools):
+    """Read and validate exactly the SHA-bound candidate bytes, without adoption."""
+    from editing_runtime import source,require,exact_keys,fingerprint
+    from work_ops import revision_diff
+    require(state['version']==spec['expected_version'],'BATCH_WORK_VERSION_CONFLICT')
+    ref=source(spec['preview_candidate'])
+    payload=Path(ref['path']).read_bytes()
+    require(hashlib.sha256(payload).hexdigest()==ref['sha256'],'BATCH_CANDIDATE_CHANGED')
+    bundle=json.loads(payload)
+    fields=['schema','base_version','base_document_sha256','document','scope']
+    exact_keys(bundle,fields,fields)
+    require(bundle['schema']=='work-candidate/1','CANDIDATE_SCHEMA_UNSUPPORTED')
+    require(bundle['base_version']==state['version'] and
+            bundle['base_document_sha256']==state['document_sha256'],'CANDIDATE_BASE_CONFLICT')
+    revision_diff(state['document'],bundle['document'],bundle['scope'],tools)
+    digest=fingerprint(bundle['document'])
+    require(digest!=state['document_sha256'],'NO_CHANGE_TO_PREVIEW')
+    if 'candidate_document_sha256' in spec:
+        require(digest==spec['candidate_document_sha256'],'BATCH_CANDIDATE_DOCUMENT_MISMATCH')
+    source(spec['preview_candidate'])
+    return digest
+
+
 def render_request(spec):
     from editing_runtime import require
     from source_binding import selection
     request={'operation':'work-render','store':spec['store'],'expected_version':spec['expected_version']}
+    if 'preview_candidate' in spec:
+        from editing_runtime import exact_keys
+        exact_keys(spec['preview_candidate'],['path','sha256'],['path','sha256'])
+        request['preview_candidate']=copy.deepcopy(spec['preview_candidate'])
     if 'audio_backend' in spec:
         require(isinstance(spec['audio_backend'],dict),'BATCH_AUDIO_BACKEND_OBJECT_REQUIRED')
         # Preserve the selected renderer's request without certifying its
@@ -139,7 +166,7 @@ def render_request(spec):
     return request
 
 
-def check_receipt(path,spec,env):
+def check_receipt(path,spec,env,tools=None):
     from editing_runtime import require,sha256,fingerprint,source
     from source_binding import selection
     require(path.is_file(),'BATCH_RECEIPT_MISSING')
@@ -151,6 +178,20 @@ def check_receipt(path,spec,env):
     for a in rr['artifacts']:
         p=folder/a['path'];require(not Path(a['path']).is_absolute() and p.resolve().is_relative_to(folder.resolve()),'BATCH_ARTIFACT_PATH_INVALID')
         require(p.is_file() and p.stat().st_size==a['bytes'] and sha256(p)==a['sha256'],'BATCH_ARTIFACT_CHANGED')
+    if 'preview_candidate' in spec:
+        require(tools is not None,'BATCH_PREVIEW_VALIDATION_TOOLS_REQUIRED')
+        state=work_state(spec['store'])
+        digest=preview_document(spec,state,tools)
+        if rr['status']=='SUCCEEDED':
+            result=rr['result']
+            require(result.get('preview_status')=='CANDIDATE_PREVIEW_NOT_COMMITTED' and
+                    result.get('work_id')==state['work_id'] and
+                    result.get('preview_candidate',{}).get('path')==str(Path(spec['preview_candidate']['path']).resolve()) and
+                    result.get('preview_candidate',{}).get('sha256')==spec['preview_candidate']['sha256'] and
+                    result.get('base_document_sha256')==state['document_sha256'] and
+                    result.get('candidate_document_sha256')==digest and
+                    result.get('document_sha256')==digest,
+                    'BATCH_PREVIEW_RESULT_MISMATCH')
     if rr['status']=='SUCCEEDED':
         require(rr['result']['version']==spec['expected_version'],'BATCH_OUTPUT_VERSION_MISMATCH')
         output=Path(rr['result']['video']['path']);require(output.resolve().is_relative_to(folder.resolve()),'BATCH_OUTPUT_PATH_INVALID')
@@ -200,6 +241,8 @@ def check_receipt(path,spec,env):
                 if selected is not None:
                     require(Path(selected['path']).resolve()==Path(helper['path']).resolve() and
                             selected['sha256']==helper['sha256'],'BATCH_AUDIO_BACKEND_HELPER_MISMATCH')
+    if 'preview_candidate' in spec:
+        require(work_state(spec['store'])['version']==spec['expected_version'],'BATCH_WORK_VERSION_CONFLICT')
     return rr
 
 
@@ -216,14 +259,19 @@ def batch_render(q,directory,tools):
         require(isinstance(q['jobs'],list) and q['jobs'],'BATCH_JOBS_REQUIRED')
         jobs=[];ids=set();identities=set()
         for spec in q['jobs']:
-            keys=['id','store','expected_version'];exact_keys(spec,keys+['audio_backend','source_consumption'],keys)
+            keys=['id','store','expected_version'];exact_keys(spec,keys+['audio_backend','source_consumption','preview_candidate'],keys)
             render_request(spec)
             jid=spec['id'];require(isinstance(jid,str) and re.fullmatch('[A-Za-z0-9][A-Za-z0-9_-]{0,79}',jid) and jid not in ids,'BATCH_JOB_ID_INVALID_OR_DUPLICATE');ids.add(jid)
             state=work_state(spec['store']);require(state['version']==spec['expected_version'],'BATCH_WORK_VERSION_CONFLICT')
             validate_document(state['document'],tools)
-            store=str(Path(spec['store']).resolve());identity=(store,spec['expected_version'])
+            store=str(Path(spec['store']).resolve())
+            candidate_digest=preview_document(spec,state,tools) if 'preview_candidate' in spec else None
+            identity=(store,spec['expected_version'],spec.get('preview_candidate',{}).get('sha256'))
             require(identity not in identities,'BATCH_DUPLICATE_WORK_VERSION');identities.add(identity)
             job={'id':jid,'store':store,'expected_version':state['version'],'document_sha256':state['document_sha256']}
+            if 'preview_candidate' in spec:
+                job['preview_candidate']=copy.deepcopy(spec['preview_candidate'])
+                job['candidate_document_sha256']=candidate_digest
             if 'audio_backend' in spec:job['audio_backend']=copy.deepcopy(spec['audio_backend'])
             if 'source_consumption' in spec:job['source_consumption']=copy.deepcopy(spec['source_consumption'])
             jobs.append(job)
@@ -290,10 +338,17 @@ def batch_render(q,directory,tools):
                     db.execute('UPDATE attempts SET status=?,error=? WHERE job_id=? AND number=?',(status,error,jid,attempt))
             for jid in q['job_ids']:
                 spec=specs[jid];row=dict(db.execute('SELECT * FROM jobs WHERE id=?',(jid,)).fetchone())
+                if 'preview_candidate' in spec:
+                    try:
+                        preview_document(spec,work_state(spec['store']),tools)
+                    except (ValueError,OSError,KeyError,sqlite3.Error) as exc:
+                        with db:db.execute('UPDATE jobs SET status=?,error=? WHERE id=?',('INVALID_OUTPUT' if row['attempt'] else 'FAILED',str(exc),jid))
+                        events.append({'job_id':jid,'action':'PREVIEW_VALIDATION_FAILED','error':str(exc)})
+                        continue
                 if row['status']=='RENDERED':
                     try:
                         require(sha256(Path(row['receipt']))==row['receipt_sha256'],'BATCH_RECEIPT_CHANGED')
-                        check_receipt(Path(row['receipt']),spec,env)
+                        check_receipt(Path(row['receipt']),spec,env,tools)
                         events.append({'job_id':jid,'action':'REUSED_VERIFIED','attempt':row['attempt']});continue
                     except (ValueError,OSError,KeyError) as exc:
                         with db:db.execute('UPDATE jobs SET status=?,error=? WHERE id=?',('INVALID_OUTPUT',str(exc),jid))
@@ -302,7 +357,7 @@ def batch_render(q,directory,tools):
                     last=db.execute('SELECT * FROM attempts WHERE job_id=? AND number=?',(jid,row['attempt'])).fetchone();receipt=Path(last['path'])/'receipt.json'
                     if receipt.exists():
                         try:
-                            rr=check_receipt(receipt,spec,env);finish(jid,row['attempt'],receipt,rr)
+                            rr=check_receipt(receipt,spec,env,tools);finish(jid,row['attempt'],receipt,rr)
                             events.append({'job_id':jid,'action':'RECOVERED_RECEIPT','status':rr['status']});continue
                         except (ValueError,OSError,KeyError) as exc:
                             with db:db.execute('UPDATE jobs SET status=?,error=? WHERE id=?',('INVALID_OUTPUT',str(exc),jid))
@@ -329,7 +384,7 @@ def batch_render(q,directory,tools):
                     db.execute('INSERT INTO attempts VALUES(?,?,?,?,?)',(jid,attempt,'RUNNING',str(path),None))
                     db.execute('UPDATE jobs SET status=?,attempt=?,error=? WHERE id=?',('RUNNING',attempt,None,jid))
                 rr=run(render_request(spec),path,tools)
-                check_receipt(path/'receipt.json',spec,env);finish(jid,attempt,path/'receipt.json',rr)
+                check_receipt(path/'receipt.json',spec,env,tools);finish(jid,attempt,path/'receipt.json',rr)
                 events.append({'job_id':jid,'action':'RENDER_ATTEMPT','attempt':attempt,'status':rr['status']})
             result=snapshot(db,manifest);result['events']=events;result['artifact_integrity']='SELECTED_COMPLETED_JOBS_VERIFIED'
         finally:db.close()

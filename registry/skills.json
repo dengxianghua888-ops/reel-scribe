@@ -656,6 +656,13 @@
       "entry": "atomic/revision-impact-inspect/SKILL.md",
       "description": "只读比较受范围约束的作品候选，列出阶段输入变化与版本绑定的复验项；不执行缓存复用、不继承旧版本验收。",
       "status": "experimental"
+    },
+    {
+      "id": "style-recipe-preview",
+      "layer": "atomic",
+      "entry": "atomic/style-recipe-preview/SKILL.md",
+      "description": "对同一当前作品的两到四份显式包装配方生成隔离视频预览与参数对照；不提交作品、不自动选风格，不继承真实效果验收。",
+      "status": "experimental"
     }
   ]
 }

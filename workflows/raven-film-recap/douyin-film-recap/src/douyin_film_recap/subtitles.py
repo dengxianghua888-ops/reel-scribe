@@ -101,6 +101,12 @@ def _split_text(text: str, max_chars: int) -> list[str]:
             current = ""
         while _visible_units(sentence) > max_chars:
             index = max_chars
+            # Avoid opening a line with closing punctuation where the hard
+            # width permits it. Keep the preceding character with punctuation,
+            # rather than exceeding the configured line width.
+            closing = "，。！？；：、,.!?;:）)]】》〉」』”’"
+            while index > 1 and index < len(sentence) and sentence[index] in closing:
+                index -= 1
             chunks.append(sentence[:index].strip())
             sentence = sentence[index:]
         current = sentence
@@ -150,13 +156,20 @@ def _cues_from_boundaries(
         if current and (
             _visible_units(proposed) > max_chars
             or current_duration > 3.2
-            or punctuation_break and current_duration >= 0.9
         ):
             groups.append(current)
             current = []
             current_text = ""
         current.append(normalized)
         current_text += token
+        # A sentence-final token belongs to the sentence it closes, not the
+        # following group. Length/time caps still split before appending it.
+        # Recompute after such a split so the old group's duration cannot
+        # force a fresh short group to close prematurely.
+        if punctuation_break and start + duration - float(current[0]["start"]) >= 0.9:
+            groups.append(current)
+            current = []
+            current_text = ""
     if current:
         groups.append(current)
 

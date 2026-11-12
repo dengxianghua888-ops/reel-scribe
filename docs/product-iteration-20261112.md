@@ -24,7 +24,35 @@
 
 - 自动理解素材并推荐最适合的完整叙事风格；真实同内容风格盲评。
 - 输入自然语言自动生成可靠局部修改；跨镜头因果与中文语义理解的实效提升。
-- 真正的缓存执行器、局部渲染、自动恢复失败任务、模型/提示版本成本核算。
+- 逐镜头局部渲染、自动无监督恢复失败任务、模型/提示版本成本核算（候选整段复用及显式队列恢复已实现）。
 - 中文字幕语义重排、完整听感自动验收、无损全编辑器工程往返。
 
-下一阶段按产品方案推进真实样例基线、少量可执行配方效果对比、局部编辑/恢复与缓存身份，再做单编辑器真实导入保存重开。需授权真实素材、明确目标编辑器及可用运行条件后，才能报告对应真实验收；不借用合成测试替代。
+真实素材与宿主的当前覆盖见下文。后续仍须逐项完善内容证据、场景安全区、语义及真实用户验收，不借用合成测试替代。
+
+## 第二切片：对比预览与现有队列恢复
+
+新增 [style-recipe-preview](../atomic/style-recipe-preview/SKILL.md)，把同一 Work 基础上的两到四份明确包装配方串成可观看的小样与参数对照。所有候选继续沿用同一内容，且不改变正式 Work 头；不能把字幕或音量差异称为叙事机制已验证。
+
+候选预览的恢复与复用扩展现有 work-batch-render 请求和回执验证，不另建缓存数据库。候选 SHA、基础版本、输出摘要、实际源消费绑定与执行环境均需核验。失败或取消保留既有尝试供诊断，不覆盖原素材；只有校验通过的成功产物才可复用。它仍不等于逐镜头增量渲染，也不自动采纳旧版本候选。
+
+
+## 真实素材驱动的第三切片
+
+用户授权使用网上合法公开素材后，本轮下载原媒体并保留来源/许可/摘要，不把媒体二进制入仓，也没有向外上传私有数据。
+
+- **叙事**：Tears of Steel 原片 30–36 秒，双候选预览→包装提交→恢复原参数→过期版本拒绝完成。
+- **访谈/软件演示**：真实原 WebM 分别被视频时钟/音频连续性校验拒绝；显式 30fps、48kHz PCM 派生后完成相同链路。转换可能复制/丢帧、补音，不是无损或原格式直通通过。访谈 45–51 秒为植物 B-roll，另用 100–106 秒讲话人近景验证。
+- 四个短窗共十二个输出完整解码，候选与恢复输出的解码 PCM 摘要相同。音频数值一致不是听检。演示字幕明确为测试标注，不冒充原声转写。
+- **真实中文语音**：Google FLEURS 三份录音参考文本覆盖否定词、数字和 WiFi。发现并修复 SRT 隐式 ASS 画布使默认字幕巨大溢出的缺陷；修复后实际抽帧文字完整，原 WAV 摘要、字幕文字及时间范围保持。背景为合成色板，时间为比例估算，未做 ASR、听审或真实对齐。
+- **真实编辑器**：[实验 Blender 导入器](editor-adapters/blender-cut-import.md)支持严格受限的原视频/原声硬切。Blender 4.3.2 实际导入、剪点调整、保存重开与渲染已验证；不含字幕、GUI、逆向读回或一般编辑器互通承诺。
+
+实际目视仍发现软件演示较大/较高字幕遮住下方编辑区，当前通用配方不能认定场景安全区适配合格。后续优先做显式保护区及实际渲染验证，不以“参数合法”代替画面合格。本方案尚未整体验收完成。
+
+### 公开素材许可与可复核来源
+
+- Tears of Steel，(CC) Blender Foundation | mango.blender.org，[源文件](https://download.blender.org/demo/movies/ToS/tears_of_steel_720p.mov)、[CC BY 3.0 声明](https://mango.blender.org/sharing/)，SHA-256 `efa9062d9cdb7a338e40ad530dfdf234806743f29ae6a1a136b97ece4e588e8f`。未使用独立 BY-ND 原声专辑。
+- Sir Tim Smit, The Green Interview，The Green Interview，[固定来源及 CC BY 3.0](https://commons.wikimedia.org/w/index.php?title=File:Sir_Tim_Smit,_The_Green_Interview.webm&oldid=1096433542)，SHA-256 `2a81a51f89173336ac92dbdead2c11230845a7bbefd8f3f97e8d1cfea98bcdc0`。
+- WikEdtutorial1，Nikkimaria，[固定来源及 CC BY-SA 3.0](https://commons.wikimedia.org/w/index.php?title=File:WikEdtutorial1.webm&oldid=1131672871)，SHA-256 `45aca1b97d9dd5fe30b316c532c106be11026204abfba4bc73339d1b63a49c16`。界面为历史版本；如发布改编素材须保留兼容的相同许可。
+- Google FLEURS，Conneau 等（2022），[固定数据卡 CC BY 4.0](https://huggingface.co/datasets/google/fleurs/blob/70bb2e84b976b7e960aa89f1c648e09c59f894dd/README.md)，cmn_hans_cn validation。数据集参考文本未经本轮听审，不当作识别结果。
+
+媒体改动包括短窗截取、缩放、转码、测试标注或合成底图；不暗示作者背书。媒体许可不自动改变独立代码许可。上述为有限技术/抽帧证据，不代表全片理解、真实审美、整套风格库或终端用户通过。

@@ -478,7 +478,14 @@ def _escape_subtitle_path(path: Path) -> str:
 
 
 def _subtitle_style(config: AppConfig, font_name: str | None = None) -> str:
+    if not 0 <= config.render.subtitle_margin_v < config.render.height:
+        raise ValueError("Subtitle bottom margin must fit the output canvas")
+    if not 0 < config.render.subtitle_font_size <= config.render.height:
+        raise ValueError("Subtitle font size must fit the output canvas")
     return (
+        # SRT's implicit ASS canvas is not the output canvas. Pin script
+        # coordinates so configured size, outline and margins use output pixels.
+        f"PlayResX={config.render.width},PlayResY={config.render.height},"
         f"FontName={font_name or config.render.subtitle_font},"
         f"FontSize={config.render.subtitle_font_size},"
         "Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00101010,"

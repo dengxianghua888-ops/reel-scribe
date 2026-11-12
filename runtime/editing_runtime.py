@@ -1057,6 +1057,9 @@ def tts_macos(request, directory, tools):
 
 def execute(request, directory, tools):
     op = request.get('operation')
+    if op == 'style-recipe-preview':
+        from style_preview_ops import execute as preview_execute
+        return preview_execute(request, directory, tools)
     if op == 'style-recipe-compile':
         from style_recipe_ops import execute as recipe_execute
         return recipe_execute(request, directory, tools)

@@ -10,9 +10,11 @@ import dependency_discovery
 
 def test_recipe_and_impact_dispatch(tmp_path):
     for operation, module in [('style-recipe-compile', 'style_recipe_ops'),
-                              ('revision-impact-inspect', 'revision_impact')]:
+                              ('revision-impact-inspect', 'revision_impact'),
+                              ('style-recipe-preview', 'style_preview_ops')]:
         request = {'operation': operation}
         with patch(module + '.execute', return_value={'sentinel': operation}) as target:
             assert editing_runtime.execute(request, tmp_path, None) == {'sentinel': operation}
             target.assert_called_once_with(request, tmp_path, None)
-        assert dependency_discovery.ATOMIC_REQUIREMENTS[operation] == ('ffprobe',)
+        assert dependency_discovery.ATOMIC_REQUIREMENTS[operation] == (
+            ('sqlite', 'ffmpeg', 'ffprobe') if operation == 'style-recipe-preview' else ('ffprobe',))
