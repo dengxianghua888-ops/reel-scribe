@@ -140,6 +140,16 @@
       "asset_path": "reel-ninegrid-source-review-stage10-final/positive-render/receipt.json",
       "sha256": "477801b854a39da236fe82e45b66becbf1e087a0cc6f90c8f061e26e61a41263",
       "bytes": 19871
+    },
+    "tutorial-stage11-observations": {
+      "asset_path": "reel-stage11-tutorial-observation/report.json",
+      "sha256": "2e52f3bf562ab406655f5e8d9589d362bd0aea2b4525827be5464f4eabc57fc8",
+      "bytes": 9634
+    },
+    "tutorial-stage11-observation-notes": {
+      "asset_path": "reel-stage11-tutorial-observation/README.md",
+      "sha256": "7e973750b7dfc5b6a7461c175d185ae066a2c8ef22342b237cf384f5e6e184f5",
+      "bytes": 4259
     }
   },
   "cases": [
@@ -391,32 +401,49 @@
       "difficulty": "complex",
       "source_id": "tutorial",
       "window_seconds": [
-        25,
-        85
+        32,
+        60.04
       ],
-      "text": "At27s basic edit toolbar; at80s a substantially expanded wikEd toolbar and Save page/Preview/Changes controls.",
-      "evidence_basis": "This worker independently inspected only27s and80s stills; different toolbar states are visible. Transition actions are not observed.",
+      "text": "Observed sparse states: basic editor/Preferences hover32.003s; Preferences36.003s; Gadgets40.003s; wikEd unchecked44.003s then checked48.003s; Preferences Save affordance49.503s; article Read52.003s, Edit hover58.003s; enhanced toolbar59.003/60.003s.",
+      "evidence_basis": "Stage11 individually viewed source stills, with source/frame SHA and actual PTS in bound report; 21 frames overall, not a continuous observed interval. The51.003s darkened article frame indicates a transition, not a visible settings-save confirmation.",
       "dependencies": [
-        "do not drop the unknown transition as redundant before identifying how advanced toolbar state was reached",
-        "retain setup/enablement prerequisites if human review establishes them",
-        "caption placement must not hide toolbar or bottom publication controls"
+        "retain declared setup/navigation anchors when presenting later enhanced-toolbar state, or explicitly label omitted steps",
+        "distinguish visible checkbox/button/editor state from an observed click or server-side successful action",
+        "preserve toolbar and bottom controls from caption occlusion"
       ],
       "expected": [
-        "mark the transition mechanism unknown and request action-level labels instead of inventing enablement steps",
-        "retain reported caption-control occlusion failure as separate visual evidence"
+        "limited supported result: additional toolbar controls visibly appear in later editor frames",
+        "do not infer persistent preference save, complete enablement procedure, or article publication from sparse states"
       ],
-      "runnable_mechanism": "fixed transition candidate for human annotation; layout exclusion checker can test explicitly labeled regions only",
+      "runnable_mechanism": "existing source/evidence identity validation only; ordered source-anchor and unsupported-save-claim artifact-check proposed, NOT_IMPLEMENTED; no machine semantic acceptance",
       "status": "NEEDS_SEMANTIC_REVIEW",
       "unknown": [
-        "No full motion/listening review; cannot claim a particular button enabled the toolbar",
-        "Prior25–31s caption occlusion FAIL retained independently, not treated as complex semantics"
+        "No continuous motion/listening review or verified click events; exact transition actions and successful server responses unknown",
+        "Fresh-session preference persistence, article-save success and current UI applicability unverified",
+        "Prior25–31s caption occlusion FAIL retained independently, not complex semantic evidence"
       ],
       "evidence_refs": [
-        "real-report"
+        "real-report",
+        "tutorial-stage11-observations",
+        "tutorial-stage11-observation-notes"
       ],
       "listening_review": "NOT_RUN",
       "semantic_acceptance": "NOT_RUN",
-      "word_timing_gold": false
+      "word_timing_gold": false,
+      "history": [
+        {
+          "stage": "before-stage11-sparse-observations",
+          "window_seconds": [
+            25,
+            85
+          ],
+          "evidence_basis": "This worker independently inspected only27s and80s stills; different toolbar states are visible. Transition actions are not observed.",
+          "unknown": [
+            "No full motion/listening review; cannot claim a particular button enabled the toolbar",
+            "Prior25–31s caption occlusion FAIL retained independently, not treated as complex semantics"
+          ]
+        }
+      ]
     },
     {
       "id": "software-misleading",
@@ -424,28 +451,56 @@
       "difficulty": "misleading",
       "source_id": "tutorial",
       "window_seconds": [
-        75,
-        85
+        49.45,
+        113.04
       ],
-      "text": "Historical wikEd screen is not evidence that current Wikipedia has the same workflow",
-      "evidence_basis": "This worker inspected source80s static frame: Wikipedia editing page, wikEd toolbar and bottom Save page/Preview/Changes controls.",
+      "text": "Preferences Save at49.503/50.003s is not article Save page at60.003s or113.003s. Late edit-summary happy editing! is entered text, not publication confirmation. Historical wikEd is not a current guide.",
+      "evidence_basis": "Outer envelope covers two sparse observation groups, NOT full-span watching: Preferences Save affordance and subsequent editor states;110.003/113.003s editor states. Bound report also includes separately observed72/80/90/100s frames, none establish successful publication.",
       "dependencies": [
-        "retain historical-version context",
-        "do not infer action order or current UI validity from one still",
-        "do not cut prerequisite setup based solely on visible toolbar"
+        "distinguish preference-saving and article-publication controls",
+        "button/cursor appearance and entered summary must not be upgraded to successful save or persistent state",
+        "retain historical software-version context and label gaps between observed frames"
       ],
       "expected": [
-        "current-version tutorial claim remains unverified; steps outside window cannot be assumed redundant"
+        "claims that preferences persisted after relogin or article was published remain unsupported",
+        "do not infer no save ever occurred between samples either; absence of observed confirmation is not proof of failure"
       ],
-      "runnable_mechanism": "source SHA/window check only; current UI validation and step-order review NOT_RUN",
+      "runnable_mechanism": "existing source/evidence identity validation only; ordered source-anchor and unsupported-save-claim artifact-check proposed, NOT_IMPLEMENTED; no machine semantic acceptance",
       "status": "NEEDS_SEMANTIC_REVIEW",
       "unknown": [
-        "No listening; only80s frame inspected; no current-site lookup or full-motion check"
+        "No listening, continuous observation, verified click/server response, fresh-session reopen, publication history or current-site check",
+        "Exact actions between sparse frames remain unknown; outer envelope is not claimed observation coverage"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "tutorial-stage11-observations",
+        "tutorial-stage11-observation-notes"
+      ],
       "listening_review": "NOT_RUN",
       "semantic_acceptance": "NOT_RUN",
-      "word_timing_gold": false
+      "word_timing_gold": false,
+      "history": [
+        {
+          "stage": "before-stage11-sparse-observations",
+          "window_seconds": [
+            75,
+            85
+          ],
+          "evidence_basis": "This worker inspected source80s static frame: Wikipedia editing page, wikEd toolbar and bottom Save page/Preview/Changes controls.",
+          "unknown": [
+            "No listening; only80s frame inspected; no current-site lookup or full-motion check"
+          ]
+        }
+      ],
+      "sparse_observation_groups_seconds": [
+        [
+          49.45,
+          60.04
+        ],
+        [
+          110,
+          113.04
+        ]
+      ]
     }
   ],
   "work_receipt_keys": {

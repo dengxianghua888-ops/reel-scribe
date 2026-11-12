@@ -89,12 +89,12 @@ def _selected_requirements(identifier, request):
     branch = None
     if identifier == 'work-version':
         branch = request.get('action') if request else None
-        if branch in ('init', 'commit', 'set-protection', 'restore'):
+        if branch in ('init', 'commit', 'set-protection', 'restore', 'prepare-local-undo'):
             required.append('ffprobe')
         elif branch == 'relink-style-resources':
             required.append('style-resources')
         elif branch != 'read':
-            unknown.append('action: read, relink-style-resources or document-validating mutation')
+            unknown.append('action: read, relink-style-resources or document-validating action')
     elif identifier == 'work-batch-render':
         branch = request.get('action') if request else None
         if branch in ('prepare', 'run'):

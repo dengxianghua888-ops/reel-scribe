@@ -119,3 +119,39 @@ work-render 的当前作品和 preview_candidate 可传入 operation-contract �
 首次也通过 batch prepare/run 生成的预览才能由同一队列复用。独立 `work-render` 已产出的预览不会被批队列自动收编；重新创建批次可能重新渲染。完整回执已写但队列未完成时沿用 `RECOVERED_RECEIPT`；缺回执的中断尝试保留，并创建新 attempt，不把零散子产物视作可复用结果。状态查询仍只读且 `artifact_integrity: NOT_RECHECKED_STATUS_ONLY`。
 
 本增量是整份候选预览复用，不是局部片段缓存、增量编码或风格效果验收。不生成第二份作品账本，不更新 Work 头，不绕过既有 QA。
+
+### `prepare-local-undo`: preserve later edits while preparing a narrow undo
+
+This action does **not** restore a whole historical document and does not commit.
+Required input fields are `operation:work-version`, `action:prepare-local-undo`,
+`store`, current `expected_version`, integer `undo_sequence`, nonempty `fields`,
+and the existing explicit `scope` (never inferred or widened).
+A field selector is either `{kind:caption_style, field:font_size|margin_v|color_rgb}`
+or `{kind:audio_track, id:<existing track ID>, field:gain_db}`. Duplicate selectors,
+font changes, unknown fields, missing fields and added/deleted tracks are unsupported.
+
+The selected sequence must be an ordinary `commit` with an existing immediate
+parent, on the current linear ancestry. Historical documents and version tokens
+are verified with the same authoritative Work loader, not imported snapshots.
+For each exact selected field, compare the parent (before), selected revision
+(after), and current head: current equal to after restores before; current equal
+to before is already restored; any third value conflicts and produces no candidate.
+All unselected current content stays unchanged. Audio track identity must match
+in all three documents apart from gain, including source reference, source window,
+anchor, offset, anchored clip and its source. Equal gain alone is not identity.
+
+A changed candidate with current `style_bindings` is rejected as
+`UNDO_STYLE_BINDING_REQUIRES_EXPLICIT_RESOLUTION`: this entry point does not support
+local undo of bound recipe works. Use the existing explicit recipe/scope workflow
+and revalidate; do not clear bindings or constraints merely to bypass this guard.
+No old recipe/constraint endorsement is silently rewritten or inherited.
+
+The complete current and candidate documents still pass ordinary `revision_diff`
+source validation, scope/CAS and persistent protection rules. A successful change
+writes ordinary `work-candidate/1` `candidate.json`, `local-undo-report.json` and
+an unchanged current `work-state.json`; the report binds before/after/current
+sequence, version and document digest plus exact field values. `NO_OP` emits no
+candidate. Conflicts emit no candidate. Commit is a separate existing action,
+which must recheck the current version and candidate. No render, delivery choice,
+semantic acceptance or media/listening approval is implied. As with other Work
+operations, use a fresh operation output directory.

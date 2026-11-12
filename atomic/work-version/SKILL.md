@@ -9,7 +9,7 @@ description: 在明确本地作品库中初始化、读取、提交候选、登�
 
 ## 本库本地 Work 实现
 
-执行 [作品合同](../../contracts/work-contract.md) 的 work-version，action 为 init/read/commit/set-protection/restore/relink-style-resources。作品目录中的 SQLite 是权威状态，每次调用的 work-state.json 是只读快照；不要修改数据库或把旧导出文件当最新状态。
+执行 [作品合同](../../contracts/work-contract.md) 的 work-version，action 为 init/read/commit/set-protection/restore/relink-style-resources/prepare-local-undo。作品目录中的 SQLite 是权威状态，每次调用的 work-state.json 是只读快照；不要修改数据库或把旧导出文件当最新状态。
 
 先 read，再基于返回 version/document 生成候选。commit 同时校验最新令牌、候选基础、修改范围与源文件；即使候选文件重算了哈希，也不能绕过范围。用户的最新手工修改需通过当前可用适配器登记成版本，不能假称这里自动监听了外部编辑器。
 
@@ -34,3 +34,9 @@ WORK_BUSY 表示其他写事务占用，先重读或核对句柄；WORK_VERSION_
 当用户明确要在同一作品中选用一份已经核验的严格媒体母版时，先读作品当前头和 `work-delivery read` 的最近事件，再以 `work-delivery select` 传当前版本、事件号、成功回执、Work 交付绑定和决策记录。`restore` 选择历史有效事件，`clear` 回到普通 `work-render`；四个动作由 [交付实现](../../runtime/delivery_ops.py)执行。事件只改变交付指针，不修改 Work 文档、片段或历史修订。原子不自行决定是否采用候选。
 
 读取会重新核作品头、媒体、严格 helper、请求与 FFmpeg/ffprobe 工具链。任一身份失效则返回 `RENDER_FALLBACK`；不能把旧回执改名后选择。此操作始终标记 `publishable=false`，完整视听、播放器兼容和真人手改验收另行完成。
+
+## 保留后续手改的受限局部撤销
+
+`prepare-local-undo` 只准备标准候选，不提交。输入当前 `expected_version`、历史普通提交 `undo_sequence`、精确结构化 `fields` 和现有完整 `scope`。支持 `{kind:caption_style,field:font_size|margin_v|color_rgb}` 及 `{kind:audio_track,id:既存轨ID,field:gain_db}`。比较历史前值/后值/当前值：当前仍为后值才恢复前值，已为前值返回 NO_OP（无候选），第三值冲突拒绝。保留全部未选择的后续修改；历史缺字段、删轨或音轨源/窗口/锚点身份改变均拒绝。
+
+有现存样式绑定且需要变化时，本入口不支持局部 undo，须使用既有显式 recipe/范围路径处理并重验；不得建议清除绑定或约束绕过。不会静默改绑定、字体、源、时序或内容保护。检查候选后另行使用现有 commit，旧头仍拒绝。结果不代表渲染、听审或真人编辑器验收。

@@ -304,6 +304,7 @@ def work_version(request,directory,tools):
     action=request.get('action')
     fields={'init':['store','work_id','document','message','author'],
             'read':['store'],
+            'prepare-local-undo':['store','expected_version','undo_sequence','fields','scope'],
             'commit':['store','expected_version','candidate','message','author'],
             'set-protection':['store','expected_version','protection','change_basis','message','author'],
             'restore':['store','expected_version','target_sequence','message','author'],
@@ -376,7 +377,14 @@ def work_version(request,directory,tools):
                         'semantic_review':'NOT_RUN','media_review':'NOT_RUN'}
             else:
                 require(request['expected_version']==current['version'],'WORK_VERSION_CONFLICT')
-                if action=='commit':
+                if action=='prepare-local-undo':
+                    from local_undo import prepare
+                    report,bundle=prepare(db,current,request,tools)
+                    result={**current,'action':action,**report}
+                    if bundle is not None:
+                        write_json(directory/'candidate.json',bundle)
+                    write_json(directory/'local-undo-report.json',report)
+                elif action=='commit':
                     candidate_ref=source(request['candidate'])
                     candidate_bytes=Path(candidate_ref['path']).read_bytes()
                     require(hashlib.sha256(candidate_bytes).hexdigest()==candidate_ref['sha256'],
