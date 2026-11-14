@@ -13,6 +13,8 @@ python tools/editor-adapters/review_caption_translation.py \
 
 All three files must match the supplied hashes before and after analysis; the JSON inputs have size limits and duplicate-key rejection. The safe writer serializes/encodes before exclusively creating output and never overwrites a previous report.
 
+For each JSON input, the tool reads at most 10,000,001 bytes once, rejects anything above 10,000,000 bytes, and hashes and parses that same captured byte sequence. A separate pathname read cannot supply different text under the pinned JSON hash. The final pathname checks still reject persistent drift. These checks are not filesystem locking: fonts remain loaded through Pillow by pathname, and this narrow JSON fix does not claim to resolve font replacement races or change the separate readability/native-project tools.
+
 ## Draft schema
 
 The root has exactly `schema="caption-translation-draft/1"` and `entries`. Each entry has exactly:

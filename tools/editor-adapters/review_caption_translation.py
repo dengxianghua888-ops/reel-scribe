@@ -1,5 +1,6 @@
 """Pinned translation-draft comparison report, never automatic translation/adoption."""
 import argparse
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -110,13 +111,21 @@ def review(source_map, draft, font_path, *, fps, frame_end, minimum=32, maximum=
                            'Language label does not verify language, accuracy, meaning, or speech alignment']}
 
 
+def read_pinned_json(path, expected):
+    # Hash exactly the bounded bytes we parse, not a separately opened pathname.
+    with path.open('rb') as stream:
+        payload = stream.read(10_000_001)
+    require(len(payload) <= 10_000_000, 'JSON_SIZE_LIMIT')
+    require(hashlib.sha256(payload).hexdigest() == expected, 'STALE_INPUT')
+    return json.loads(payload.decode('utf-8'), object_pairs_hook=contract.unique)
+
+
 def build(args):
     paths = [Path(args.source_map).resolve(strict=True), Path(args.draft).resolve(strict=True),
              Path(args.font).resolve(strict=True)]
     expected = [args.source_sha256, args.draft_sha256, args.font_sha256]
-    require(all(p.stat().st_size <= 10_000_000 for p in paths[:2]), 'JSON_SIZE_LIMIT')
-    require(all(contract.digest(p) == h for p, h in zip(paths, expected)), 'STALE_INPUT')
-    source, draft = [json.loads(p.read_text(), object_pairs_hook=contract.unique) for p in paths[:2]]
+    source, draft = [read_pinned_json(p, h) for p, h in zip(paths[:2], expected[:2])]
+    require(contract.digest(paths[2]) == expected[2], 'STALE_INPUT')
     result = review(source, draft, paths[2], fps=args.fps, frame_end=args.frame_end,
                     minimum=args.minimum_size, maximum=args.maximum_size)
     require(all(contract.digest(p) == h for p, h in zip(paths, expected)), 'INPUT_CHANGED_DURING_READ')

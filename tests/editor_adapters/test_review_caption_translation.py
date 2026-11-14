@@ -128,3 +128,62 @@ def test_unicode_line_and_paragraph_separator_rejected(separator):
     d=draft();d['entries'][0]['target_text']='前'+separator+'后'
     with pytest.raises(ValueError,match='TARGET_MUST_BE_SINGLE_PARAGRAPH'):
         m.review(source(),d,'unused',fps=24,frame_end=72)
+
+
+@pytest.mark.parametrize('target', ['source_map', 'draft'])
+def test_report_never_attributes_reopened_json_to_pinned_bytes(tmp_path, monkeypatch, target):
+    a = args(tmp_path)
+    path = getattr(a, target)
+    frozen = path.read_bytes()
+    changed = json.loads(frozen)
+    if target == 'source_map':
+        changed['rows'][1]['text'] = 'Unpinned context replacement.'
+    else:
+        changed['entries'][0]['target_text'] = 'Unpinned translation replacement.'
+    real_read_text = Path.read_text
+
+    def replacing_read(self, *pos, **kw):
+        if self == path:
+            self.write_text(json.dumps(changed))
+            try:
+                return real_read_text(self, *pos, **kw)
+            finally:
+                self.write_bytes(frozen)
+        return real_read_text(self, *pos, **kw)
+
+    monkeypatch.setattr(Path, 'read_text', replacing_read)
+    m.build(a)
+    result = json.loads(real_read_text(a.output))
+    assert path.read_bytes() == frozen
+    assert result['draft_sha256'] == a.draft_sha256
+    assert result['source_map_sha256'] == a.source_sha256
+    row = result['reports'][0]
+    assert row['target_text'] == draft()['entries'][0]['target_text']
+    assert row['source_context'][0]['text'] == source()['rows'][1]['text']
+
+
+@pytest.mark.parametrize('target', ['source_map', 'draft'])
+def test_persistent_json_change_during_analysis_rejected(tmp_path, monkeypatch, target):
+    a = args(tmp_path)
+    original_review = m.review
+
+    def changing_review(*pos, **kw):
+        result = original_review(*pos, **kw)
+        getattr(a, target).write_text('{}')
+        return result
+
+    monkeypatch.setattr(m, 'review', changing_review)
+    with pytest.raises(ValueError, match='INPUT_CHANGED_DURING_READ'):
+        m.build(a)
+    assert not a.output.exists()
+
+
+@pytest.mark.parametrize('target', ['source_map', 'draft'])
+def test_json_size_limit_checked_on_consumed_bytes(tmp_path, monkeypatch, target):
+    a = args(tmp_path)
+    path = getattr(a, target)
+    path.write_bytes(b' ' * 10_000_001)
+    setattr(a, 'source_sha256' if target == 'source_map' else 'draft_sha256', m.contract.digest(path))
+    with pytest.raises(ValueError, match='JSON_SIZE_LIMIT'):
+        m.build(a)
+    assert not a.output.exists()
