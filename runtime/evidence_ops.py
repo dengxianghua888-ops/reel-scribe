@@ -113,6 +113,11 @@ def compile_evidence(request, directory, tools, *, normalized_document=None, val
                 a=max(u['start'],c['start']);b=min(u['end'],c['end'])
                 source_start=c['start'];output_start=c['output_start'];speed=c['source_seconds_per_output_second']
             require(b>a,'CARRIER_DOES_NOT_COVER_UNIT')
+            if key[0]=='audio-track' and 'envelope' in c:
+                env=c['envelope'];lo=Fraction(str(c['start']));hi=Fraction(str(c['end']))
+                fi=Fraction(env['fade_in_samples'],48000);fo=Fraction(env['fade_out_samples'],48000)
+                require(not ((fi and Fraction(str(a))<lo+fi) or (fo and Fraction(str(b))>hi-fo)),
+                        'EVIDENCE_AUDIO_ENVELOPE_OVERLAP: '+oid)
             start=output_start+(a-source_start)/speed;end=start+(b-a)/speed
             part={'carrier':ref,'source_start':float(a),'source_end':float(b),'output_start':float(start),
                   'output_end':float(end),'source_seconds_per_output_second':float(speed)}

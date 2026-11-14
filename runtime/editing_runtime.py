@@ -810,9 +810,12 @@ def map_captions(request, directory, tools):
     require(isinstance(request['cues'], list), 'CUES_ARRAY_REQUIRED')
     ids, mapped = set(), []
     for cue in request['cues']:
-        exact_keys(cue, ['id', 'source_id', 'start', 'end', 'text'], ['id', 'source_id', 'start', 'end', 'text'])
+        exact_keys(cue, ['id', 'source_id', 'start', 'end', 'text', 'style_override'], ['id', 'source_id', 'start', 'end', 'text'])
         require(isinstance(cue['id'], str) and cue['id'] and cue['id'] not in ids, 'CUE_ID_DUPLICATE_OR_EMPTY')
         ids.add(cue['id'])
+        if 'style_override' in cue:
+            from caption_style import validate_override
+            validate_override(cue['style_override'],normalized['height'])
         require(isinstance(cue['text'], str) and cue['text'].strip(), 'CUE_TEXT_REQUIRED')
         require(cue['source_id'] in normalized['sources'], 'CUE_SOURCE_UNKNOWN')
         a, b = span(cue['start'], cue['end'], normalized['sources'][cue['source_id']]['media']['duration'])
@@ -830,6 +833,7 @@ def map_captions(request, directory, tools):
             require(start < end, 'CUE_LOST_TO_FRAME_QUANTIZATION')
             mapped.append({'id': cue['id'], 'clip_id': clip['id'], 'start': start,
                            'end': end, 'text': cue['text'], 'partial': partial})
+            if 'style_override' in cue:mapped[-1]['style_override']=copy.deepcopy(cue['style_override'])
     mapped.sort(key=lambda c: (c['start'], c['end']))
     write_json(directory / 'captions.json', {'schema': 'output-captions/1', 'plan_sha256': fingerprint(request['plan']), 'cues': mapped})
     def timestamp(seconds):
@@ -842,8 +846,10 @@ def map_captions(request, directory, tools):
         for i, cue in enumerate(mapped, 1):
             require(round(cue['end'] * 1000) > round(cue['start'] * 1000), 'CUE_TOO_SHORT_FOR_SRT')
             stream.write(f'{i}\n{timestamp(cue["start"])} --> {timestamp(cue["end"])}\n{cue["text"]}\n\n')
-    return {'mapped_cues': len(mapped), 'partial_cues': sum(x['partial'] for x in mapped),
+    result={'mapped_cues': len(mapped), 'partial_cues': sum(x['partial'] for x in mapped),
             'text_modified': False, 'semantic_accuracy': 'UNVERIFIED'}
+    if any('style_override' in cue for cue in mapped):result['local_presentation']='Preserved in captions.json only; SRT cannot represent style overrides; effective style requires downstream global style'
+    return result
 
 
 def patch_plan(request, directory, tools):
@@ -969,7 +975,7 @@ def audio_mix(request, directory, tools):
         filters.append(f'anullsrc=r=48000:cl=stereo,atrim=duration={picture_duration}[base]')
     labels.append('[base]')
     for i, track in enumerate(request['tracks'], 1):
-        exact_keys(track, ['source', 'start', 'end', 'output_start', 'gain_db'], ['source','start','end','output_start','gain_db'])
+        exact_keys(track, ['source', 'start', 'end', 'output_start', 'gain_db', 'envelope'], ['source','start','end','output_start','gain_db'])
         ref=source(track['source']); info=tools.probe(ref['path'])
         require(any(s['codec_type']=='audio' for s in info['streams']), 'TRACK_AUDIO_REQUIRED')
         a,b=span(track['start'],track['end'],info['duration'])
@@ -979,10 +985,28 @@ def audio_mix(request, directory, tools):
         require(output_start+b-a <= picture_duration+0.000001, 'AUDIO_EXCEEDS_PICTURE')
         volume=number(track['gain_db'],'gain_db'); require(-120 <= volume <= 24,'GAIN_OUT_OF_RANGE')
         samples=round(output_start*48000)
-        args += ['-i',ref['path']]
-        filters.append(f'[{i}:a:0]atrim=start={a}:end={b},asetpts=PTS-{a}/TB,aresample=48000:async=1:first_pts=0,'
-                       f'aformat=sample_fmts=fltp:channel_layouts=stereo,volume={volume}dB,adelay={samples}S:all=1[t{i}]')
+        envelope_filter=''
+        if 'envelope' in track:
+            from audio_ops import validate_work_envelope, work_envelope_filters, envelope_sample_count
+            envelope_sample_count(a);envelope_sample_count(b)
+            samples=envelope_sample_count(output_start)
+            count=validate_work_envelope(track['envelope'],Fraction(envelope_sample_count(b)-envelope_sample_count(a),48000))
+            audio_intersection(track_clock,a,b,require_full=True,require_precise=True)
+            checked=directory/f'envelope-source-{i}.f32'
+            tools.ff(['-copyts','-i',ref['path'],'-map','0:a:0','-af',
+                      f'atrim=start={a}:end={b},asetpts=PTS-STARTPTS,aresample=48000',
+                      '-ar','48000','-ac','2','-c:a','pcm_f32le','-f','f32le',str(checked)])
+            require(checked.stat().st_size==count*8,'ENVELOPE_AUDIO_COVERAGE_INCOMPLETE')
+            envelope_filter=work_envelope_filters(track['envelope'],count)
+        args += (['-f','f32le','-ar','48000','-ac','2','-i',str(checked)] if 'envelope' in track else ['-i',ref['path']])
+        if 'envelope' in track:
+            filters.append(f'[{i}:a:0]asetpts=PTS-STARTPTS,aformat=sample_fmts=fltp:channel_layouts=stereo,volume={volume}dB{envelope_filter},adelay={samples}S:all=1[t{i}]')
+        else:
+            filters.append(f'[{i}:a:0]atrim=start={a}:end={b},asetpts=PTS-{a}/TB,aresample=48000:async=1:first_pts=0,'
+                       f'aformat=sample_fmts=fltp:channel_layouts=stereo,volume={volume}dB{envelope_filter},adelay={samples}S:all=1[t{i}]')
         labels.append(f'[t{i}]'); used.append({'source':ref,'start':a,'end':b,'output_start_samples':samples,'gain_db':volume,'audio_clock_basis':track_clock.get('playback_basis', {'status':'OBSERVED_ONLY'})})
+        if 'envelope' in track:
+            used[-1].update(envelope=dict(track['envelope']), envelope_pcm={'path':str(checked),'sha256':sha256(checked),'samples':count,'sample_rate':48000,'format':'pcm_f32le','padding':False})
     filters.append(''.join(labels)+f'amix=inputs={len(labels)}:duration=first:dropout_transition=0:normalize=0[mix]')
     tools.ff(args+['-filter_complex',';'.join(filters),'-map','0:v:0','-map','[mix]','-c:v','copy','-c:a','aac','-b:a','192k',str(directory/'mixed.mp4')])
     return {'source':asset,'tracks':used,'base_gain_windows':windows,'picture_clock':picture_clock,
@@ -991,6 +1015,46 @@ def audio_mix(request, directory, tools):
             'gain_window_precision':'FFmpeg audio frame boundaries',
             'automatic_ducking':False,'automatic_limiter':False,
             'audio_review':'NOT_RUN','note':'Gains and overlap are caller decisions; no automatic peak or loudness correction'}
+
+
+def caption_ass(request, width, height, duration, *, layout_padding=0):
+    """Canonical static ASS; padding preserves the original layout rectangle."""
+    family=request['font_family'];size=number(request['font_size'],'font_size',1)
+    margin=number(request['margin_v'],'margin_v',0);rgb=request['color_rgb']
+    require(isinstance(family,str) and bool(re.fullmatch(r'[\w \-]+',family)), 'FONT_FAMILY_INVALID')
+    require(size <= height and margin < height, 'CAPTION_GEOMETRY_INVALID')
+    require(isinstance(rgb,str) and bool(re.fullmatch('[0-9A-Fa-f]{6}',rgb)), 'COLOR_RGB_INVALID')
+    require(isinstance(request['cues'],list) and request['cues'],'CUES_REQUIRED')
+    require(type(layout_padding) is int and layout_padding >= 0, 'CAPTION_PADDING_INVALID')
+    ass='[Script Info]\nScriptType: v4.00+\nPlayResX: '+str(width + 2*layout_padding)+'\nPlayResY: '+str(height + 2*layout_padding)+'\nWrapStyle: 0\n'
+    ass+='[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n'
+    ass+=f'Style: Default,{family},{size},&H00{rgb[4:6]}{rgb[2:4]}{rgb[0:2]},&H00000000,1,1,0,2,{20+layout_padding},{20+layout_padding},{margin+layout_padding},1\n'
+    local_names={}
+    for index,cue in enumerate(request['cues']):
+        exact_keys(cue,['start','end','text','style_override'],['start','end','text'])
+        if 'style_override' in cue:
+            from caption_style import effective_style
+            style=effective_style({k:request[k] for k in ['font_family','font_size','margin_v','color_rgb']},cue['style_override'],height)
+            local_size=number(style['font_size'],'font_size',1);local_margin=number(style['margin_v'],'margin_v',0);local_rgb=style['color_rgb']
+            require(local_size<=height and local_margin<height,'CAPTION_GEOMETRY_INVALID')
+            name=f'Cue{index:04d}';local_names[index]=name
+            ass+=f'Style: {name},{family},{local_size},&H00{local_rgb[4:6]}{local_rgb[2:4]}{local_rgb[0:2]},&H00000000,1,1,0,2,{20+layout_padding},{20+layout_padding},{local_margin+layout_padding},1\n'
+    ass+='[Events]\nFormat: Layer, Start, End, Style, Text\n'
+    previous_end=0
+    def ts(value):
+        centis=round(value*100); hours,centis=divmod(centis,360000); mins,centis=divmod(centis,6000); secs,centis=divmod(centis,100)
+        return f'{hours}:{mins:02}:{secs:02}.{centis:02}'
+    for index,cue in enumerate(request['cues']):
+        exact_keys(cue,['start','end','text','style_override'],['start','end','text'])
+        a,b=span(cue['start'],cue['end'],duration)
+        require(a >= previous_end,'OVERLAPPING_CAPTIONS');previous_end=b
+        require(round(b*100)>round(a*100),'CUE_TOO_SHORT_FOR_ASS')
+        require(isinstance(cue['text'],str) and cue['text'].strip(),'CUE_TEXT_REQUIRED')
+        # ASS override syntax must not be accepted through ordinary text.
+        require(not any(x in cue['text'] for x in ['{','}','\\','\r']),'ASS_CONTROL_CHARACTERS_UNSUPPORTED')
+        text=cue['text'].replace('\n',r'\N')
+        ass+=f'Dialogue: 0,{ts(a)},{ts(b)},{local_names.get(index,"Default")},{text}\n'
+    return ass
 
 
 def caption_burn(request, directory, tools):
@@ -1009,24 +1073,7 @@ def caption_burn(request, directory, tools):
     suffix=Path(font['path']).suffix.lower(); require(suffix in ['.ttf','.otf','.ttc'],'FONT_FORMAT_UNSUPPORTED')
     from source_binding import execution_path
     shutil.copyfile(execution_path(font['path']),directory/'fonts'/('specified'+suffix))
-    ass='[Script Info]\nScriptType: v4.00+\nPlayResX: '+str(video['width'])+'\nPlayResY: '+str(video['height'])+'\nWrapStyle: 0\n'
-    ass+='[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n'
-    ass+=f'Style: Default,{family},{size},&H00{rgb[4:6]}{rgb[2:4]}{rgb[0:2]},&H00000000,1,1,0,2,20,20,{margin},1\n'
-    ass+='[Events]\nFormat: Layer, Start, End, Style, Text\n'
-    previous_end=0
-    def ts(value):
-        centis=round(value*100); hours,centis=divmod(centis,360000); mins,centis=divmod(centis,6000); secs,centis=divmod(centis,100)
-        return f'{hours}:{mins:02}:{secs:02}.{centis:02}'
-    for cue in request['cues']:
-        exact_keys(cue,['start','end','text'],['start','end','text'])
-        a,b=span(cue['start'],cue['end'],media['duration'])
-        require(a >= previous_end,'OVERLAPPING_CAPTIONS');previous_end=b
-        require(round(b*100)>round(a*100),'CUE_TOO_SHORT_FOR_ASS')
-        require(isinstance(cue['text'],str) and cue['text'].strip(),'CUE_TEXT_REQUIRED')
-        # ASS override syntax must not be accepted through ordinary text.
-        require(not any(x in cue['text'] for x in ['{','}','\\','\r']),'ASS_CONTROL_CHARACTERS_UNSUPPORTED')
-        text=cue['text'].replace('\n',r'\N')
-        ass+=f'Dialogue: 0,{ts(a)},{ts(b)},Default,{text}\n'
+    ass=caption_ass(request,video['width'],video['height'],media['duration'])
     (directory/'captions.ass').write_text(ass,encoding='utf-8')
     tools.ff(['-i',asset['path'],'-vf','ass=captions.ass:fontsdir=fonts','-map','0:v:0','-map','0:a?',
               '-c:v','libx264','-crf','18','-preset','medium','-c:a','copy','captioned.mp4'],cwd=directory)
@@ -1057,6 +1104,27 @@ def tts_macos(request, directory, tools):
 
 def execute(request, directory, tools):
     op = request.get('operation')
+    if op == 'creation-recommendation':
+        from creation_recommendation_ops import execute as recommendation_execute
+        return recommendation_execute(request, directory, tools)
+    if op == 'reference-transfer-prepare':
+        from reference_transfer_ops import execute as reference_execute
+        return reference_execute(request, directory, tools)
+    if op == 'creation-brief-prepare':
+        from creation_brief_ops import execute as brief_execute
+        return brief_execute(request, directory, tools)
+    if op == 'result-preview-compile':
+        from result_preview_ops import execute as result_preview_execute
+        return result_preview_execute(request, directory, tools)
+    if op == 'style-recipe-preview':
+        from style_preview_ops import execute as preview_execute
+        return preview_execute(request, directory, tools)
+    if op == 'style-recipe-compile':
+        from style_recipe_ops import execute as recipe_execute
+        return recipe_execute(request, directory, tools)
+    if op == 'revision-impact-inspect':
+        from revision_impact import execute as impact_execute
+        return impact_execute(request, directory, tools)
     if op == 'host-bridge':
         from host_bridge import execute as bridge_execute
         return bridge_execute(request, directory, tools)
@@ -1117,6 +1185,9 @@ def execute(request, directory, tools):
     if op in ['work-version','timeline-revise','work-render']:
         from work_ops import execute as work_execute
         return work_execute(request,directory,tools)
+    if op == 'tutorial-artifact-check':
+        from artifact_check_ops import execute as artifact_check_execute
+        return artifact_check_execute(request,directory,tools)
     if op in ['screen-focus','tutorial-plan-compile']:
         from tutorial_ops import execute as tutorial_execute
         return tutorial_execute(request,directory,tools)

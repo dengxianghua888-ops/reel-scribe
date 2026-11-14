@@ -232,6 +232,7 @@ def revision_preview_command(
     base: Annotated[Path | None, typer.Option("--base", help="既有 revision-snapshot，拒绝过期引用")] = None,
     beat_id: Annotated[list[str] | None, typer.Option("--beat-id", help="只查看指定 beat，可重复")] = None,
     raw_cards: Annotated[Path | None, typer.Option("--raw-cards", help="已有 RawEvidenceCard 数组；仅投影声明")] = None,
+    support_windows: Annotated[Path | None, typer.Option("--support-windows", help="明确声明的源窗口；仅检查已绑定渲染记录覆盖，不判断语义")] = None,
     format: Annotated[PreviewFormat, typer.Option("--format", help="输出 JSON 或离线只读 HTML；只写标准输出")] = PreviewFormat.json,
 ) -> None:
     """定位选材、分镜引用与已绑定的渲染消费；预览不表示验证或采用通过。"""
@@ -239,15 +240,18 @@ def revision_preview_command(
     from .workspace import sha
 
     try:
-        paths = [path for path in (proposal, base, raw_cards) if path is not None]
-        identities = {path: sha(path) for path in paths}
-        documents = {path: json.loads(path.read_text(encoding="utf-8")) for path in paths}
+        paths = [path for path in (proposal, base, raw_cards, support_windows) if path is not None]
+        import hashlib
+        snapshots = {path: path.read_bytes() for path in paths}
+        identities = {path: hashlib.sha256(data).hexdigest() for path, data in snapshots.items()}
+        documents = {path: json.loads(data) for path, data in snapshots.items()}
         if raw_cards is not None and not isinstance(documents[raw_cards], list):
             raise ValueError("RAW_CARDS_MUST_BE_A_LIST")
         result = preview_revision(work_dir,
             proposal=documents[proposal] if proposal is not None else None,
             base=documents[base] if base is not None else None, beat_ids=beat_id,
-            raw_cards=documents[raw_cards] if raw_cards is not None else None)
+            raw_cards=documents[raw_cards] if raw_cards is not None else None,
+            support_windows=documents[support_windows] if support_windows is not None else None)
         if any(sha(path) != value for path, value in identities.items()):
             raise ValueError("PREVIEW_INPUT_DOCUMENT_CHANGED")
         if format == PreviewFormat.html:

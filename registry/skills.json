@@ -642,6 +642,62 @@
         "generation and actual editing tools are supplied by the running Agent; no provider is required for PLAN",
         "full viewing/listening, independent content outcomes and native host compatibility remain unvalidated"
       ]
+    },
+    {
+      "id": "style-recipe-compile",
+      "layer": "atomic",
+      "entry": "atomic/style-recipe-compile/SKILL.md",
+      "description": "将摘要绑定的显式字幕与音轨包装配方编译为受范围保护的作品候选；不自动选择内容、不渲染、不把风格卡当已验证效果。",
+      "status": "experimental"
+    },
+    {
+      "id": "revision-impact-inspect",
+      "layer": "atomic",
+      "entry": "atomic/revision-impact-inspect/SKILL.md",
+      "description": "只读比较受范围约束的作品候选，列出阶段输入变化与版本绑定的复验项；不执行缓存复用、不继承旧版本验收。",
+      "status": "experimental"
+    },
+    {
+      "id": "style-recipe-preview",
+      "layer": "atomic",
+      "entry": "atomic/style-recipe-preview/SKILL.md",
+      "description": "对同一当前作品的两到四份显式包装配方生成隔离视频预览与参数对照；不提交作品、不自动选风格，不继承真实效果验收。",
+      "status": "experimental"
+    },
+    {
+      "id": "result-preview-compile",
+      "layer": "atomic",
+      "entry": "atomic/result-preview-compile/SKILL.md",
+      "description": "将明确教程结果源窗前置为标注的后段画面预览，保留完整原流程并按显式范围生成Work候选；不判断因果、不自动参考迁移、不提交作品。",
+      "status": "local-synthetic-tested"
+    },
+    {
+      "id": "creation-brief-prepare",
+      "layer": "atomic",
+      "entry": "atomic/creation-brief-prepare/SKILL.md",
+      "description": "将明确解析且标明出处的简报绑定当前Work，准备字幕呈现、教程校验或显式口播决定请求并列缺项；不自动推荐、渲染或提交。",
+      "status": "local-synthetic-tested"
+    },
+    {
+      "id": "creation-recommendation",
+      "layer": "atomic",
+      "entry": "atomic/creation-recommendation/SKILL.md",
+      "description": "依明确简报推荐受限呈现候选，显式选择、记录反馈并按明确问题准备一轮修正；不自动采纳或认证效果。",
+      "status": "experimental"
+    },
+    {
+      "id": "reference-transfer-prepare",
+      "layer": "atomic",
+      "entry": "atomic/reference-transfer-prepare/SKILL.md",
+      "description": "逐项记录参考观察的采纳、调整或舍弃，准备字幕呈现或明确教程结果先行请求；保留原流程与保护，不认证观察真伪或提交作品。",
+      "status": "experimental"
+    },
+    {
+      "id": "tutorial-artifact-check",
+      "layer": "atomic",
+      "entry": "atomic/tutorial-artifact-check/SKILL.md",
+      "description": "核验明确教程产物文件身份及声明的检查窗口关联，区分文件缺失和证据链完整；不认证观察真伪、服务端保存或实际教学效果。",
+      "status": "experimental"
     }
   ]
 }

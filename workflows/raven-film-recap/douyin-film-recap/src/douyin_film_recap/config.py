@@ -177,11 +177,12 @@ class RenderConfig(FlexibleModel):
     subtitle_font_file: str | None = None
     # Additional libass font discovery directory (mutually exclusive with file).
     subtitle_fonts_dir: str | None = None
-    subtitle_font_size: int = 62
-    subtitle_margin_v: int = 250
+    # Output-canvas pixels; render pins ASS PlayResX/Y to width/height.
+    subtitle_font_size: int = Field(default=62, gt=0)
+    subtitle_margin_v: int = Field(default=250, ge=0)
     subtitle_max_chars_per_line: int = Field(default=16, gt=0)
     subtitle_max_lines: int = Field(default=2, gt=0)
-    subtitle_outline: int = 3
+    subtitle_outline: int = Field(default=3, ge=0)
 
 
 class QCConfig(FlexibleModel):

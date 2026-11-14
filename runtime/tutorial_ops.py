@@ -1,5 +1,6 @@
 """Explicit screen framing and evidence-window compilation, without UI interpretation."""
 import re
+import copy
 from fractions import Fraction
 
 
@@ -13,9 +14,47 @@ def rectangle(value, width, height):
     return x, y, w, h
 
 
+def resolve_focus_coordinates(request, video):
+    """Convert only an explicit full-raster, equal-scale display declaration."""
+    from editing_runtime import exact_keys, require
+    crop=copy.deepcopy(request['crop']);highlights=copy.deepcopy(request['highlights'])
+    require(isinstance(highlights,list),'HIGHLIGHTS_ARRAY_REQUIRED')
+    if 'coordinate_space' not in request:
+        return crop,highlights,None
+    space=request['coordinate_space']
+    fields=['kind','width','height','source_width','source_height']
+    exact_keys(space,fields,fields)
+    require(space['kind']=='display','FOCUS_COORDINATE_SPACE_UNSUPPORTED')
+    require(all(type(space[k]) is int and space[k]>0 for k in fields if k!='kind'),'FOCUS_COORDINATE_DIMENSIONS_INVALID')
+    require((space['source_width'],space['source_height'])==(video['width'],video['height']),'FOCUS_SOURCE_DIMENSION_MISMATCH')
+    require(space['width']*video['height']==space['height']*video['width'],'FOCUS_DISPLAY_ASPECT_MISMATCH')
+    ratio=Fraction(video['width'],space['width'])
+    def integer(value):
+        require(type(value) is int,'INTEGER_RECTANGLE_REQUIRED')
+        result=value*ratio
+        require(result.denominator==1,'FOCUS_NONINTEGER_SOURCE_COORDINATE')
+        return result.numerator
+    def mapped(rect):
+        rectangle(rect,space['width'],space['height'])
+        return {key:integer(value) for key,value in rect.items()}
+    crop=mapped(crop)
+    for item in highlights:
+        exact_keys(item,['start','end','box','color_rgb','thickness'],['start','end','box','color_rgb','thickness'])
+        item['box']=mapped(item['box'])
+        require(type(item['thickness']) is int and item['thickness']>0,'THICKNESS_INVALID')
+        item['thickness']=integer(item['thickness'])
+    audit={'declared_space':copy.deepcopy(space),'input_crop':copy.deepcopy(request['crop']),
+           'input_highlights':copy.deepcopy(request['highlights']),
+           'source_dimensions':{'width':video['width'],'height':video['height']},
+           'display_to_source_scale':{'numerator':ratio.numerator,'denominator':ratio.denominator},
+           'assumption':'Caller declares a complete unrotated source raster scaled uniformly, without mirroring, letterboxing, borders or cropping; not verified screenshot provenance',
+           'rounding':'NONE'}
+    return crop,highlights,audit
+
+
 def screen_focus(request, directory, tools):
     from editing_runtime import exact_keys, require, source, span, write_json
-    exact_keys(request, ['operation', 'source', 'crop', 'output', 'highlights'],
+    exact_keys(request, ['operation', 'source', 'crop', 'output', 'highlights', 'coordinate_space'],
                ['operation', 'source', 'crop', 'output', 'highlights'])
     asset = source(request['source']); media = tools.probe(asset['path'])
     video = next((s for s in media['streams'] if s['codec_type'] == 'video'), None)
@@ -23,14 +62,15 @@ def screen_focus(request, directory, tools):
     rotations = [video.get('tags', {}).get('rotate', 0)] + [s.get('rotation', 0) for s in video.get('side_data_list', [])]
     require(all(float(r) % 360 == 0 for r in rotations), 'ROTATED_COORDINATES_UNSUPPORTED')
     require(video.get('sample_aspect_ratio', '1:1') in ['1:1', '0:1', 'N/A'], 'NONSQUARE_PIXEL_COORDINATES_UNSUPPORTED')
-    x, y, w, h = rectangle(request['crop'], video['width'], video['height'])
+    crop,highlights,coordinate_audit=resolve_focus_coordinates(request,video)
+    x, y, w, h = rectangle(crop, video['width'], video['height'])
     require(all(v % 2 == 0 for v in [x,y,w,h]), 'EVEN_CROP_REQUIRED')
     output=request['output'];exact_keys(output, ['width','height'], ['width','height'])
     require(all(type(v) is int and 2 <= v <= 8192 and v % 2 == 0 for v in output.values()), 'EVEN_DIMENSION_REQUIRED')
     require(w*output['height'] == h*output['width'], 'OUTPUT_ASPECT_MUST_MATCH_CROP')
     require(isinstance(request['highlights'],list), 'HIGHLIGHTS_ARRAY_REQUIRED')
     filters=[f'crop={w}:{h}:{x}:{y}']
-    for item in request['highlights']:
+    for item in highlights:
         exact_keys(item,['start','end','box','color_rgb','thickness'],['start','end','box','color_rgb','thickness'])
         a,b=span(item['start'],item['end'],media['duration'])
         hx,hy,hw,hh=rectangle(item['box'],video['width'],video['height'])
@@ -43,10 +83,20 @@ def screen_focus(request, directory, tools):
               '-c:v','libx264','-crf','18','-preset','medium','-c:a','copy',str(directory/'focused.mp4')])
     actual=tools.probe(directory/'focused.mp4')
     require(abs(actual['duration']-media['duration'])<=0.1,'FOCUS_DURATION_CHANGED')
-    report={'source':asset,'crop':request['crop'],'output':output,'highlights':request['highlights'],
+    actual_video=[s for s in actual['streams'] if s.get('codec_type')=='video']
+    require(len(actual_video)==1 and (actual_video[0].get('width'),actual_video[0].get('height'))==(output['width'],output['height']),'FOCUS_OUTPUT_DIMENSIONS_MISMATCH')
+    require(actual_video[0].get('sample_aspect_ratio')=='1:1','FOCUS_OUTPUT_PIXEL_ASPECT_MISMATCH')
+    audio_keys=['codec_name','sample_rate','channels']
+    audio_before=[{k:s.get(k) for k in audio_keys} for s in media['streams'] if s.get('codec_type')=='audio']
+    audio_after=[{k:s.get(k) for k in audio_keys} for s in actual['streams'] if s.get('codec_type')=='audio']
+    require(audio_before==audio_after,'FOCUS_AUDIO_STREAM_METADATA_CHANGED')
+    report={'source':asset,'crop':crop,'output':output,'highlights':highlights,
             'time_mapping':'output seconds equal source seconds; no time edit',
             'coordinate_mapping':{'offset_x':x,'offset_y':y,'scale_x':output['width']/w,'scale_y':output['height']/h},
             'semantic_target_check':'NOT_RUN','legibility_check':'NOT_RUN','audio':'stream copy, when present'}
+    if coordinate_audit is not None:report['coordinate_audit']=coordinate_audit
+    report['output_readback']={'video_dimensions':output,'sample_aspect_ratio':'1:1','audio_streams':audio_after,'check':'Metadata only, not decoded waveform equality or listening'}
+    source(request['source'])
     write_json(directory/'focus-map.json',report)
     return report
 

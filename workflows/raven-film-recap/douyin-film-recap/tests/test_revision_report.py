@@ -188,3 +188,58 @@ def test_malformed_exclusions_preserved_without_count_or_side_effects(workspace,
         assert rows['reason'] in ''.join(doc.text)
     assert value == original
     assert inventory(workspace.parent) == before
+
+
+def window_diagnostics(value, status):
+    bid=value['beats'][0]['beat_id']
+    return {'schema':'film-recorded-window-coverage/1',
+            'beats':[{'beat_id':bid,'status':status,'alternatives':[{'status':status,'windows':[{'id':'action','status':status,'covered':[[{'num':1,'den':1},{'num':3,'den':2}]],'gaps':[[{'num':3,'den':2},{'num':2,'den':1}]]}]}],
+                      'mapping_unknowns':[{'segment_id':'seg','reason':'millisecond_seek_rounding_unresolved'}]}],
+            'declaration':{'schema':'film-support-windows/1','beats':[{'beat_id':bid,'alternatives':[[{'id':'action','source_id':'source','source_sha256':'0'*64,'start':1,'end':2,'basis':'declared action, not semantic gold'}]]}]},
+            'declaration_is_semantic_gold':False,'physical_frame_coverage':'NOT_VERIFIED',
+            'semantic_review':'NOT_RUN','media_reverified':False,'render_binding_status':'unknown',
+            'render_binding_reason':'candidate_has_not_been_rendered'}
+
+
+@pytest.mark.parametrize('status,translated',[
+    ('RECORDED_WINDOW_FULL','记录窗口完整覆盖'),
+    ('RECORDED_WINDOW_PARTIAL','记录窗口部分覆盖'),
+    ('RECORDED_WINDOW_MISSING','记录窗口未覆盖'),
+    ('UNKNOWN','记录窗口覆盖未知'),
+])
+def test_optional_window_diagnostics_explicit_boundaries(workspace,status,translated):
+    value=preview_revision(workspace);value['support_window_diagnostics']=window_diagnostics(value,status)
+    before=copy.deepcopy(value);html=render_preview_html(value)
+    assert translated in html and status in html
+    assert '毫秒寻址取整关系未解决' in html
+    assert '不是逐帧消费、叙事支持或语义真值' in html
+    assert '不改变原采用流程或 QC 门槛' in html and 'QC：NOT_RUN' in html
+    assert '已记录覆盖区间（源秒）' in html and '记录未覆盖区间' in html
+    assert '声明依据不是金标' in html and '该候选尚未渲染' in html
+    assert value==before
+
+
+def test_legacy_preview_does_not_invent_window_diagnostics(workspace):
+    html=render_preview_html(preview_revision(workspace))
+    assert '支持窗口记录诊断' not in html and 'RECORDED_WINDOW_FULL' not in html
+
+
+def test_window_declarations_and_unknown_reasons_are_offline_escaped(workspace):
+    value=preview_revision(workspace);diag=window_diagnostics(value,'UNKNOWN')
+    poison='<script>alert(1)</script><img src="https://evil.invalid" onerror="bad()">'
+    diag['declaration']['beats'][0]['alternatives'][0][0]['basis']=poison
+    diag['beats'][0]['mapping_unknowns'][0]['reason']=poison
+    value['support_window_diagnostics']=diag
+    doc=Document(render_preview_html(value))
+    assert poison in ''.join(doc.text)
+    assert not any(tag in {'script','img','iframe','object','embed','link','form'} for tag,_ in doc.tags)
+    assert not any('src' in attrs for _,attrs in doc.tags)
+    assert all(attrs.get('href','#beat-0').startswith('#') for _,attrs in doc.tags)
+
+
+@pytest.mark.parametrize('malformed',[None,False,'<img src=x>',{'beats':None},{'beats':[{'beat_id':'unrelated','status':'RECORDED_WINDOW_FULL'}]}])
+def test_malformed_or_unmatched_optional_diagnostics_no_fabricated_beat_conclusion(workspace,malformed):
+    value=preview_revision(workspace);value['support_window_diagnostics']=malformed
+    html=render_preview_html(value)
+    assert '没有可对应的窗口诊断' in html and 'QC：NOT_RUN' in html
+    assert not any(tag=='img' for tag,_ in Document(html).tags)
