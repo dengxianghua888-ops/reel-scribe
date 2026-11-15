@@ -14,6 +14,8 @@ The acknowledgment declares **existing generated line breaks to be soft wraps**,
 
 Every original cue ID, source seconds, host frame window and quantization delta is retained unchanged. No cue is split, paginated, extended or moved; no word timestamps are fabricated. A single font size is chosen for all cues, largest fitting within the explicit range, never below 32 pixels. If any cue cannot fit two lines at the minimum, the entire plan fails rather than dropping text or quietly shrinking it. Pixel-width and conservative line-height measurements use the exact font bytes and font face 0. Input map/font hashes are checked before and after; output is exclusive and never overwrites a file.
 
+The map is read once, up to 10,000,001 bytes, then rejected above the 10,000,000-byte limit. Its pinned SHA and JSON parser consume that same captured byte sequence, so a separate pathname read cannot substitute cue text, IDs or windows under the original hash. Final pathname checks still reject persistent drift. This is not filesystem locking: Pillow continues to load fonts by pathname, and font replacement races or native-project observation are not covered by this narrow map fix.
+
 ## Proposed spatial layout
 
 Coordinates are top-left pixels on 720×1280 canvas:

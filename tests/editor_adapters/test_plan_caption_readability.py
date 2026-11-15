@@ -1,5 +1,6 @@
 import copy
 import importlib.util
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -120,3 +121,87 @@ def test_invalid_fps(fps):
 def test_invalid_frame_end(frame_end):
     with pytest.raises(ValueError, match='FRAME_END_MUST_BE_POSITIVE_INTEGER'):
         m.plan({'rows': [row()]}, 'unused', frame_end=frame_end)
+
+
+def build_args(tmp_path, monkeypatch):
+    monkeypatch.setattr(m.ImageFont, 'truetype', lambda path, size: Font(size))
+    mp, fp = tmp_path / 'map.json', tmp_path / 'font'
+    mp.write_text(json.dumps({'rows': [row('Do not proceed.')]}))
+    fp.write_bytes(b'font fixture')
+    return SimpleNamespace(acknowledge_reflow=True, caption_map=mp, font=fp,
+                           map_sha256=m.contract.digest(mp), font_sha256=m.contract.digest(fp),
+                           fps=24, frame_end=48, minimum_size=32, maximum_size=40,
+                           output=tmp_path / 'result.json')
+
+
+@pytest.mark.parametrize('field', ['text', 'identity', 'window'])
+def test_reopened_map_cannot_change_pinned_candidate(tmp_path, monkeypatch, field):
+    args = build_args(tmp_path, monkeypatch)
+    frozen = args.caption_map.read_bytes()
+    changed = json.loads(frozen)
+    if field == 'text':
+        changed['rows'][0]['text'] = 'Proceed.'
+    elif field == 'identity':
+        changed['rows'][0]['id'] = 'unreviewed'
+    else:
+        changed['rows'][0].update(end_frame=48, declared_end_sec=2)
+    real_read = Path.read_text
+
+    def replaced_read(path, *pos, **kw):
+        if path == args.caption_map:
+            path.write_text(json.dumps(changed))
+            try:
+                return real_read(path, *pos, **kw)
+            finally:
+                path.write_bytes(frozen)
+        return real_read(path, *pos, **kw)
+
+    monkeypatch.setattr(Path, 'read_text', replaced_read)
+    m.build(args)
+    result = json.loads(real_read(args.output))
+    assert args.caption_map.read_bytes() == frozen
+    assert result['source_map_sha256'] == args.map_sha256
+    assert result['source_rows'] == json.loads(frozen)['rows']
+    assert result['candidate_rows'] == json.loads(frozen)['rows']
+    assert result['status'] == 'REVIEW_CANDIDATE_ONLY'
+    assert result['adopted'] is False
+
+
+def test_map_drift_during_planning_rejected(tmp_path, monkeypatch):
+    args = build_args(tmp_path, monkeypatch)
+    real_plan = m.plan
+
+    def changed_plan(*pos, **kw):
+        result = real_plan(*pos, **kw)
+        args.caption_map.write_text('{}')
+        return result
+
+    monkeypatch.setattr(m, 'plan', changed_plan)
+    with pytest.raises(ValueError, match='INPUT_CHANGED_DURING_READ'):
+        m.build(args)
+    assert not args.output.exists()
+
+
+@pytest.mark.parametrize('payload, error', [
+    (b' ' * 10_000_001, 'MAP_SIZE_LIMIT'),
+    (b'{"rows": [], "rows": []}', 'DUPLICATE_JSON_KEY'),
+    (b'\xff', 'utf-8'),
+], ids=['oversize', 'duplicate', 'invalid-utf8'])
+def test_invalid_captured_json_never_publishes(tmp_path, monkeypatch, payload, error):
+    args = build_args(tmp_path, monkeypatch)
+    args.caption_map.write_bytes(payload)
+    args.map_sha256 = m.contract.digest(args.caption_map)
+    with pytest.raises(ValueError, match=error):
+        m.build(args)
+    assert not args.output.exists()
+
+
+def test_pinned_build_preserves_inputs_and_existing_output(tmp_path, monkeypatch):
+    args = build_args(tmp_path, monkeypatch)
+    before = args.caption_map.read_bytes(), args.font.read_bytes()
+    m.build(args)
+    result = args.output.read_bytes()
+    with pytest.raises(FileExistsError):
+        m.build(args)
+    assert args.output.read_bytes() == result
+    assert (args.caption_map.read_bytes(), args.font.read_bytes()) == before

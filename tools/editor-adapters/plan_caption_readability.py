@@ -1,5 +1,6 @@
 """Pinned, candidate-only 720x1280 two-line soft-wrap plan; no timing edits."""
 import argparse
+import hashlib
 import importlib.util
 import json
 import re
@@ -114,9 +115,13 @@ def plan(data, font_path, *, fps=24, frame_end=984, minimum=32, maximum=40):
 def build(args):
     require(args.acknowledge_reflow, 'EXPLICIT_SOFT_WRAP_ACK_REQUIRED')
     mp, fp = Path(args.caption_map).resolve(strict=True), Path(args.font).resolve(strict=True)
-    require(mp.stat().st_size <= 10_000_000, 'MAP_SIZE_LIMIT')
-    require(contract.digest(mp) == args.map_sha256 and contract.digest(fp) == args.font_sha256, 'STALE_INPUT')
-    data = json.loads(mp.read_text(), object_pairs_hook=contract.unique)
+    # Hash the same bounded snapshot consumed by the parser, not a prior path read.
+    with mp.open('rb') as stream:
+        payload = stream.read(10_000_001)
+    require(len(payload) <= 10_000_000, 'MAP_SIZE_LIMIT')
+    require(hashlib.sha256(payload).hexdigest() == args.map_sha256
+            and contract.digest(fp) == args.font_sha256, 'STALE_INPUT')
+    data = json.loads(payload.decode('utf-8'), object_pairs_hook=contract.unique)
     result = plan(data, fp, fps=args.fps, frame_end=args.frame_end,
                   minimum=args.minimum_size, maximum=args.maximum_size)
     require(contract.digest(mp) == args.map_sha256 and contract.digest(fp) == args.font_sha256, 'INPUT_CHANGED_DURING_READ')
