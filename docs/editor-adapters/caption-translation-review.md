@@ -13,7 +13,7 @@ python tools/editor-adapters/review_caption_translation.py \
 
 All three files must match the supplied hashes before and after analysis; the JSON inputs have size limits and duplicate-key rejection. The safe writer serializes/encodes before exclusively creating output and never overwrites a previous report.
 
-For each JSON input, the tool reads at most 10,000,001 bytes once, rejects anything above 10,000,000 bytes, and hashes and parses that same captured byte sequence. A separate pathname read cannot supply different text under the pinned JSON hash. The final pathname checks still reject persistent drift. These checks are not filesystem locking: fonts remain loaded through Pillow by pathname, and this narrow JSON fix does not claim to resolve font replacement races or change the separate readability/native-project tools.
+For each JSON input, the tool reads at most 10,000,001 bytes once, rejects anything above 10,000,000 bytes, and hashes and parses that same captured byte sequence. A separate pathname read cannot supply different text under the pinned JSON hash. The final pathname checks still reject persistent drift. These checks are not filesystem locking. The build now also captures the pinned font once and verifies the same bytes supplied to every Pillow measurement through an in-memory stream, shared with the readability planner. A 64 MiB font limit bounds capture memory (at most 64 MiB + 1 byte is read); larger inputs raise FONT_SIZE_LIMIT without a report. Existing Noto CJK collections of approximately 20–28 MB are within the limit. The final font-path check still rejects persistent drift. Direct internal review/fit calls with the legacy pathname API remain unpinned; native-project observation is not changed.
 
 ## Draft schema
 

@@ -4,11 +4,11 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
-from PIL import ImageFont
 
 SPEC = importlib.util.spec_from_file_location('readability_plan', Path(__file__).with_name('plan_caption_readability.py'))
 layout = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(layout)
+ImageFont = layout.ImageFont
 contract = layout.contract
 require = contract.require
 ENTRY_FIELDS = {'id', 'source_text', 'target_text', 'target_language', 'context_ids',
@@ -50,7 +50,7 @@ def validate_draft(draft, source):
 
 def fit(text, font_path, minimum, maximum):
     for size in range(maximum, minimum - 1, -1):
-        font = ImageFont.truetype(str(font_path), size)
+        font = layout.load_font(font_path, size)
         try:
             lines = layout.wrap_two(text, font, layout.BOX['width'])
         except ValueError as error:
@@ -125,8 +125,8 @@ def build(args):
              Path(args.font).resolve(strict=True)]
     expected = [args.source_sha256, args.draft_sha256, args.font_sha256]
     source, draft = [read_pinned_json(p, h) for p, h in zip(paths[:2], expected[:2])]
-    require(contract.digest(paths[2]) == expected[2], 'STALE_INPUT')
-    result = review(source, draft, paths[2], fps=args.fps, frame_end=args.frame_end,
+    font_bytes = layout.capture_pinned_font(paths[2], expected[2])
+    result = review(source, draft, font_bytes, fps=args.fps, frame_end=args.frame_end,
                     minimum=args.minimum_size, maximum=args.maximum_size)
     require(all(contract.digest(p) == h for p, h in zip(paths, expected)), 'INPUT_CHANGED_DURING_READ')
     result['source_map_sha256'], result['draft_sha256'] = expected[:2]

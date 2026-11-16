@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import importlib.util
+import io
 import json
 import re
 import unicodedata
@@ -14,6 +15,21 @@ SPEC.loader.exec_module(contract)
 require = contract.require
 BOX = {'x': 48, 'y': 900, 'width': 624, 'height': 240}
 PICTURE = {'x': 0, 'y': 160, 'width': 720, 'height': 600}
+MAX_FONT_BYTES = 64 * 1024 * 1024
+
+
+def capture_pinned_font(path, expected):
+    with Path(path).open('rb') as stream:
+        payload = stream.read(MAX_FONT_BYTES + 1)
+    require(len(payload) <= MAX_FONT_BYTES, 'FONT_SIZE_LIMIT')
+    require(hashlib.sha256(payload).hexdigest() == expected, 'STALE_INPUT')
+    return payload
+
+
+def load_font(source, size):
+    # Each size gets a fresh stream over the same immutable verified snapshot.
+    # Direct plan/review callers may still supply their existing unpinned path.
+    return ImageFont.truetype(io.BytesIO(source) if isinstance(source, bytes) else str(source), size)
 
 
 def validate_layout_text(text):
@@ -70,7 +86,7 @@ def plan(data, font_path, *, fps=24, frame_end=984, minimum=32, maximum=40):
     rows = contract.validate_map(data, fps, frame_end)
     source = json.loads(json.dumps(rows))
     for size in range(maximum, minimum-1, -1):
-        font = ImageFont.truetype(str(font_path), size)
+        font = load_font(font_path, size)
         result = []
         try:
             for row in rows:
@@ -119,10 +135,10 @@ def build(args):
     with mp.open('rb') as stream:
         payload = stream.read(10_000_001)
     require(len(payload) <= 10_000_000, 'MAP_SIZE_LIMIT')
-    require(hashlib.sha256(payload).hexdigest() == args.map_sha256
-            and contract.digest(fp) == args.font_sha256, 'STALE_INPUT')
+    require(hashlib.sha256(payload).hexdigest() == args.map_sha256, 'STALE_INPUT')
     data = json.loads(payload.decode('utf-8'), object_pairs_hook=contract.unique)
-    result = plan(data, fp, fps=args.fps, frame_end=args.frame_end,
+    font_bytes = capture_pinned_font(fp, args.font_sha256)
+    result = plan(data, font_bytes, fps=args.fps, frame_end=args.frame_end,
                   minimum=args.minimum_size, maximum=args.maximum_size)
     require(contract.digest(mp) == args.map_sha256 and contract.digest(fp) == args.font_sha256, 'INPUT_CHANGED_DURING_READ')
     result['source_map_sha256'] = args.map_sha256
