@@ -933,7 +933,7 @@ def _checked_realized_timeline(storyboard: Storyboard, config: AppConfig):
             raise ValueError("REALIZED_TIMELINE_DIFFERS_FROM_SEGMENT_MEDIA")
         return realized
     expected_cursor = 0.0
-    tolerance = 1.0 / config.render.fps + 1e-8
+    tolerance = 1.0 / float(config.render.fps_rational) + 1e-8
     for segment, row in zip(storyboard.segments, actual):
         duration = segment_output_duration(segment)
         expected_cursor += duration
@@ -1104,7 +1104,8 @@ def post_render_qc(
             )
         for rate_name in ("avg_frame_rate", "r_frame_rate"):
             rate = _frame_rate(video_stream.get(rate_name))
-            if abs(rate - config.render.fps) > max(0.02, config.render.fps * 0.001):
+            expected_rate = float(config.render.fps_rational)
+            if abs(rate - expected_rate) > max(0.02, expected_rate * 0.001):
                 builder.add(stage="post_render", severity="error", blocking=True, deterministic=True,
                             rule_id="OUTPUT_FPS_MISMATCH", message="最终视频帧率与配置不一致或无法验证。",
                             evidence={"field": rate_name, "actual": rate, "expected": config.render.fps})
@@ -1148,7 +1149,7 @@ def post_render_qc(
     subtitle_coverage = _subtitle_delivery_checks(builder, storyboard, config, actual_duration, final_hash,
                                                   realized_timeline=checked_realized)
     nominal_duration = sum(segment_output_duration(segment) for segment in storyboard.segments)
-    if abs(expected_duration - nominal_duration) > 1 / config.render.fps:
+    if abs(expected_duration - nominal_duration) > 1 / float(config.render.fps_rational):
         builder.add(stage="post_render", severity="warning", blocking=False, deterministic=True,
                     rule_id="NOMINAL_FRAME_QUANTIZATION", message="逐段帧量化与名义计划时长存在累计差；字幕与 EDL 使用实测时间线。",
                     evidence={"nominal_duration_sec": nominal_duration,

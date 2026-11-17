@@ -1,9 +1,7 @@
 """Synthetic FFmpeg integration and path/corruption safety; no film-quality claim."""
 from __future__ import annotations
 
-import copy
 import json
-import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -175,7 +173,7 @@ class IncrementalCacheTests(unittest.TestCase):
         from douyin_film_recap import workspace as w
         w.atomic(self.work / "state.json", {"schema_version": 2, "project_name": "synthetic",
             "input_fingerprint": "same-source", "config_fingerprint": "old-config", "stages": {}})
-        cold = render_storyboard(self.board, self.config, self.work)
+        render_storyboard(self.board, self.config, self.work)
         w.atomic(self.work / "09_storyboard.json", self.board.model_dump(mode="json"))
         root, active, _ = w.prepare(self.work, {"input_paths": [str(self.source)],
             "input_fingerprint": "same-source", "config_fingerprint": "new-config"})

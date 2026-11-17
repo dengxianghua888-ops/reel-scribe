@@ -36,7 +36,7 @@ def build(destination):
         raise FileExistsError('PLUGIN_OUTPUT_ALREADY_EXISTS')
     rows = inventory()
     destination.mkdir(parents=True, exist_ok=False)
-    (destination / 'build-incomplete.json').write_text('{"status":"BUILD_INCOMPLETE"}\n')
+    (destination / 'build-incomplete.json').write_text('{"status":"BUILD_INCOMPLETE"}\n', encoding='utf-8')
     _common.copy_members(ROOT, destination, rows)
     output_files = {destination / row['path'] for row in rows}
     edges = _common.validate_package(destination, output_files)

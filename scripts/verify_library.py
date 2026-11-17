@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 import re
 import sys
-from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGED = ('atomic','workflows','styles','contracts','runtime','registry','scripts','provenance',
@@ -29,7 +28,7 @@ def structure(inventory=None):
     errors=[]; skills=[]
     for kind in ['atomic','workflows']:
         for entry in sorted((ROOT/kind).glob('*/SKILL.md')):
-            text=entry.read_text()
+            text=entry.read_text(encoding='utf-8')
             parts=text.split('---',2)
             if len(parts)!=3:errors.append(str(entry)+' frontmatter');continue
             name=re.search(r'^name:\s*(\S+)\s*$',parts[1],re.M)
@@ -51,7 +50,7 @@ def structure(inventory=None):
         external_pairs = {tuple(pair) for pair in inventory['external_links']}
     package_manifest = ROOT / 'bundle-manifest.json'
     if inventory is None and package_manifest.is_file():
-        policy = json.loads(package_manifest.read_text()).get('distribution_policy') or {}
+        policy = json.loads(package_manifest.read_text(encoding='utf-8')).get('distribution_policy') or {}
         external_pairs = {(row['from']['path'], row['target']['path']) for row in policy.get('external_links', [])}
     try:
         references = _common.validate_package(ROOT, members if members is not None else set(files()), external_pairs)
@@ -62,7 +61,7 @@ def structure(inventory=None):
     required=['id','name','family','fit','question','selection','sequence','audio','rhythm','visual','anti','example','nearest','effect_check','status','source_ids']
     style_counts={}
     for catalog_path in sorted((ROOT/'styles').glob('*/catalog.json')):
-        catalog=json.loads(catalog_path.read_text());styles=catalog['styles'];ids=set()
+        catalog=json.loads(catalog_path.read_text(encoding='utf-8'));styles=catalog['styles'];ids=set()
         style_counts[catalog_path.parent.name]=len(styles)
         for style in styles:
             for key in required:
@@ -70,7 +69,7 @@ def structure(inventory=None):
             if style['id'] in ids:errors.append('duplicate style '+style['id'])
             ids.add(style['id'])
             if not (catalog_path.parent/f'{style["id"]}.md').is_file():errors.append('missing style card '+style['id'])
-    registry=json.loads((ROOT/'registry/skills.json').read_text())
+    registry=json.loads((ROOT/'registry/skills.json').read_text(encoding='utf-8'))
     entries=registry['entries'];known={s['id'] for s in skills}
     if {e['id'] for e in entries}!=known:errors.append('registry does not match actual skill entries')
     for entry in entries:
@@ -97,8 +96,8 @@ def snapshot(path):
 
 def verify(path):
     failures=[]
-    if sha(path)!=path.with_suffix(path.suffix+'.sha256').read_text().strip():failures.append('manifest hash mismatch')
-    manifest=json.loads(path.read_text());expected={}
+    if sha(path)!=path.with_suffix(path.suffix+'.sha256').read_text(encoding='utf-8').strip():failures.append('manifest hash mismatch')
+    manifest=json.loads(path.read_text(encoding='utf-8'));expected={}
     for item in manifest['files']:
         rel=Path(item['path'])
         if rel.is_absolute() or '..' in rel.parts:failures.append('invalid path '+str(rel));continue
@@ -118,7 +117,7 @@ if __name__=='__main__':
     args=parser.parse_args()
     try:
         if args.command=='structure':
-            result=structure(json.loads(args.inventory.read_text()) if args.inventory else None)
+            result=structure(json.loads(args.inventory.read_text(encoding='utf-8')) if args.inventory else None)
         else:
             if not args.manifest:raise ValueError('--manifest required')
             result=snapshot(args.manifest) if args.command=='snapshot' else verify(args.manifest)

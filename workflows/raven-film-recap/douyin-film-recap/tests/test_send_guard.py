@@ -10,7 +10,7 @@ from douyin_film_recap import send_guard as guard
 from douyin_film_recap.providers import OpenAICompatibleClient, ProviderError
 from douyin_film_recap.tts import synthesize_edge_tts
 from douyin_film_recap.pipeline import FilmRecapPipeline
-from douyin_film_recap.workspace import read, work_lock
+from douyin_film_recap.workspace import read
 
 SCOPE = {"binding": "synthetic full identity", "stage": "story", "stage_inputs": "stable"}
 

@@ -15,6 +15,7 @@ _OUTPUT_LOCK = threading.Lock()
 
 VERSION = '0.1.0'
 NAME = 'editing-skill-library'
+SUPPORTED_PROTOCOL_VERSIONS = ('2024-11-05', '2025-03-26', '2025-06-18')  # Oldest to latest.
 
 
 def library_root():
@@ -70,7 +71,7 @@ def call_tool(name, arguments, *, cancel_event=None, progress=None):
     if name == 'list_skills':
         if arguments:
             raise ValueError('UNKNOWN_TOOL_ARGUMENTS')
-        registry = json.loads((root / 'registry' / 'skills.json').read_text())
+        registry = json.loads((root / 'registry' / 'skills.json').read_text(encoding='utf-8'))
         return {'schema': registry.get('schema'), 'entries': [
             {k: row.get(k) for k in ('id', 'layer', 'entry', 'status')}
             for row in registry['entries']], 'limit': 'Static registry listing; no installation, route or capability execution claim.'}
@@ -220,7 +221,8 @@ def serve():
                     continue
                 if method == 'initialize':
                     requested = params.get('protocolVersion')
-                    protocol = requested if requested in ('2024-11-05', '2025-03-26', '2025-06-18') else '2025-03-26'
+                    # MCP: echo a supported requested version, otherwise offer the latest one.
+                    protocol = requested if requested in SUPPORTED_PROTOCOL_VERSIONS else SUPPORTED_PROTOCOL_VERSIONS[-1]
                     _response(identifier, {'protocolVersion': protocol,
                         'capabilities': {'tools': {'listChanged': False}},
                         'serverInfo': {'name': NAME, 'version': VERSION}})

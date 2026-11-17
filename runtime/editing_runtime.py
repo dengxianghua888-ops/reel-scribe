@@ -21,6 +21,7 @@ import sqlite3
 import time
 import importlib.util
 import sys
+import traceback
 import wave
 from fractions import Fraction
 
@@ -34,6 +35,8 @@ RUN_CANCELLATION = ContextVar('editing_run_cancellation', default=None)
 RUN_PROGRESS = ContextVar('editing_run_progress', default=None)
 RUN_DIRECTORY = ContextVar('editing_run_directory', default=None)
 TOOL_DIAGNOSTIC_SEQUENCE = ContextVar('editing_tool_diagnostic_sequence', default=0)
+# Per-run reuse of identical decoded-clock observations (see windowed_mix_clock).
+CLOCK_OBSERVATIONS = ContextVar('editing_clock_observations', default=None)
 
 
 class ContractError(ValueError):
@@ -94,9 +97,43 @@ def source(ref, hash_required=True):
     return {'path': str(p), 'sha256': digest, 'bytes': p.stat().st_size}
 
 
+VERIFIED_JSON_LIMIT = 32 * 1024 * 1024
+
+
+def verified_json(ref, label, limit=VERIFIED_JSON_LIMIT):
+    """Hash and parse one bounded buffer instead of re-reading a verified path.
+
+    Two pathname observations cannot detect a replacement that is restored
+    before the second hash; the parsed bytes themselves must match the hash.
+    """
+    artifact = source(ref)
+    require(artifact['bytes'] <= limit, label + '_FILE_TOO_LARGE')
+    with open(artifact['path'], 'rb') as stream:
+        payload = stream.read(limit + 1)
+    require(len(payload) <= limit, label + '_FILE_TOO_LARGE')
+    require(hashlib.sha256(payload).hexdigest() == artifact['sha256'],
+            'SOURCE_HASH_MISMATCH: ' + artifact['path'])
+    artifact['bytes'] = len(payload)
+    try:
+        data = json.loads(payload.decode('utf-8'))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ContractError(label + '_JSON_INVALID') from exc
+    return artifact, data
+
+
+def frame_rate(value):
+    """Parse an ffprobe rational; missing, malformed or '0/0' rates are unknown (0)."""
+    try:
+        return Fraction(str(value))
+    except (TypeError, ValueError, ZeroDivisionError):
+        return Fraction(0)
+
+
 def owned_process(command, timeout=300, cwd=None):
     """Stop only this invocation's process group on catchable cancellation."""
-    proc = subprocess.Popen(command, text=True, stdout=subprocess.PIPE,
+    # Decode as UTF-8 regardless of locale; undecodable bytes in tool output
+    # (for example container tags) become U+FFFD instead of aborting the run.
+    proc = subprocess.Popen(command, text=True, encoding='utf-8', errors='replace', stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, cwd=cwd,
                             pass_fds=SUBPROCESS_LOCK_FDS.get(), start_new_session=True)
     reason = None
@@ -472,14 +509,16 @@ def normalize_plan(plan, tools):
         sid = item['source_id']
         require(sid in sources, 'UNKNOWN_SOURCE: ' + str(sid))
         a, b = span(item['start'], item['end'], sources[sid]['media']['duration'])
-        clock = windowed_mix_clock(tools, sources[sid]['path'], sources[sid]['media'], b, kind='video', start=a)
+        clock = windowed_mix_clock(tools, sources[sid]['path'], sources[sid]['media'], b, kind='video', start=a,
+                                   identity=sources[sid]['sha256'])
         require_video_coverage(clock, a, b, playback=True)
         gain = number(item['gain_db'], 'gain_db')
         audio_clock = None
         if not item.get('mute', False) and gain > -120 and any(
                 s['codec_type'] == 'audio' for s in sources[sid]['media']['streams']):
             audio_clock = windowed_mix_clock(tools, sources[sid]['path'], sources[sid]['media'], b,
-                                             kind='audio', start=a, allow_no_audio=True, playback=True)
+                                             kind='audio', start=a, allow_no_audio=True, playback=True,
+                                             identity=sources[sid]['sha256'])
             audio_intersection(audio_clock, a, b, playback=True)
         require(-120 <= gain <= 24, 'GAIN_OUT_OF_RANGE')
         # Source IDs and paths are aliases, not permission to reuse identical media.
@@ -702,7 +741,7 @@ def render(plan, directory, tools, audio_backend=None, source_consumption=None):
     with consumption_session(list(plan['sources'].values()), source_consumption, directory, tools) as (_, bound_tools):
         result = _render_bound(plan, directory, bound_tools, audio_backend)
     binding_path = directory / 'source-binding.json'
-    evidence = json.loads(binding_path.read_text())
+    evidence = json.loads(binding_path.read_text(encoding='utf-8'))
     result['source_consumption'] = {'schema': evidence['schema'], 'selection': evidence['selection'],
                                     'status': evidence['status'], 'adoptable': evidence['adoptable'],
                                     'binding': {'path': str(binding_path), 'sha256': sha256(binding_path)}}
@@ -787,7 +826,7 @@ def _render_bound(plan, directory, tools, audio_backend=None):
     stream = counted.get('streams', [{}])[0]
     require(str(stream.get('nb_read_frames')) == str(normalized['total_frames']), 'RENDER_FRAME_COUNT_MISMATCH')
     require(stream.get('avg_frame_rate') is not None and
-            Fraction(stream['avg_frame_rate']) == Fraction(fps), 'RENDER_FRAME_RATE_MISMATCH')
+            frame_rate(stream['avg_frame_rate']) == Fraction(fps), 'RENDER_FRAME_RATE_MISMATCH')
     require(abs(media['duration'] - normalized['duration']) <= max(0.1, 2 / float(Fraction(fps))), 'RENDER_DURATION_MISMATCH')
     return {'media': media, 'normalized_plan': 'normalized-plan.json',
             'decoded_frames': int(stream['nb_read_frames']), 'verified_fps': stream['avg_frame_rate'],
@@ -873,7 +912,31 @@ def patch_plan(request, directory, tools):
 
 
 def windowed_mix_clock(tools, path, media, end, *, kind, start=0, window_seconds=240,
-                       allow_no_audio=False, playback=False):
+                       allow_no_audio=False, playback=False, identity=None):
+    """Reuse an identical observation within one run when the caller supplies
+    the content SHA it has just verified for ``path``.
+
+    The key also binds the active source-consumption binding and tool instance,
+    so observations never cross a consumption boundary, nested run or another
+    ffprobe. Results are deep copies; a changed file fails its SHA check upstream.
+    """
+    cache = CLOCK_OBSERVATIONS.get()
+    key = None
+    if cache is not None and identity is not None:
+        from source_binding import ACTIVE_BINDING
+        key = (identity, str(path), kind, str(start), str(end), window_seconds, allow_no_audio, playback,
+               id(ACTIVE_BINDING.get()), id(getattr(tools, 'tools', tools)))
+        if key in cache:
+            return copy.deepcopy(cache[key])
+    result = _windowed_mix_clock(tools, path, media, end, kind=kind, start=start,
+                                 window_seconds=window_seconds, allow_no_audio=allow_no_audio, playback=playback)
+    if key is not None:
+        cache[key] = copy.deepcopy(result)
+    return result
+
+
+def _windowed_mix_clock(tools, path, media, end, *, kind, start=0, window_seconds=240,
+                        allow_no_audio=False, playback=False):
     """Observe a complete mix input in bounded, overlapping presentation windows.
 
     Source selectors retain their per-call frame cap. The overlapping decoded
@@ -1222,14 +1285,21 @@ def loaded_runtime_modules(snapshot):
 
 def run(request, directory, tools):
     require(isinstance(request, dict), 'REQUEST_OBJECT_REQUIRED')
+    # Reject NaN/Infinity or non-JSON values before creating a directory that
+    # could never receive a request copy or receipt.
+    try:
+        request_sha256 = fingerprint(request)
+    except (TypeError, ValueError) as exc:
+        raise ContractError('REQUEST_JSON_INVALID: ' + str(exc)) from exc
     directory = Path(directory).resolve()
     directory.mkdir(parents=True, exist_ok=False)
     write_json(directory / 'request.json', request)
     receipt = {'schema': 'operation-receipt/1', 'runtime_version': VERSION,
-               'runtime_sha256': sha256(__file__), 'request_sha256': fingerprint(request),
+               'runtime_sha256': sha256(__file__), 'request_sha256': request_sha256,
                'operation': request.get('operation')}
     directory_token = RUN_DIRECTORY.set(directory)
     sequence_token = TOOL_DIAGNOSTIC_SEQUENCE.set(0)
+    clock_token = CLOCK_OBSERVATIONS.set({})
     try:
         snapshot = {}
         try:
@@ -1264,12 +1334,20 @@ def run(request, directory, tools):
             receipt['error'] = str(exc)
             if str(exc).startswith(('TOOL_CANCELLED:', 'RUBBERBAND_TOOL_CANCELLED:')):
                 receipt['cancelled'] = True
-        receipt['artifacts'] = [{'path': str(p.relative_to(directory)), 'sha256': sha256(p), 'bytes': p.stat().st_size}
+        except Exception as exc:
+            # A defect (ZeroDivisionError, IndexError, ...) must still leave a
+            # durable FAILED receipt and artifact inventory, never a bare directory.
+            receipt['status'] = 'FAILED'
+            receipt['error'] = 'INTERNAL_ERROR: ' + type(exc).__name__ + ': ' + str(exc)
+            receipt['internal_error'] = True
+            (directory / 'internal-error-traceback.txt').write_text(traceback.format_exc(), encoding='utf-8')
+        receipt['artifacts'] =[{'path': str(p.relative_to(directory)), 'sha256': sha256(p), 'bytes': p.stat().st_size}
                                 for p in sorted(directory.rglob('*')) if p.is_file()]
         write_json(directory / 'receipt.json', receipt)
         return receipt
 
     finally:
+        CLOCK_OBSERVATIONS.reset(clock_token)
         TOOL_DIAGNOSTIC_SEQUENCE.reset(sequence_token)
         RUN_DIRECTORY.reset(directory_token)
 
@@ -1287,7 +1365,7 @@ def main():
         print(json.dumps(tools.doctor(), ensure_ascii=False, indent=2))
         return 0
     require(args.request and args.work_dir, 'REQUEST_AND_WORK_DIR_REQUIRED')
-    receipt = run(json.loads(args.request.read_text()), args.work_dir, tools)
+    receipt = run(json.loads(args.request.read_text(encoding='utf-8')), args.work_dir, tools)
     print(json.dumps(receipt, ensure_ascii=False, indent=2))
     return 0 if receipt['status'] == 'SUCCEEDED' else 1
 

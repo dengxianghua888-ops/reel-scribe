@@ -227,6 +227,12 @@ def _fallback_shots(duration: float, max_unit: float) -> list[tuple[float, float
     return shots
 
 
+def _timecode_seconds(timecode: Any) -> float:
+    # PySceneDetect 0.7 exposes ``seconds`` and deprecates ``get_seconds()``.
+    seconds = getattr(timecode, "seconds", None)
+    return float(seconds if seconds is not None else timecode.get_seconds())
+
+
 def detect_shots_with_metadata(
     source: SourceInfo, config: AppConfig
 ) -> tuple[list[tuple[float, float]], SceneDetectionMetadata]:
@@ -249,9 +255,9 @@ def detect_shots_with_metadata(
         manager.detect_scenes(video=video, show_progress=False)
         scenes = manager.get_scene_list(start_in_scene=True)
         shots = [
-            (start.get_seconds(), min(end.get_seconds(), source.duration))
+            (_timecode_seconds(start), min(_timecode_seconds(end), source.duration))
             for start, end in scenes
-            if end.get_seconds() - start.get_seconds() >= 0.08
+            if _timecode_seconds(end) - _timecode_seconds(start) >= 0.08
         ]
         if shots:
             return shots, SceneDetectionMetadata(

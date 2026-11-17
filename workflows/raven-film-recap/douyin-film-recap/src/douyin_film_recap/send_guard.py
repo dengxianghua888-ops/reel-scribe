@@ -55,11 +55,16 @@ class SendSession:
             if current != self.grant:
                 raise SendBlocked("REMOTE_AUTHORIZATION_REVOKED_OR_CHANGED")
 
-    def _reserve(self, kind: str, payload: dict, intent_key=None, prepare=None):
+    def _reserve(self, kind: str, payload: dict, intent_key=None, prepare=None, superseded_keys=()):
         with self._lock:
-            return self._reserve_locked(kind, payload, intent_key, prepare)
+            return self._reserve_locked(kind, payload, intent_key, prepare, superseded_keys)
 
-    def _reserve_locked(self, kind, payload, intent_key, prepare=None):
+    def _intent_path(self, kind, logical_key):
+        intent = digest({"schema": "film-send-intent/1", "scope": self.scope,
+                         "kind": kind, "logical_key": logical_key})
+        return intent, member(self.root, f".remote-intents/{intent}.json")
+
+    def _reserve_locked(self, kind, payload, intent_key, prepare=None, superseded_keys=()):
         self.check_cancelled()
         policy = self.scope.get("remote_policy")
         if policy:
@@ -75,9 +80,7 @@ class SendSession:
         self.ordinal += 1
         payload_hash = digest(payload)
         logical_key = intent_key or f"request:{payload_hash}"
-        intent = digest({"schema": "film-send-intent/1", "scope": self.scope,
-                         "kind": kind, "logical_key": logical_key})
-        path = member(self.root, f".remote-intents/{intent}.json")
+        intent, path = self._intent_path(kind, logical_key)
         if path.exists():
             previous = read(path)
             if previous.get("schema") != "film-send-intent/1":
@@ -90,6 +93,15 @@ class SendSession:
                 return path, previous, True
             if previous.get("status") != "NOT_SUBMITTED_CONFIRMED":
                 raise SendBlocked(f"SEND_OUTCOME_UNKNOWN: {intent}; automatic retry disabled")
+        # A renamed request format cannot evade an interrupted send under its
+        # former key. SUCCEEDED or reconciled legacy intents are not replayed:
+        # the replacement is a different payload and needs fresh authorization.
+        for superseded in superseded_keys:
+            legacy, legacy_path = self._intent_path(kind, superseded)
+            if legacy_path.exists():
+                prior = read(legacy_path)
+                if prior.get("status") not in ("SUCCEEDED", "NOT_SUBMITTED_CONFIRMED"):
+                    raise SendBlocked(f"SEND_OUTCOME_UNKNOWN: superseded intent {legacy}; reconcile before sending its replacement")
         # An unkeyed caller cannot evade an interrupted send by changing its payload.
         if intent_key is None and (self.root / ".remote-intents").is_dir():
             for receipt in (self.root / ".remote-intents").glob("*.json"):
@@ -157,8 +169,8 @@ class SendSession:
         record["local_error"] = {"type": type(exc).__name__, "message": str(exc)[:500]}
         atomic(path, record)
 
-    def perform(self, kind: str, payload: dict, send: Callable[[], Any], intent_key=None):
-        path, record, cached = self._reserve(kind, payload, intent_key)
+    def perform(self, kind: str, payload: dict, send: Callable[[], Any], intent_key=None, superseded_keys=()):
+        path, record, cached = self._reserve(kind, payload, intent_key, superseded_keys=superseded_keys)
         if cached:
             return record["result"]
         self._check_before_transport(path, record)
@@ -210,11 +222,11 @@ def check_active_send():
         current.check_cancelled()
 
 
-def guarded_send(kind, payload, send, *, intent_key=None):
+def guarded_send(kind, payload, send, *, intent_key=None, superseded_keys=()):
     current = _session.get()
     if current is None:
         raise SendBlocked("REMOTE_AUTHORIZATION_REQUIRED: no active scoped send session")
-    return current.perform(kind, payload, send, intent_key)
+    return current.perform(kind, payload, send, intent_key, superseded_keys)
 
 
 async def guarded_async_send(kind, payload, send, *, intent_key=None, prepare=None):

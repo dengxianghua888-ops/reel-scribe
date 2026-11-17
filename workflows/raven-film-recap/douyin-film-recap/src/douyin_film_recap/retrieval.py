@@ -5,7 +5,7 @@ retained. Actual provider token/compute equality is unknown unless instrumented.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from collections import Counter
 import hashlib
 import json

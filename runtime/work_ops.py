@@ -51,7 +51,7 @@ def validate_document(doc,tools):
         asset=source(track['source']);media=tools.probe(asset['path'])
         require(any(s['codec_type']=='audio' for s in media['streams']),'AUDIO_STREAM_REQUIRED')
         a,b=span(track['start'],track['end'],media['duration'])
-        audio_intersection(windowed_mix_clock(tools,asset['path'],media,b,kind='audio',start=a,playback=True),a,b,require_full=True,playback=True)
+        audio_intersection(windowed_mix_clock(tools,asset['path'],media,b,kind='audio',start=a,playback=True,identity=asset['sha256']),a,b,require_full=True,playback=True)
         anchor=track['anchor_clip_id'];require(anchor is None or anchor in clips,'AUDIO_ANCHOR_MISSING: '+aid)
         start=(clips[anchor]['output_start'] if anchor is not None else 0)+number(track['offset'],'offset')
         require(start>=0 and start+b-a<=norm['duration']+1e-8,'AUDIO_TRACK_OUTSIDE_WORK: '+aid)
@@ -490,7 +490,7 @@ def render_document(document,directory,tools,*,work_version,audio_backend=None,s
         result=_render_document_bound(document,directory,bound_tools,work_version=work_version,
                                       audio_backend=audio_backend,source_consumption=source_consumption)
     binding=directory/'source-binding.json'
-    evidence=json.loads(binding.read_text())
+    evidence=json.loads(binding.read_text(encoding='utf-8'))
     result['source_consumption']={'schema':evidence['schema'],'selection':evidence['selection'],
         'status':evidence['status'],'adoptable':evidence['adoptable'],
         'binding':{'path':str(binding),'sha256':sha256(binding)},

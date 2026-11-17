@@ -1,10 +1,9 @@
 """Explicit static crop, scale and canvas placement. No automatic subject selection."""
 from fractions import Fraction
-import json
 
 
 def reframe(q,directory,tools):
-    from editing_runtime import exact_keys,require,source,sha256,exec_tool,write_json
+    from editing_runtime import exact_keys,require,source,sha256,exec_tool,write_json,frame_rate
     from color_ops import frame_clock
     keys=['operation','source','crop','canvas','placement','background_rgb','allow_upscale','input_color']
     exact_keys(q,keys,keys);asset=source(q['source']);media=tools.probe(asset['path'])
@@ -27,14 +26,14 @@ def reframe(q,directory,tools):
     require(type(q['allow_upscale']) is bool,'REFRAME_UPSCALE_BOOLEAN_REQUIRED')
     require(q['allow_upscale'] or (pw<=cw and ph<=ch),'REFRAME_UPSCALE_NOT_ALLOWED')
     bg=q['background_rgb'];require(isinstance(bg,list) and len(bg)==3 and all(type(x) is int and 0<=x<=255 for x in bg),'REFRAME_BACKGROUND_REQUIRED')
-    fps=Fraction(video.get('avg_frame_rate','0/1'));require(0<fps<=120 and Fraction(video.get('r_frame_rate','0/1'))==fps,'REFRAME_CFR_REQUIRED')
+    fps=frame_rate(video.get('avg_frame_rate'));require(0<fps<=120 and frame_rate(video.get('r_frame_rate'))==fps,'REFRAME_CFR_REQUIRED')
     times=frame_clock(asset['path'],tools);require(all(abs(t-float(Fraction(i,1)/fps))<.00001 for i,t in enumerate(times)),'REFRAME_ZERO_ORIGIN_REQUIRED')
     color='0x'+''.join(f'{c:02x}' for c in bg)
     filt=f'crop=w={cw}:h={ch}:x={x}:y={y}:exact=1,scale={pw}:{ph}:flags=lanczos,pad={width}:{height}:{px}:{py}:color={color},setsar=1'
     output=directory/'reframed.mp4'
     tools.ff(['-i',asset['path'],'-vf',filt,'-map','0:v:0','-map','0:a?','-r',str(fps),'-fps_mode','cfr','-c:v','libx264','-crf','18','-c:a','copy','-colorspace','bt709','-color_trc','bt709','-color_primaries','bt709','-color_range','tv','-movflags','+faststart',str(output)])
     after=tools.probe(output);v=next(s for s in after['streams'] if s['codec_type']=='video');clock=frame_clock(output,tools)
-    require(v['width']==width and v['height']==height and Fraction(v['avg_frame_rate'])==fps,'REFRAME_OUTPUT_GEOMETRY_CHANGED')
+    require(v['width']==width and v['height']==height and frame_rate(v.get('avg_frame_rate'))==fps,'REFRAME_OUTPUT_GEOMETRY_CHANGED')
     require(len(clock)==len(times) and all(abs(a-b)<.00001 for a,b in zip(times,clock)),'REFRAME_FRAME_CLOCK_CHANGED')
     before_audio=[s for s in media['streams'] if s['codec_type']=='audio'];after_audio=[s for s in after['streams'] if s['codec_type']=='audio'];require(len(before_audio)==len(after_audio),'REFRAME_AUDIO_COUNT_CHANGED');checks=[]
     for i,(a,b) in enumerate(zip(before_audio,after_audio)):

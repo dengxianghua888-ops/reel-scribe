@@ -143,10 +143,10 @@ def check_receipt(path,spec,env):
     from editing_runtime import require,sha256,fingerprint,source
     from source_binding import selection
     require(path.is_file(),'BATCH_RECEIPT_MISSING')
-    rr=json.loads(path.read_text());folder=path.parent
+    rr=json.loads(path.read_text(encoding='utf-8'));folder=path.parent
     expected=render_request(spec)
     require(rr['request_sha256']==fingerprint(expected),'BATCH_REQUEST_MISMATCH')
-    require(json.loads((folder/'request.json').read_text())==expected,'BATCH_REQUEST_FILE_MISMATCH')
+    require(json.loads((folder/'request.json').read_text(encoding='utf-8'))==expected,'BATCH_REQUEST_FILE_MISMATCH')
     require(rr['runtime_files']==env['runtime_files'] and rr['tools']==env['tools'],'BATCH_RECEIPT_ENVIRONMENT_CHANGED')
     for a in rr['artifacts']:
         p=folder/a['path'];require(not Path(a['path']).is_absolute() and p.resolve().is_relative_to(folder.resolve()),'BATCH_ARTIFACT_PATH_INVALID')
@@ -166,7 +166,7 @@ def check_receipt(path,spec,env):
         require(Path(binding_ref.get('path','')).resolve()==folder/'source-binding.json',
                 'BATCH_SOURCE_BINDING_PATH_INVALID')
         source(binding_ref)
-        binding=json.loads((folder/'source-binding.json').read_text())
+        binding=json.loads((folder/'source-binding.json').read_text(encoding='utf-8'))
         require(binding.get('selection')==actual_consumption['selection'] and binding.get('status')=='VERIFIED' and
                 binding.get('adoptable') is True,'BATCH_SOURCE_BINDING_UNVERIFIED')
         for bound_source in binding['sources']:
@@ -183,7 +183,7 @@ def check_receipt(path,spec,env):
         if 'audio_backend' in spec or timeline.is_file():
             require(any(a['path']=='timeline/receipt.json' for a in rr['artifacts']),
                     'BATCH_AUDIO_BACKEND_RECEIPT_UNBOUND')
-            child=json.loads(timeline.read_text())
+            child=json.loads(timeline.read_text(encoding='utf-8'))
             require(child['status']=='SUCCEEDED','BATCH_TIMELINE_RECEIPT_FAILED')
             consumption=child.get('result',{}).get('source_consumption',{})
             require(consumption.get('selection')==actual_consumption['selection'] and
@@ -204,7 +204,7 @@ def check_receipt(path,spec,env):
 
 
 def batch_render(q,directory,tools):
-    from editing_runtime import exact_keys,require,write_json,fingerprint,sha256,run,ContractError
+    from editing_runtime import exact_keys,require,write_json,sha256,run
     from work_ops import validate_document
     action=q.get('action');base=['operation','action','batch_dir']
     extra={'prepare':['batch_id','jobs'],'status':['manifest_sha256'],'run':['manifest_sha256','job_ids','retry_failed']}
