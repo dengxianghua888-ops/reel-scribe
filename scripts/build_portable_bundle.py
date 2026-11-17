@@ -88,7 +88,7 @@ def discover(policy=None, external_records=None):
     for file in queue:
         if file.suffix != '.md':
             continue
-        for link_target in markdown_targets(file.read_text()):
+        for link_target in markdown_targets(file.read_text(encoding='utf-8')):
             target = local_target(file, link_target)
             if target is None:
                 continue
@@ -141,7 +141,7 @@ def historical_refs(files):
                 walk(item, origin, pointer + '[' + str(index) + ']')
     for file in sorted(files):
         if file.suffix == '.json':
-            walk(json.loads(file.read_text()), file)
+            walk(json.loads(file.read_text(encoding='utf-8')), file)
     return refs
 
 
@@ -195,7 +195,7 @@ def build(destination, policy=None, resources=None):
     core, files, links, external, entries, resource_edges = inventory_resources(policy, resources)
     refs = historical_refs(files)
     destination.mkdir(parents=True, exist_ok=False)
-    (destination/'build-incomplete.json').write_text('{"status":"BUILD_INCOMPLETE"}\n')
+    (destination/'build-incomplete.json').write_text('{"status":"BUILD_INCOMPLETE"}\n', encoding='utf-8')
     _common.copy_members(ROOT, destination, entries)
     output_files = {destination / row['path'] for row in entries}
     external_pairs = {(row['from']['path'], row['target']['path']) for row in external}
@@ -239,7 +239,7 @@ def build(destination, policy=None, resources=None):
         'codex_plugin': {'manifest': '.codex-plugin/plugin.json', 'mcp': '.mcp.json',
             'gateway_skill': 'skills/editing-skill-library/SKILL.md',
             'status': 'BUNDLED_NOT_INSTALLED_OR_HOST_ACCEPTED'},
-        'runtime_version': re.search(r"^VERSION = '([^']+)'", (ROOT/'runtime/editing_runtime.py').read_text(), re.M).group(1),
+        'runtime_version': re.search(r"^VERSION = '([^']+)'", (ROOT/'runtime/editing_runtime.py').read_text(encoding='utf-8'), re.M).group(1),
         'limits': ['No host installation, automatic discovery or production certification.',
           'Historical evidence is copied byte-for-byte; its original absolute paths are not rewritten.',
           'Explicit external Markdown links remain unresolved in the standalone bundle; use the recorded locator and verify hashes in an authorized workspace.',
@@ -248,7 +248,7 @@ def build(destination, policy=None, resources=None):
           'Configure explicit tool paths and fresh task inputs. Do not execute old requests against user files.']}
     (destination/'external-evidence.json').write_text(json.dumps({'schema':'historical-reference-locator/1',
         'note':'An index, not download permission or proof of remote availability. No historical references were rewritten.',
-        'references':refs,'markdown_links':external},ensure_ascii=False,indent=2)+'\n')
+        'references':refs,'markdown_links':external},ensure_ascii=False,indent=2)+'\n', encoding='utf-8')
     _common.verify_rows(ROOT, entries)
     _common.verify_rows(destination, entries)
     with (destination/'bundle-manifest.json').open('x', encoding='utf-8') as stream:
@@ -265,8 +265,8 @@ if __name__ == '__main__':
     parser.add_argument('--resources',type=Path,help='SHA-bound restricted HTML/CSS/JS resource declaration')
     parser.add_argument('--plan-only',action='store_true',help='Write an exclusive inventory JSON; do not copy files or build a package')
     args=parser.parse_args()
-    policy = json.loads(args.policy.read_text()) if args.policy else None
-    resources = json.loads(args.resources.read_text()) if args.resources else None
+    policy = json.loads(args.policy.read_text(encoding='utf-8')) if args.policy else None
+    resources = json.loads(args.resources.read_text(encoding='utf-8')) if args.resources else None
     if args.plan_only:
         if args.out.exists(): raise FileExistsError('OUTPUT_ALREADY_EXISTS')
         core, files, links, external, entries, resource_edges = inventory_resources(policy, resources)

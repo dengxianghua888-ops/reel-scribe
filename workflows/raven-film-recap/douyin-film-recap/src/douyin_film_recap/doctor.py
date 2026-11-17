@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import shutil
 import sys
 import tempfile
@@ -46,9 +47,9 @@ def run_doctor(config: AppConfig, config_path: Path | None = None) -> list[Docto
     if shutil.which("ffmpeg"):
         try:
             output = run_command(["ffmpeg", "-hide_banner", "-filters"], timeout=30).stdout
-            has_subtitles = bool(
-                " subtitles " in output or " ass " in output or "subtitles" in output
-            )
+            # Burn-in uses the ``subtitles`` filter itself; match its name column,
+            # not any filter description that merely mentions subtitles.
+            has_subtitles = re.search(r"^\s*\S+\s+subtitles\s", output, re.MULTILINE) is not None
             checks.append(
                 DoctorCheck(
                     name="FFmpeg libass",

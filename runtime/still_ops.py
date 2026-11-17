@@ -12,7 +12,7 @@ MAX_RENDER_PIXELS = 30_000_000_000
 
 def render_still(request,directory,tools):
     from pathlib import Path
-    from editing_runtime import exact_keys,source,require,number,sha256,write_json,ContractError,exec_tool,RUN_CANCELLATION,OperationCancelled
+    from editing_runtime import exact_keys,source,require,number,sha256,write_json,ContractError,exec_tool,RUN_CANCELLATION,OperationCancelled,frame_rate
     try:
         from PIL import Image, __version__ as pillow_version
     except ImportError as exc:
@@ -109,7 +109,7 @@ def render_still(request,directory,tools):
         require(process.returncode==0,'STILL_ENCODER_FAILED: '+log.read_text(errors='replace')[-2000:])
     counted=json.loads(exec_tool([tools.binary('ffprobe'),'-v','error','-select_streams','v:0','-count_frames',
         '-show_entries','stream=nb_read_frames,avg_frame_rate,width,height','-of','json',str(output)]).stdout)['streams'][0]
-    require(int(counted['nb_read_frames'])==n and Fraction(counted['avg_frame_rate'])==fps,'STILL_OUTPUT_CLOCK_MISMATCH')
+    require(int(counted['nb_read_frames'])==n and frame_rate(counted.get('avg_frame_rate'))==fps,'STILL_OUTPUT_CLOCK_MISMATCH')
     require(counted['width']==w and counted['height']==h,'STILL_OUTPUT_GEOMETRY_MISMATCH')
     from color_ops import frame_clock
     times=frame_clock(output,tools);require(len(times)==n and all(abs(t-float(Fraction(i,1)/fps))<=.00001 for i,t in enumerate(times)),'STILL_OUTPUT_TIMESTAMP_MISMATCH')

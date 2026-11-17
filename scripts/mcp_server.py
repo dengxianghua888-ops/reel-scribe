@@ -70,7 +70,7 @@ def call_tool(name, arguments, *, cancel_event=None, progress=None):
     if name == 'list_skills':
         if arguments:
             raise ValueError('UNKNOWN_TOOL_ARGUMENTS')
-        registry = json.loads((root / 'registry' / 'skills.json').read_text())
+        registry = json.loads((root / 'registry' / 'skills.json').read_text(encoding='utf-8'))
         return {'schema': registry.get('schema'), 'entries': [
             {k: row.get(k) for k in ('id', 'layer', 'entry', 'status')}
             for row in registry['entries']], 'limit': 'Static registry listing; no installation, route or capability execution claim.'}

@@ -1,12 +1,10 @@
 """Compile explicit translated cues and whole dub assets; never translate or rewrite."""
-import json
-from pathlib import Path
 import math
 import re
 
 
 def compile_localization(request, directory, tools):
-    from editing_runtime import exact_keys, require, fingerprint, source, span, number, write_json, audio_intersection, windowed_mix_clock
+    from editing_runtime import exact_keys, require, fingerprint, source, span, number, write_json, audio_intersection, windowed_mix_clock, verified_json
     from work_ops import validate_document
     fields=['operation','document','expected_document_sha256','source_script','translation','reading_profile']
     exact_keys(request,fields,fields)
@@ -14,8 +12,7 @@ def compile_localization(request, directory, tools):
     require(document_hash==request['expected_document_sha256'],'DOCUMENT_REVISION_CONFLICT')
     norm,_,_=validate_document(doc,tools)
     clips={c['id']:c for c in norm['clips']}
-    script_ref=source(request['source_script'])
-    script=json.loads(Path(script_ref['path']).read_text())
+    script_ref,script=verified_json(request['source_script'],'LOCALIZATION_SOURCE')
     sk=['schema','document_sha256','provenance','units']
     exact_keys(script,sk,sk)
     require(script['schema']=='localization-source/1','LOCALIZATION_SOURCE_SCHEMA')

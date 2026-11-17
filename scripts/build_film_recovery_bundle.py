@@ -19,8 +19,8 @@ def build(out):
     source = REPO / "workflows/raven-film-recap/douyin-film-recap/src/douyin_film_recap/workspace.py"
     package = out / "src/douyin_film_recap"
     package.mkdir(parents=True)
-    (out / "recover.py").write_text(RECOVERY_LAUNCHER)
-    (package / "__init__.py").write_text("# Read-only recovery package.\n")
+    (out / "recover.py").write_text(RECOVERY_LAUNCHER, encoding="utf-8")
+    (package / "__init__.py").write_text("# Read-only recovery package.\n", encoding="utf-8")
     expected = sha(source)
     shutil.copyfile(source, package / "workspace.py")
     if sha(source) != expected or sha(package / "workspace.py") != expected:

@@ -156,8 +156,10 @@ def build_story(
     context = ""
     if config.story.allow_external_context and config.project.context_file:
         context_path = Path(config.project.context_file).expanduser()
-        if context_path.exists():
-            context = context_path.read_text(encoding="utf-8", errors="replace")[:30000]
+        if not context_path.is_file():
+            # An enabled, configured context must not silently become "no context".
+            raise FileNotFoundError(f"Configured story context file not found: {context_path}")
+        context = context_path.read_text(encoding="utf-8", errors="replace")[:30000]
 
     bundle = client.chat_json(
         intent_key="story:global",

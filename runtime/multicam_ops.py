@@ -1,6 +1,4 @@
 """Measured constant offsets and explicit multicamera picture/program-audio mapping."""
-import json
-from pathlib import Path
 from fractions import Fraction
 import statistics
 import subprocess
@@ -152,7 +150,7 @@ def sync_measure(request,directory,tools):
 
 
 def compile_multicam(request,directory,tools):
-    from editing_runtime import exact_keys,require,source,number,span,fingerprint,normalize_plan,write_json,ContractError
+    from editing_runtime import exact_keys,require,source,number,span,fingerprint,normalize_plan,write_json,ContractError,verified_json
     from work_ops import validate_document
     exact_keys(request,['operation','master','expected_revision','output','segments','allow_reorder','allow_session_reuse','allow_declared_clock'],
                ['operation','master','expected_revision','output','segments','allow_reorder','allow_session_reuse'])
@@ -171,7 +169,7 @@ def compile_multicam(request,directory,tools):
         offsets[sid]=number(place['offset_seconds'],'offset_seconds')
         if sid==reference:
             require(offsets[sid]==0 and place['evidence'] is None,'REFERENCE_OFFSET_MUST_BE_ZERO');continue
-        record=source(place['evidence']);measurement=json.loads(Path(record['path']).read_text())
+        record,measurement=verified_json(place['evidence'],'SYNC_EVIDENCE')
         require(measurement.get('schema')=='sync-measurement/1','SYNC_EVIDENCE_SCHEMA_UNSUPPORTED')
         require(measurement.get('reference')==master['sources'][reference] and measurement.get('follower')==ref,'SYNC_EVIDENCE_SOURCE_MISMATCH')
         if measurement.get('method')=='declared-clock':

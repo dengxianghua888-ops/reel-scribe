@@ -490,7 +490,7 @@ def render_document(document,directory,tools,*,work_version,audio_backend=None,s
         result=_render_document_bound(document,directory,bound_tools,work_version=work_version,
                                       audio_backend=audio_backend,source_consumption=source_consumption)
     binding=directory/'source-binding.json'
-    evidence=json.loads(binding.read_text())
+    evidence=json.loads(binding.read_text(encoding='utf-8'))
     result['source_consumption']={'schema':evidence['schema'],'selection':evidence['selection'],
         'status':evidence['status'],'adoptable':evidence['adoptable'],
         'binding':{'path':str(binding),'sha256':sha256(binding)},

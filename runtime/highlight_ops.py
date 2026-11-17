@@ -8,7 +8,7 @@ from pathlib import Path
 def metadata_rows(path,max_rows):
     from editing_runtime import require
     rows=[];current=None
-    for line in Path(path).read_text().splitlines():
+    for line in Path(path).read_text(encoding='utf-8').splitlines():
         if line.startswith('frame:'):
             match=re.search(r'pts_time:([^\s]+)',line);require(match is not None,'MEASUREMENT_TIMESTAMP_MISSING')
             t=float(match.group(1));require(math.isfinite(t),'MEASUREMENT_TIMESTAMP_NONFINITE')
