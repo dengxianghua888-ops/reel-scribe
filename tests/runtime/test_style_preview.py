@@ -156,3 +156,11 @@ def test_binding_replaced_after_batch_validation_cannot_be_reendorsed(comparison
         style_preview_ops.execute(request, folder, tools)
     assert not (folder / 'style-preview.json').exists()
     assert not (folder / 'comparison.html').exists()
+
+
+def test_explicit_document_hash_rejects_wrong_prepared_snapshot(comparison):
+    request,folder,tools,_=comparison
+    request['expected_document_sha256']='0'*64
+    with pytest.raises(ValueError,match='DOCUMENT_REVISION_CONFLICT'):
+        style_preview_ops.execute(request,folder,tools)
+    assert not (folder/'variants').exists()

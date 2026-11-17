@@ -144,15 +144,97 @@ def propose_layout(cues: list[dict], *, font_file: str | Path, font_size: int,
             'adopted': False}
 
 
+def prepare_work_preview(document: dict, *, expected_document_sha256: str,
+                         store: str, expected_version: str, recipe: dict,
+                         caption_ids: list[str], max_chars: int = 16,
+                         max_lines: int = 2) -> dict:
+    """Measure an explicit Work snapshot and prepare its ordinary two-way preview.
+
+    This does not access a Work store or authorize adoption. Runtime compilation,
+    actual layout masks, render receipts, compare-and-swap adoption and undo stay
+    authoritative. The caller supplies an existing compatible style/card and
+    explicit layout constraints; no protected regions or editorial choices are
+    guessed. Runtime currently renders collection face zero only.
+    """
+    import copy
+
+    def digest(value):
+        return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
+                                        separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+
+    if digest(document) != expected_document_sha256:
+        raise LayoutBlocked('WORK_DOCUMENT_CHANGED')
+    if not isinstance(store, str) or not store or not isinstance(expected_version, str) or not expected_version:
+        raise LayoutBlocked('WORK_STORE_AND_VERSION_REQUIRED')
+    if (not isinstance(caption_ids, list) or not caption_ids
+            or not all(isinstance(cid, str) for cid in caption_ids)
+            or len(set(caption_ids)) != len(caption_ids)
+            or any(cid not in document['captions'] for cid in caption_ids)):
+        raise LayoutBlocked('WORK_CAPTION_TARGETS_INVALID')
+    if not isinstance(recipe, dict) or 'layout_constraints' not in recipe:
+        raise LayoutBlocked('WORK_LAYOUT_CONSTRAINTS_REQUIRED')
+    style = document['caption_style']
+    if not isinstance(style, dict):
+        raise LayoutBlocked('WORK_EXPLICIT_FONT_REQUIRED')
+    font = Path(style['font']['path'])
+    if hashlib.sha256(font.read_bytes()).hexdigest() != style['font']['sha256']:
+        raise LayoutBlocked('WORK_FONT_CHANGED')
+    variants, measurements = [], []
+    parameters = recipe.get('parameters', {})
+    if not isinstance(parameters, dict):
+        raise LayoutBlocked('WORK_RECIPE_PARAMETERS_INVALID')
+    original = copy.deepcopy(parameters)
+    measured = copy.deepcopy(parameters)
+    for params in (original, measured):
+        params.setdefault('caption_overrides', {})
+    for cid in caption_ids:
+        cue = document['captions'][cid]
+        override = copy.deepcopy(cue.get('style_override', {}))
+        declared = parameters.get('caption_overrides', {}).get(cid, override)
+        if declared != override:
+            raise LayoutBlocked('WORK_RECIPE_TARGET_OVERRIDE_CONFLICT')
+        effective = {**style, **override}
+        result = propose_layout([{'id': cid, **{k: cue[k] for k in ['start', 'end', 'text']}}],
+                                font_file=font, font_index=0,
+                                font_size=effective['font_size'],
+                                width=document['plan']['width'], height=document['plan']['height'],
+                                margin_x=20, margin_v=effective['margin_v'], outline=1,
+                                max_chars=max_chars, max_lines=max_lines)
+        if result['font_sha256'] != style['font']['sha256'] or result['font_family'] != style['font_family']:
+            raise LayoutBlocked('WORK_FONT_IDENTITY_MISMATCH')
+        binding = {'text_sha256': hashlib.sha256(cue['text'].encode()).hexdigest(), 'offsets': []}
+        original['caption_overrides'][cid] = {**override, 'line_breaks': override.get('line_breaks', binding)}
+        measured['caption_overrides'][cid] = {**override, 'line_breaks': {
+            **binding, 'offsets': result['cues'][0]['inserted_newline_offsets']}}
+        measurements.append(result)
+    scope = {'clip_ids': [], 'source_ids': [], 'caption_ids': list(caption_ids),
+             'audio_ids': [], 'style_keys': ['*'], 'note_keys': [], 'output_fields': [],
+             'caption_style': False, 'freeze_positions': [c['id'] for c in document['plan']['clips']],
+             'freeze_duration': True}
+    for identity, params in [('original', original), ('measured', measured)]:
+        variant = copy.deepcopy(recipe)
+        variant['parameters'] = params
+        variants.append({'id': identity, 'recipe': variant, 'expected_recipe_sha256': digest(variant),
+                         'capabilities': ['caption-cue-style'], 'scope': copy.deepcopy(scope)})
+    return {'schema': 'subtitle-work-preview-preparation/1', 'status': 'PREPARED_NOT_EXECUTED',
+            'expected_document_sha256': expected_document_sha256, 'measurements': measurements,
+            'preview_request': {'operation': 'style-recipe-preview', 'store': store,
+                                'expected_version': expected_version, 'expected_document_sha256': expected_document_sha256,
+                                'variants': variants},
+            'render_verification': 'NOT_PERFORMED', 'human_readability': 'NOT_REVIEWED',
+            'adopted': False}
+
+
 def main():
     """Standalone candidate command: never writes a workspace or render artifact."""
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('request', type=Path, help='JSON containing cues and explicit layout parameters')
+    parser.add_argument('--work-preview', action='store_true', help='Prepare existing Work original/measured preview request')
+    parser.add_argument('request', type=Path, help='JSON containing explicit candidate or Work preparation parameters')
     parser.add_argument('output', type=Path, help='New candidate JSON; never overwrites')
     args = parser.parse_args()
     request = json.loads(args.request.read_text(encoding='utf-8'))
-    result = propose_layout(**request)
+    result = prepare_work_preview(**request) if args.work_preview else propose_layout(**request)
     # Exclusive creation, including rejection of symlink targets.
     with args.output.open('x', encoding='utf-8') as handle:
         json.dump(result, handle, ensure_ascii=False, indent=2, allow_nan=False)

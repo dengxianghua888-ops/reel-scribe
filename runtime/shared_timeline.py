@@ -56,7 +56,7 @@ def compatible(left, right):
             from caption_style import validate_override
             height=document['plan']['height']
             require(type(height) is int and height>0, 'CAPTION_OVERRIDE_CANVAS_INVALID')
-            validate_override(cue['style_override'], height)
+            validate_override(cue['style_override'], height,cue['text'])
             cue.pop('style_override')
         return result
     try:

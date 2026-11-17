@@ -37,7 +37,7 @@ def validate_document(doc,tools):
         if 'style_override' in cue:
             from caption_style import effective_style, validate_override
             from editing_runtime import fingerprint
-            override=validate_override(cue['style_override'],norm['height'])
+            override=validate_override(cue['style_override'],norm['height'],cue['text'])
             effective=effective_style(doc['caption_style'],override,norm['height'])
             cues[-1].update(style_override=override,effective_style_sha256=fingerprint(effective))
     cues.sort(key=lambda x:(x['start'],x['end']))

@@ -46,3 +46,35 @@
 影片及演示改编保留 CC BY-SA 3.0 署名与授权；不把该素材许可扩大为独立软件源码许可。
 
 真实样例报告 SHA256 `44618cd9d15c2f0770129d78ea1e14e105144521e8a8ae11be48706bcb4df6b0`，代码身份快照 SHA256 `654546754832542abbb04625ebe2f2077445a9d3685012345b880c6ca576b92c`。30 份操作回执与冻结运行时身份一致。这里没有额外执行真实素材同字段冲突负例，拒绝路径由专用自动化测试覆盖，不能混写为真实用户验证。
+
+## Explicit line-break presentation
+
+A cue override may additionally include `line_breaks: {text_sha256, offsets}`.
+The hash binds the unchanged UTF-8 source text. Offsets are strictly increasing
+code-point boundaries at which the renderer inserts a newline; `[]` clears the
+presentation. Source text, timing and clip anchoring remain unchanged. Unknown,
+stale, out-of-range, token-splitting and unsafe grapheme boundaries fail closed.
+This is cue-only: global caption style cannot authorize text line breaks.
+
+The ordinary style recipe preview, compare-and-swap commit, local-undo binding
+resolution and layout-mask checks remain authoritative. Undo field `line_breaks`
+restores the earlier presence/value without overwriting later text/manual changes.
+Source newlines and ambiguous whitespace remain unsupported by the existing
+layout-mask checker; explicit inserted presentation breaks use the shared ASS
+renderer. Technical masks do not certify human readability or host round-trip.
+
+If undo removes the sole mapped field, the default still refuses an empty derived
+recipe. An explicit `binding_resolution.detach_empty_binding: true` permits
+removing that now-empty sole `*` binding only. It cannot detach a nonempty recipe
+or other bindings, requires style-key scope and the exact current recipe/hash,
+and reruns the original layout constraints for both current and restored Work.
+The report marks `EXPLICIT_EMPTY_BINDING_DETACHED`; an empty derived recipe is
+an audit artifact, not an applied style. No extra color/style mapping is invented.
+
+Explicit `line_breaks` (including empty offsets) uses a process-local Fontconfig
+configuration containing only the copied font directory, with a private cache.
+The parent environment and global font settings are unchanged. Both layout masks
+and final caption burn retain verbose selection logs and reject missing/unlogged
+selection, nonzero collection faces, alternate PostScript names and missing-glyph
+fallback. Face-zero metadata comes from `fc-query`; unavailable metadata blocks
+this strict path. Legacy cues without this field retain their previous behavior.

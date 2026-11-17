@@ -26,7 +26,7 @@ def reference(path):
 
 def execute(request, directory, tools):
     fields = ['operation', 'store', 'expected_version', 'variants']
-    exact_keys(request, fields + ['audio_backend', 'source_consumption'], fields)
+    exact_keys(request, fields + ['audio_backend', 'source_consumption', 'expected_document_sha256'], fields)
     require(request['operation'] == 'style-recipe-preview', 'STYLE_PREVIEW_OPERATION_UNSUPPORTED')
     variants = request['variants']
     require(isinstance(variants, list) and 2 <= len(variants) <= 4, 'STYLE_PREVIEW_REQUIRES_2_TO_4_VARIANTS')
@@ -40,6 +40,8 @@ def execute(request, directory, tools):
     require(len(set(ids)) == len(ids), 'STYLE_PREVIEW_DUPLICATE_ID')
     base = state(request['store'])
     require(base['version'] == request['expected_version'], 'WORK_VERSION_CONFLICT')
+    if 'expected_document_sha256' in request:
+        require(base['document_sha256'] == request['expected_document_sha256'], 'DOCUMENT_REVISION_CONFLICT')
     # All recipes must compile before any expensive render is attempted.
     compiled = []
     variants_dir = directory / 'variants'

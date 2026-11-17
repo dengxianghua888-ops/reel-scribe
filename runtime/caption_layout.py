@@ -60,6 +60,11 @@ def check(document, constraints, directory, tools):
     (directory/'fonts').mkdir()
     shutil.copyfile(font['path'], directory/'fonts'/('specified'+suffix))
     require(sha256(directory/'fonts'/('specified'+suffix)) == font['sha256'], 'LAYOUT_FONT_CHANGED')
+    strict=any("line_breaks" in c.get("style_override",{}) for c in cues)
+    binding=None
+    if strict:
+        from caption_font_binding import prepare, verify
+        binding=prepare(directory/"fonts"/("specified"+suffix),directory/"font-binding",document["caption_style"]["font_family"])
     observations = []
     for index, cue in enumerate(cues):
         folder = directory / f'cue-{index:04d}'
@@ -78,9 +83,10 @@ def check(document, constraints, directory, tools):
             ass = caption_ass(style, width, height, 1, layout_padding=pad)
             (folder/(label+'.ass')).write_text(ass, encoding='utf-8')
             w, h = width+2*pad, height+2*pad
-            tools.ff(['-f', 'lavfi', '-i', f'color=c=black@0:s={w}x{h}:r=1:d=1,format=rgba',
+            rendered=tools.ff((['-loglevel','verbose'] if strict else [])+['-f', 'lavfi', '-i', f'color=c=black@0:s={w}x{h}:r=1:d=1,format=rgba',
                 '-vf', f'ass={label}.ass:fontsdir=../fonts:alpha=1,format=rgba',
-                '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgba', label+'.rgba'], cwd=folder)
+                '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgba', label+'.rgba'], cwd=folder, **({'env':binding['env']} if strict else {}))
+            if strict:verify(rendered.stderr,binding,f'{index:04d}-{label}')
             raw_path = folder/(label+'.rgba')
             payload = raw_path.read_bytes()
             require(len(payload) == w*h*4, 'LAYOUT_MASK_SIZE_INVALID')
@@ -127,7 +133,7 @@ def check(document, constraints, directory, tools):
                             'temporary_raw_masks_removed': True, 'font_copies': 1},
         'sampling': 'Each nonoverlapping static cue, constant glyph layout; animation/control syntax rejected by caption_burn',
         'scope': 'Pre-encode subtitle glyph/outline alpha coverage only; declared UI regions, no UI recognition',
-        'font_fallback_verified': False, 'text_accuracy': 'NOT_VERIFIED',
+        'font_fallback_verified': strict, 'text_accuracy': 'NOT_VERIFIED',
         'aesthetic_readability': 'NOT_VERIFIED', 'post_codec_pixels': 'NOT_VERIFIED'}
     if any('style_override' in cue for cue in cues):
         report['style_resolver_sha256']=sha256(Path(__file__).with_name('caption_style.py'))

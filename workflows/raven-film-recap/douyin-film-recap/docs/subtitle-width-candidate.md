@@ -27,3 +27,69 @@
 下一切片仍需将候选纳入既有预览/采用/撤销通路，绑定实际渲染字体、显式保护区和最终渲染检查；现有生产路径不自动替换，避免把一次候选原型伪装成完整优化。真实案例、连续听审与编辑器往返沿用现有验收矩阵，未完成项不改为通过。
 
 参考机制：VideoLingo `5b06a8232ca84aec50453442eb16b25c44571c3f` 的测量→拟合→渲染验证（Apache-2.0）。此实现独立编写，没有复制代码或引入上游依赖；字体许可由所选字体单独决定。
+
+## Work preview, adoption and undo
+
+`prepare_work_preview(document, expected_document_sha256=..., store=...,
+expected_version=..., recipe=..., caption_ids=[...])` prepares an ordinary
+`style-recipe-preview` request with `original` and `measured` variants. It does
+not open or mutate the Work store. The equivalent exclusive-file CLI is:
+
+```sh
+python -m douyin_film_recap.subtitle_layout --work-preview work-request.json prepared.json
+```
+
+Supply the exact current Work snapshot and its canonical SHA-256/version, an
+explicit existing compatible style recipe/card and its `layout_constraints`,
+and the target caption IDs. No region, style card, source text, or user choice
+is guessed. Existing recipe parameters and per-cue overrides are retained;
+the normal compiler refuses incompatible/diverged bindings. Preparation pins
+the exact font hash/family (collection face zero), effective per-cue size,
+canvas, 20-pixel runtime horizontal margins and 1-pixel outline. A different
+font face, changed font bytes or stale source snapshot fails explicitly.
+
+The prepared `preview_request` must be executed through the existing Work
+runtime. The actual libass layout mask and render receipts, protection scopes,
+source bindings and current-version checks remain authoritative. Select a
+variant only after inspecting that preview; use the existing preview adoption
+command, never copy candidate JSON directly into a store. Adoption and local
+undo are the existing Work operations, not new authority in the film CLI.
+
+Breaks are per-cue presentation offsets bound to the UTF-8 source-text SHA-256;
+original `text`, anchor and start/end are unchanged. Removing/restoring them is
+a presentation operation. Empty offsets mean no inserted breaks. Human reading
+preference, film-context suitability, listening and native-editor roundtrip
+remain separate unperformed acceptance gates unless actually recorded.
+
+## Separate speed/audio boundary probe (baseline 288521b9)
+
+Cloud-generated six-second media, not a user's film, verified these existing
+behaviours independently of the subtitle change:
+
+- A video with no audio stream renders at 0.5x / 1x / 2x into 12 / 6 / 3 seconds,
+  with 300 / 150 / 75 decoded frames at 25 fps. No duration-padding fix was
+  justified. An unsupported `target_duration` field is rejected.
+- An existing silent audio stream at 1x renders successfully and yields 288000
+  envelope samples; a missing audio stream is rejected as `NO_AUDIO` in the
+  envelope path. Silence is not treated as a missing track.
+- A nonexistent audio stream index is rejected by text comparison as
+  `AUDIO_STREAM_REQUIRED`; this is safe rejection, not a precise missing-index
+  diagnostic.
+- Audio-bearing 0.5x / 2x renders were **blocked**, not passed, because the pinned
+  Rubber Band helper was absent. No alternative algorithm was substituted and
+  no helper was installed. A real listen-through and the pinned-backend test
+  remain outstanding.
+
+These findings concern that exact baseline and synthetic media, not deployed
+product health or human acceptance. No unrelated speed/audio patch was made.
+
+For a newly created recipe whose only mapping is `line_breaks`, ordinary local
+undo would leave an empty recipe. The default remains explicit rejection.
+After selecting the exact original edit, callers can additionally set
+`binding_resolution.detach_empty_binding: true` in the normal undo preparation
+request. This only detaches the sole `*` style binding when the restored recipe
+has **no** remaining mappings; nonempty mappings, mismatched hashes, changed
+caption identity and failed current/restored layout checks still block it.
+Undo preparation is not a commit. Inspect its candidate and explicitly commit
+it using the existing current-version checks. No artificial color/font mapping
+is added merely to make undo pass.

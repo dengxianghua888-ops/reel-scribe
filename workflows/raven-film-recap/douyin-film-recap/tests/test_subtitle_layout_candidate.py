@@ -130,3 +130,96 @@ def test_font_coverage_tool_missing_is_blocked(monkeypatch):
     from douyin_film_recap import subtitle_layout
     monkeypatch.setattr(subtitle_layout.shutil,'which',lambda name:None)
     with pytest.raises(LayoutBlocked,match='TOOL_UNAVAILABLE'): propose_layout(**request())
+
+
+def work_fixture():
+    import hashlib
+    from PIL import ImageFont
+    doc = {'schema': 'work-document/1', 'plan': {'width': 360, 'height': 640, 'clips': [{'id': 'clip'}]},
+           'captions': {'cue': {'clip_id': 'clip', 'start': 0, 'end': 2,
+                               'text': '中文与 WiFi 网络连接成功，保留原文。',
+                               'style_override': {'color_rgb': 'FFFFFF'}}},
+           'caption_style': {'font': {'path': str(FONT), 'sha256': hashlib.sha256(FONT.read_bytes()).hexdigest()},
+                             'font_family': ImageFont.truetype(str(FONT), 24).getname()[0],
+                             'font_size': 24, 'margin_v': 60, 'color_rgb': 'FFFFFF'}}
+    recipe = {'schema': 'style-recipe/1', 'id': 'linebreak', 'version': '1',
+              'style': {'family': 'film', 'style_id': 'provided', 'version': '1', 'card': {'path': 'explicit-card', 'sha256': 'caller-provided'}},
+              'parameters': {}, 'layout_constraints': {'schema': 'caption-layout/1'}}
+    return doc, recipe
+
+
+def work_digest(value):
+    import json
+    import hashlib
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+
+
+def test_work_preview_adapter_preserves_text_time_and_existing_override():
+    from douyin_film_recap.subtitle_layout import prepare_work_preview
+    doc, recipe = work_fixture()
+    before = deepcopy(doc); old_recipe = deepcopy(recipe)
+    prepared = prepare_work_preview(doc, expected_document_sha256=work_digest(doc),
+                                   store='explicit.sqlite', expected_version='version-1', recipe=recipe,
+                                   caption_ids=['cue'], max_chars=12, max_lines=4)
+    assert doc == before and recipe == old_recipe
+    req = prepared['preview_request']
+    assert req['operation'] == 'style-recipe-preview' and req['expected_version'] == 'version-1'
+    assert req['expected_document_sha256'] == work_digest(doc)
+    a, b = req['variants']
+    assert a['recipe']['parameters']['caption_overrides']['cue']['line_breaks']['offsets'] == []
+    assert b['recipe']['parameters']['caption_overrides']['cue']['line_breaks']['offsets']
+    assert b['recipe']['parameters']['caption_overrides']['cue']['color_rgb'] == 'FFFFFF'
+    assert b['scope']['caption_ids'] == ['cue'] and b['scope']['freeze_duration']
+    assert b['scope']['freeze_positions'] == ['clip'] and not b['scope']['caption_style']
+    assert b['expected_recipe_sha256'] == work_digest(b['recipe'])
+    assert prepared['render_verification'] == 'NOT_PERFORMED' and not prepared['adopted']
+
+
+@pytest.mark.parametrize('change,error', [('document', 'WORK_DOCUMENT_CHANGED'), ('font', 'WORK_FONT_CHANGED'),
+    ('family', 'WORK_FONT_IDENTITY_MISMATCH'), ('constraints', 'WORK_LAYOUT_CONSTRAINTS_REQUIRED'),
+    ('targets', 'WORK_CAPTION_TARGETS_INVALID')])
+def test_work_preview_adapter_rejects_stale_or_unbound_inputs(change, error):
+    from douyin_film_recap.subtitle_layout import prepare_work_preview
+    doc, recipe = work_fixture(); digest = work_digest(doc); targets = ['cue']
+    if change == 'document': doc['captions']['cue']['text'] += '新'
+    if change == 'font': doc['caption_style']['font']['sha256'] = '0'*64
+    if change == 'family': doc['caption_style']['font_family'] = 'NotTheFont'
+    if change == 'constraints': recipe.pop('layout_constraints')
+    if change == 'targets': targets = ['cue', 'cue']
+    if change != 'document': digest = work_digest(doc)
+    with pytest.raises(LayoutBlocked, match=error):
+        prepare_work_preview(doc, expected_document_sha256=digest, store='explicit.sqlite',
+                             expected_version='v1', recipe=recipe, caption_ids=targets, max_lines=4)
+
+
+def test_work_preview_cli_prepares_only_and_never_overwrites(tmp_path):
+    import json
+    import subprocess
+    import sys
+    doc, recipe = work_fixture()
+    request_path = tmp_path/'request.json'; output = tmp_path/'prepared.json'
+    payload = {'document': doc, 'expected_document_sha256': work_digest(doc), 'store': str(tmp_path/'absent.sqlite'),
+               'expected_version': 'v1', 'recipe': recipe, 'caption_ids': ['cue'], 'max_lines': 4}
+    request_path.write_text(json.dumps(payload), encoding='utf-8')
+    source_bytes = request_path.read_bytes()
+    cmd = [sys.executable, '-m', 'douyin_film_recap.subtitle_layout', '--work-preview', str(request_path), str(output)]
+    import os
+    env = {**os.environ, 'PYTHONPATH': str(Path(__file__).resolve().parents[1]/'src')}
+    subprocess.run(cmd, check=True, capture_output=True, env=env)
+    assert json.loads(output.read_text())['status'] == 'PREPARED_NOT_EXECUTED'
+    assert not (tmp_path/'absent.sqlite').exists()
+    assert request_path.read_bytes() == source_bytes
+    before = output.read_bytes()
+    assert subprocess.run(cmd, capture_output=True, env=env).returncode != 0
+    assert output.read_bytes() == before
+
+
+def test_work_adapter_rejects_conflicting_recipe_without_dropping_styles():
+    from douyin_film_recap.subtitle_layout import prepare_work_preview
+    doc, recipe = work_fixture()
+    recipe['parameters']['caption_overrides'] = {'cue': {'font_size': 48, 'color_rgb': 'FF0000'}}
+    before = deepcopy(recipe)
+    with pytest.raises(LayoutBlocked, match='WORK_RECIPE_TARGET_OVERRIDE_CONFLICT'):
+        prepare_work_preview(doc, expected_document_sha256=work_digest(doc), store='explicit.sqlite',
+                             expected_version='v1', recipe=recipe, caption_ids=['cue'])
+    assert recipe == before
