@@ -478,8 +478,8 @@ def verify_recovery_bundle(directory, expected_sha=None):
     actual = {p for p in actual if "__pycache__" not in Path(p).parts}
     if actual != expected | {"recovery-package.json"}:
         raise WorkspaceError("RECOVERY_BUNDLE_MEMBERS_CHANGED")
-    if ((directory / "recover.py").read_text() != RECOVERY_LAUNCHER
-            or (directory / "src/douyin_film_recap/__init__.py").read_text() != "# Read-only recovery package.\n"
+    if ((directory / "recover.py").read_text(encoding="utf-8") != RECOVERY_LAUNCHER
+            or (directory / "src/douyin_film_recap/__init__.py").read_text(encoding="utf-8") != "# Read-only recovery package.\n"
             or sha(directory / "src/douyin_film_recap/workspace.py") != sha(__file__)):
         raise WorkspaceError("RECOVERY_SOURCE_NOT_THIS_TESTED_CANDIDATE")
     return sha(Path(directory) / "recovery-package.json")

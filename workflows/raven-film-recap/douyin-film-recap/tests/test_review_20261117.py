@@ -138,6 +138,8 @@ def _transport(monkeypatch, results):
             result = results[len(sent) - 1]
             if isinstance(result, Exception):
                 raise result
+            if isinstance(result, httpx.Response):
+                return result
             return httpx.Response(200, json={"choices": [{"message": {"content": result}}]})
 
     monkeypatch.setattr("douyin_film_recap.providers.httpx.Client", FakeClient)
@@ -285,3 +287,47 @@ def test_render_fps_rejects_inexact_or_nonpositive_rates(value):
 
 def test_integer_fps_keeps_existing_config_fingerprint_shape(app_config):
     assert app_config.render.model_dump(mode="json")["fps"] == 24
+
+
+def test_unknown_legacy_format_fallback_blocks_even_when_first_attempt_succeeded(tmp_path, chat_provider,
+                                                                                  monkeypatch):
+    # Former release: format-0 got an observed 400 (recorded SUCCEEDED), its
+    # format-1 fallback then timed out (UNKNOWN).
+    rejected = httpx.Response(400, json={"error": "response_format unsupported"})
+    sent = _transport(monkeypatch, [rejected, httpx.ReadTimeout("synthetic: outcome unknown")])
+    with guard.send_session(tmp_path, SCOPE, authorized=True):
+        with pytest.raises(httpx.ReadTimeout):
+            chat_provider.chat(system="s", prompt="old", response_format={"type": "json_object"},
+                               intent_key="role")
+    assert len(sent) == 2
+    with guard.send_session(tmp_path, SCOPE, authorized=True):
+        with pytest.raises(guard.SendBlocked, match="SEND_OUTCOME_UNKNOWN: superseded intent"):
+            chat_provider.chat_json(system="s", prompt="p", model_type=_Answer, intent_key="role")
+    assert len(sent) == 2
+    assert _logical_keys(tmp_path) == {"role:format-0", "role:format-1"}
+
+
+def test_unknown_legacy_json_repair_blocks_the_replacement_primary_request(tmp_path, chat_provider,
+                                                                           monkeypatch):
+    sent = _transport(monkeypatch, ["not json", httpx.ReadTimeout("synthetic: outcome unknown")])
+    with guard.send_session(tmp_path, SCOPE, authorized=True):
+        chat_provider.chat(system="s", prompt="old", intent_key="role")
+        with pytest.raises(httpx.ReadTimeout):
+            chat_provider.chat(system="s", prompt="old repair", intent_key="role:json-repair")
+    with guard.send_session(tmp_path, SCOPE, authorized=True):
+        with pytest.raises(guard.SendBlocked, match="SEND_OUTCOME_UNKNOWN: superseded intent"):
+            chat_provider.chat_json(system="s", prompt="p", model_type=_Answer, intent_key="role")
+    assert len(sent) == 2  # No replacement primary request was sent.
+
+
+def test_reconciled_legacy_attempts_allow_the_replacement(tmp_path, chat_provider, monkeypatch):
+    sent = _transport(monkeypatch, [httpx.ReadTimeout("synthetic"), '{"number": 3}'])
+    with guard.send_session(tmp_path, SCOPE, authorized=True):
+        with pytest.raises(httpx.ReadTimeout):
+            chat_provider.chat(system="s", prompt="old", intent_key="role")
+    (unknown,) = [guard.read(p) for p in (tmp_path / ".remote-intents").glob("*.json")]
+    guard.reconcile(tmp_path, unknown["intent"], "operator checked provider console: not submitted")
+    with guard.send_session(tmp_path, SCOPE, authorized=True):
+        assert chat_provider.chat_json(system="s", prompt="p", model_type=_Answer,
+                                       intent_key="role").number == 3
+    assert len(sent) == 2
