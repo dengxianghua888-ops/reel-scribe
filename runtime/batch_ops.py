@@ -204,7 +204,7 @@ def check_receipt(path,spec,env):
 
 
 def batch_render(q,directory,tools):
-    from editing_runtime import exact_keys,require,write_json,fingerprint,sha256,run,ContractError
+    from editing_runtime import exact_keys,require,write_json,sha256,run
     from work_ops import validate_document
     action=q.get('action');base=['operation','action','batch_dir']
     extra={'prepare':['batch_id','jobs'],'status':['manifest_sha256'],'run':['manifest_sha256','job_ids','retry_failed']}

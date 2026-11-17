@@ -1,6 +1,5 @@
 """Explicit static crop, scale and canvas placement. No automatic subject selection."""
 from fractions import Fraction
-import json
 
 
 def reframe(q,directory,tools):

@@ -14,7 +14,7 @@ def declare_clock(request,directory,tools):
     require(isinstance(request['clock_id'],str) and request['clock_id'].strip(),'CLOCK_ID_REQUIRED')
     refs={k:source(request[k]) for k in ['reference','follower']}
     media={k:tools.probe(v['path']) for k,v in refs.items()}
-    evidence=source(request['clock_evidence'])
+    source(request['clock_evidence'])  # Evidence bytes must exist and match; not parsed here.
     ref_origin=number(request['reference_origin_seconds'],'reference_origin_seconds')
     follower_origin=number(request['follower_origin_seconds'],'follower_origin_seconds')
     offset=follower_origin-ref_origin

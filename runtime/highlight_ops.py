@@ -1,5 +1,4 @@
 """Objective signal measurements and caller-declared event assembly checks."""
-import json
 import math
 import re
 from pathlib import Path

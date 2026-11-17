@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 import re
 import sys
-from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGED = ('atomic','workflows','styles','contracts','runtime','registry','scripts','provenance',

@@ -17,7 +17,7 @@ from .config import AppConfig
 from .highlight import _compute_final_score, _deduplicate, _events_for_span, _select_diverse
 from .models import (
     HighlightDocument, OriginalCue, RecapPlan, SceneAnalysisDocument, SceneIndex,
-    SourceManifest, StoryBundle, Storyboard, TranscriptDocument, VisualReference,
+    SourceManifest, StoryBundle, Storyboard, TranscriptDocument,
 )
 from .narrative_contracts import get_plan_constraints, hook_eligibility
 from .utils import fingerprint_json
