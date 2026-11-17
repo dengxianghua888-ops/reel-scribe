@@ -129,6 +129,7 @@ render:
   # 或指定额外字体目录（与 subtitle_font_file 二选一）。不会安装/下载字体。
   # subtitle_fonts_dir: /path/to/cjk-fonts
   # 缺字即阻断渲染；可查 output/final.fonts.json，不能以 FFmpeg 退出码 0 代替字形正确。
+  # Output-canvas pixels; ASS PlayResX/Y is pinned to width/height.
   subtitle_font_size: 62
   subtitle_margin_v: 250
   subtitle_max_chars_per_line: 16

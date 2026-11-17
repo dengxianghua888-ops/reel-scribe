@@ -79,12 +79,51 @@ def _visible_units(text: str) -> int:
     return len(re.sub(r"\s+", "", text))
 
 
+def _wrap_latin_words(text: str, max_chars: int) -> list[str]:
+    """Bounded code-point lines; preserve Latin words that fit the limit.
+
+    Long unbreakable tokens still use the documented hard-width fallback.
+    This is not pixel/font-width or linguistic layout certification.
+    """
+    word = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ0-9]+(?:['’\-][A-Za-zÀ-ÖØ-öø-ÿ0-9]+)*")
+    closing = "，。！？；：、,.!?;:）)]】》〉」』”’"
+    lines = []
+    remaining = text
+    while len(remaining) > max_chars:
+        boundary = max_chars
+        space = remaining.rfind(" ", 0, max_chars + 1)
+        if space > 0:
+            boundary = space
+        else:
+            for match in word.finditer(remaining):
+                if match.start() < boundary < match.end() and match.start() > 0:
+                    boundary = match.start()
+                    break
+        while boundary > 1 and remaining[boundary] in closing:
+            boundary -= 1
+        # If punctuation adjustment enters a short word, move the whole word.
+        for match in word.finditer(remaining):
+            if match.start() < boundary < match.end():
+                if match.start() > 0:
+                    boundary = match.start()
+                elif len(match.group()) <= max_chars:
+                    boundary = match.end()
+                break
+        lines.append(remaining[:boundary].strip())
+        remaining = remaining[boundary:].lstrip()
+    if remaining:
+        lines.append(remaining)
+    return [line for line in lines if line]
+
+
 def _split_text(text: str, max_chars: int) -> list[str]:
     if type(max_chars) is not int or max_chars <= 0:
         raise ValueError("max_chars must be a positive integer")
     cleaned = re.sub(r"\s+", " ", text).strip()
     if not cleaned:
         return []
+    if re.search(r"[A-Za-zÀ-ÖØ-öø-ÿ0-9]", cleaned):
+        return _wrap_latin_words(cleaned, max_chars)
     sentences = [
         item.strip()
         for item in re.split(r"(?<=[。！？!?；;，,])", cleaned)
@@ -101,6 +140,12 @@ def _split_text(text: str, max_chars: int) -> list[str]:
             current = ""
         while _visible_units(sentence) > max_chars:
             index = max_chars
+            # Avoid opening a line with closing punctuation where the hard
+            # width permits it. Keep the preceding character with punctuation,
+            # rather than exceeding the configured line width.
+            closing = "，。！？；：、,.!?;:）)]】》〉」』”’"
+            while index > 1 and index < len(sentence) and sentence[index] in closing:
+                index -= 1
             chunks.append(sentence[:index].strip())
             sentence = sentence[index:]
         current = sentence
@@ -150,13 +195,20 @@ def _cues_from_boundaries(
         if current and (
             _visible_units(proposed) > max_chars
             or current_duration > 3.2
-            or punctuation_break and current_duration >= 0.9
         ):
             groups.append(current)
             current = []
             current_text = ""
         current.append(normalized)
         current_text += token
+        # A sentence-final token belongs to the sentence it closes, not the
+        # following group. Length/time caps still split before appending it.
+        # Recompute after such a split so the old group's duration cannot
+        # force a fresh short group to close prematurely.
+        if punctuation_break and start + duration - float(current[0]["start"]) >= 0.9:
+            groups.append(current)
+            current = []
+            current_text = ""
     if current:
         groups.append(current)
 

@@ -44,7 +44,15 @@ ATOMIC_REQUIREMENTS = {
     'tts-macos': ('say', 'ffmpeg', 'ffprobe'),
     'screen-focus': ('ffmpeg', 'ffprobe'),
     'tutorial-plan-compile': ('ffprobe',),
+    'tutorial-artifact-check': ('ffprobe',),
     'timeline-revise': ('ffprobe',),
+    'style-recipe-compile': ('ffprobe',),
+    'creation-brief-prepare': ('sqlite',),
+    'creation-recommendation': ('sqlite',),
+    'reference-transfer-prepare': ('sqlite', 'ffprobe'),
+    'result-preview-compile': ('sqlite', 'ffprobe'),
+    'style-recipe-preview': ('sqlite', 'ffmpeg', 'ffprobe'),
+    'revision-impact-inspect': ('ffprobe',),
     'work-render': ('sqlite', 'ffmpeg', 'ffprobe'),
     'work-version': ('sqlite',),
     'sync-offset-measure': ('ffprobe',),
@@ -71,7 +79,9 @@ ATOMIC_REQUIREMENTS = {
 # successful branch observation; it is reported as conditional unknown.
 BRANCH_KEYS = {'work-version': 'action', 'work-batch-render': 'action',
                'sync-offset-measure': 'method', 'caption-burn': 'font',
-               'work-render': 'document', 'speech-transcribe-local': 'locks'}
+               'work-render': 'document', 'speech-transcribe-local': 'locks',
+               'style-recipe-compile': 'recipe.layout_constraints',
+               'style-recipe-preview': 'variants[].recipe.layout_constraints'}
 
 
 def _selected_requirements(identifier, request):
@@ -80,12 +90,17 @@ def _selected_requirements(identifier, request):
     branch = None
     if identifier == 'work-version':
         branch = request.get('action') if request else None
-        if branch in ('init', 'commit', 'set-protection', 'restore'):
+        if branch in ('init', 'commit', 'set-protection', 'restore', 'prepare-local-undo'):
             required.append('ffprobe')
+            if branch == 'prepare-local-undo':
+                resolution = request.get('binding_resolution')
+                recipe = resolution.get('recipe') if isinstance(resolution, dict) else None
+                if isinstance(recipe, dict) and 'layout_constraints' in recipe:
+                    required += ['ffmpeg', 'Pillow']
         elif branch == 'relink-style-resources':
             required.append('style-resources')
         elif branch != 'read':
-            unknown.append('action: read, relink-style-resources or document-validating mutation')
+            unknown.append('action: read, relink-style-resources or document-validating action')
     elif identifier == 'work-batch-render':
         branch = request.get('action') if request else None
         if branch in ('prepare', 'run'):
@@ -100,6 +115,17 @@ def _selected_requirements(identifier, request):
             required += ['ffmpeg', 'numpy']
         elif branch not in ('declared-clock', 'declared-markers'):
             unknown.append('method: declared-clock, declared-markers or audio-correlation')
+    elif identifier in ('style-recipe-compile', 'style-recipe-preview'):
+        if request is None:
+            unknown.append('optional recipe layout constraints require actual FFmpeg/Pillow coverage checks')
+        else:
+            recipes = ([request.get('recipe')] if identifier == 'style-recipe-compile' else
+                       [v.get('recipe') for v in request.get('variants', []) if isinstance(v, dict)])
+            if any(isinstance(recipe, dict) and 'layout_constraints' in recipe for recipe in recipes):
+                required += ['ffmpeg', 'Pillow']
+                branch = 'actual-static-caption-layout'
+            else:
+                branch = 'no-layout-constraints'
     elif identifier == 'caption-burn':
         if request is None:
             unknown.append('request.font path and hash')

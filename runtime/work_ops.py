@@ -27,13 +27,19 @@ def validate_document(doc,tools):
         require(all(isinstance(k,str) and k for k in doc[field]),'RESOURCE_ID_REQUIRED')
     cues=[]
     for cid,cue in doc['captions'].items():
-        exact_keys(cue,['clip_id','start','end','text'],['clip_id','start','end','text'])
+        exact_keys(cue,['clip_id','start','end','text','style_override'],['clip_id','start','end','text'])
         require(cue['clip_id'] in clips,'CAPTION_ANCHOR_MISSING: '+cid)
         clip=clips[cue['clip_id']]
         # A complete sentence may legitimately span more than one picture clip.
         a,b=span(cue['start'],cue['end'],norm['duration']-clip['output_start'])
         require(isinstance(cue['text'],str) and cue['text'].strip(),'CUE_TEXT_REQUIRED')
         cues.append({'id':cid,'start':clip['output_start']+a,'end':clip['output_start']+b,'text':cue['text']})
+        if 'style_override' in cue:
+            from caption_style import effective_style, validate_override
+            from editing_runtime import fingerprint
+            override=validate_override(cue['style_override'],norm['height'])
+            effective=effective_style(doc['caption_style'],override,norm['height'])
+            cues[-1].update(style_override=override,effective_style_sha256=fingerprint(effective))
     cues.sort(key=lambda x:(x['start'],x['end']))
     require(all(a['end']<=b['start'] for a,b in zip(cues,cues[1:])),'OVERLAPPING_CAPTIONS')
     style=doc['caption_style']
@@ -47,7 +53,7 @@ def validate_document(doc,tools):
     require(not cues or style is not None,'CAPTION_STYLE_REQUIRED')
     tracks=[]
     for aid,track in doc['audio_tracks'].items():
-        exact_keys(track,['source','start','end','anchor_clip_id','offset','gain_db'],['source','start','end','anchor_clip_id','offset','gain_db'])
+        exact_keys(track,['source','start','end','anchor_clip_id','offset','gain_db','envelope'],['source','start','end','anchor_clip_id','offset','gain_db'])
         asset=source(track['source']);media=tools.probe(asset['path'])
         require(any(s['codec_type']=='audio' for s in media['streams']),'AUDIO_STREAM_REQUIRED')
         a,b=span(track['start'],track['end'],media['duration'])
@@ -57,6 +63,23 @@ def validate_document(doc,tools):
         require(start>=0 and start+b-a<=norm['duration']+1e-8,'AUDIO_TRACK_OUTSIDE_WORK: '+aid)
         gain=number(track['gain_db'],'gain_db');require(-120<=gain<=24,'GAIN_OUT_OF_RANGE')
         tracks.append({'source':track['source'],'start':a,'end':b,'output_start':start,'gain_db':gain})
+        if 'envelope' in track:
+            from audio_ops import validate_work_envelope, envelope_sample_count
+            from fractions import Fraction
+            validate_work_envelope(track['envelope'],Fraction(envelope_sample_count(b)-envelope_sample_count(a),48000))
+            precise_start=(Fraction(clips[anchor]['output_start_frame'])/Fraction(norm['fps']) if anchor is not None else Fraction(0))+Fraction(str(track['offset']))
+            start=float(Fraction(envelope_sample_count(precise_start),48000))
+            envelope_sample_count(a);envelope_sample_count(b)
+            tracks[-1]['output_start']=start
+            if doc['style_bindings']:
+                from style_recipe_ops import validate_envelope_binding
+                validate_envelope_binding(doc)
+            tracks[-1]['envelope']=track['envelope']
+    if any(isinstance(b,dict) and isinstance(b.get('parameters'),dict) and
+           isinstance(b['parameters'].get('presentation'),dict) and 'audio_envelope' in b['parameters']['presentation']
+           for b in doc['style_bindings'].values()):
+        from style_recipe_ops import validate_envelope_binding
+        validate_envelope_binding(doc)
     for key,binding in doc['style_bindings'].items():
         require(key=='*' or key in clips,'STYLE_ANCHOR_MISSING: '+key)
         exact_keys(binding,['family','style_id','version','card','parameters'],['family','style_id','version','card','parameters'])
@@ -304,13 +327,15 @@ def work_version(request,directory,tools):
     action=request.get('action')
     fields={'init':['store','work_id','document','message','author'],
             'read':['store'],
+            'prepare-local-undo':['store','expected_version','undo_sequence','fields','scope'],
             'commit':['store','expected_version','candidate','message','author'],
             'set-protection':['store','expected_version','protection','change_basis','message','author'],
             'restore':['store','expected_version','target_sequence','message','author'],
             'relink-style-resources':['store','expected_version','relocations','message','author']}
     require(action in fields,'WORK_ACTION_UNSUPPORTED')
     optional=(['style_resource_relocations'] if action=='restore' else
-              ['drama_inheritance'] if action=='init' else [])
+              ['drama_inheritance'] if action=='init' else
+              ['binding_resolution'] if action=='prepare-local-undo' else [])
     exact_keys(request,['operation','action']+fields[action]+optional,['operation','action']+fields[action])
     p=Path(request['store']);require(p.is_absolute(),'ABSOLUTE_STORE_PATH_REQUIRED')
     from drama_binding import (validate_work_attachment, recheck as drama_recheck,
@@ -376,7 +401,16 @@ def work_version(request,directory,tools):
                         'semantic_review':'NOT_RUN','media_review':'NOT_RUN'}
             else:
                 require(request['expected_version']==current['version'],'WORK_VERSION_CONFLICT')
-                if action=='commit':
+                if action=='prepare-local-undo':
+                    from local_undo import prepare
+                    report,bundle=prepare(db,current,request,tools,directory=directory)
+                    result={**current,'action':action,**report}
+                    if bundle is not None:
+                        if 'binding_resolution' in report:
+                            write_json(directory/'derived-recipe.json',report['binding_resolution']['derived_recipe'])
+                        write_json(directory/'candidate.json',bundle)
+                    write_json(directory/'local-undo-report.json',report)
+                elif action=='commit':
                     candidate_ref=source(request['candidate'])
                     candidate_bytes=Path(candidate_ref['path']).read_bytes()
                     require(hashlib.sha256(candidate_bytes).hexdigest()==candidate_ref['sha256'],
@@ -511,9 +545,17 @@ def _render_document_bound(document,directory,tools,*,work_version,audio_backend
         require(receipt['status']=='SUCCEEDED','WORK_RENDER_FAILED: '+name+': '+receipt.get('error',''))
         child_receipts.append({'operation':req['operation'],'path':str(directory/name/'receipt.json'),
                                'sha256':sha256(directory/name/'receipt.json')})
-    invoke({'operation':'timeline-render','plan':doc['plan'],
+    timeline_request={'operation':'timeline-render','plan':doc['plan'],
             **({'source_consumption':source_consumption} if source_consumption is not None else {}),
-            **({'audio_backend':audio_backend} if audio_backend is not None else {})},'timeline')
+            **({'audio_backend':audio_backend} if audio_backend is not None else {})}
+    from shared_timeline import obtain, inspect_lineage
+    shared=obtain(doc,timeline_request,directory,tools)
+    if shared is None:
+        invoke(timeline_request,'timeline')
+    else:
+        child_receipts.append({'operation':'timeline-render','path':str(directory/'timeline/receipt.json'),
+                               'sha256':sha256(directory/'timeline/receipt.json'),
+                               'execution':'REUSED_VERIFIED_NOT_EXECUTED'})
     current=directory/'timeline/preview.mp4'
     if tracks:
         invoke({'operation':'audio-mix','source':{'path':str(current),'sha256':sha256(current)},'base_gain_db':0,'tracks':tracks},'audio')
@@ -527,15 +569,19 @@ def _render_document_bound(document,directory,tools,*,work_version,audio_backend
         current=directory/'visual/composited.mp4'
     if cues:
         invoke({'operation':'caption-burn','source':{'path':str(current),'sha256':sha256(current)},**doc['caption_style'],
-                'cues':[{k:v for k,v in c.items() if k!='id'} for c in cues]},'captions')
+                'cues':[{k:v for k,v in c.items() if k not in ['id','effective_style_sha256']} for c in cues]},'captions')
         current=directory/'captions/captioned.mp4'
     invoke({'operation':'media-qc','source':{'path':str(current),'sha256':sha256(current)},
             'expected':{'duration':norm['duration'],'duration_tolerance':0.1,'width':norm['width'],'height':norm['height'],'audio_required':True}},'qc')
+    if shared is not None:
+        shared[1]()
+        inspect_lineage(directory,shared[0])
     write_json(directory/'rendered-document.json',doc)
     write_json(directory/'output-captions.json',{'cues':cues,'work_version':work_version})
     if visual:write_json(directory/'output-visual-layers.json',{'layers':visual,'work_version':work_version,'order':'after audio, before captions'})
     return {'video':{'path':str(current),'sha256':sha256(current)},'document_sha256':fingerprint(doc),
             'child_receipts':child_receipts,
+            **({'timeline_reuse':shared[0]} if shared is not None else {}),
             'layer_counts':{'audio_tracks':len(tracks),'visual_layers':len(visual),'captions':len(cues)}}
 
 
@@ -585,6 +631,7 @@ def work_render(request,directory,tools):
             'source_audio_evidence':'NOT_GRANTED_BY_RENDER',
             'style_application':'explicit document operations only; bindings are not automatic effects',
             'content_review':'NOT_RUN','listening_review':'NOT_RUN','native_editor_acceptance':'NOT_RUN'}
+    if 'timeline_reuse' in rendered:result['timeline_reuse']=rendered['timeline_reuse']
     if preview:
         result.update(preview_status='CANDIDATE_PREVIEW_NOT_COMMITTED',
                       preview_candidate=candidate_ref,

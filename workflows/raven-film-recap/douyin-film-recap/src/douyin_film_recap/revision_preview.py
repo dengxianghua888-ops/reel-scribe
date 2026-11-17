@@ -162,7 +162,7 @@ def _raw_cards(cards, base):
     return result, validated
 
 
-def preview_revision(work_dir, *, proposal=None, base=None, beat_ids=None, raw_cards=None):
+def preview_revision(work_dir, *, proposal=None, base=None, beat_ids=None, raw_cards=None, support_windows=None):
     """Inspect current artifacts or an existing ``revise`` local proposal.
 
     ``base`` accepts the existing film-revision-base/1 snapshot. A candidate
@@ -269,6 +269,20 @@ def preview_revision(work_dir, *, proposal=None, base=None, beat_ids=None, raw_c
         "limitations": ["read_only_projection; no adoption, rendering, models or raw extraction",
             "scope_check is partial; original adoption validators and fresh QC remain required",
             "retrieval and raw declarations do not establish complete narrative support"]}
+    if support_windows is not None:
+        from .consumption_coverage import diagnose
+        import hashlib
+        import json
+        from pathlib import Path
+        coverage_plan = {}
+        if consumption['status'] == 'recorded':
+            identity = consumption['render_plan']
+            data = Path(identity['path']).read_bytes()
+            if hashlib.sha256(data).hexdigest() != identity['sha256'] or len(data) != identity['bytes']:
+                raise WorkspaceError('PREVIEW_RENDER_EVIDENCE_CHANGED')
+            coverage_plan = json.loads(data)
+        result['binding']['support_windows_sha256'] = digest(support_windows)
+        result['support_window_diagnostics'] = diagnose(support_windows, parsed_board, base, consumption, coverage_plan)
     # Recheck byte identities after all projection, including optional render
     # evidence outside the snapshot. No lock file or derived artifact is written.
     for identity in external:

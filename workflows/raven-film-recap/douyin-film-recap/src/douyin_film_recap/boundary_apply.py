@@ -7,6 +7,7 @@ to revision.adopt_revision's existing workspace generation transaction.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 from .boundary import (
@@ -247,7 +248,8 @@ def prepare_boundary_revision(
 
 def apply_boundary_proposal(work_dir: str | Path, *, proposal: BoundaryProposal,
     base: dict, config: AppConfig, timebases: dict[str, TimebaseBinding],
-    raw_cards: list | None = None, evidence_root: str | Path | None = None) -> dict:
+    raw_cards: list | None = None, evidence_root: str | Path | None = None,
+    candidate_check=None) -> dict:
     """Publish through I2; repeat preparation under its lock to prevent TOCTOU."""
     from .revision import adopt_revision
     from .workspace import preflight, read, sha
@@ -265,9 +267,16 @@ def apply_boundary_proposal(work_dir: str | Path, *, proposal: BoundaryProposal,
             character_registry=CharacterRegistry.model_validate(read(active / "04_character_registry.json")),
             story_graph=StoryGraph.model_validate(read(active / "05_story_graph.json")),
             knowledge_timeline=KnowledgeTimeline.model_validate(read(active / "06_knowledge_timeline.json")))
-        return prepare_boundary_revision(proposal, **inputs, config=config, timebases=timebases,
+        prepared = prepare_boundary_revision(proposal, **inputs, config=config, timebases=timebases,
             current_artifact_hashes={key: sha(active / key) for key in proposal.base_artifact_hashes},
             raw_cards=raw_cards, evidence_root=evidence_root)
+        if candidate_check is not None:
+            audit = candidate_check(active, deepcopy(prepared.artifacts))
+            if audit is not None:
+                if not isinstance(audit, dict):
+                    raise BoundaryApplyError("CANDIDATE_CHECK_AUDIT_INVALID")
+                prepared.artifacts[SIDECAR]["additional_candidate_binding"] = deepcopy(audit)
+        return prepared
 
     _, active = preflight(work_dir)
     prepared = prepare_at(active)

@@ -1,0 +1,21 @@
+{
+  "schema": "style-recipe/1",
+  "id": "guided-first-run-caption-readable",
+  "version": "0.1.0",
+  "style": {
+    "family": "教学",
+    "style_id": "guided-first-run",
+    "version": "0.1.0",
+    "card": {
+      "path": "/absolute/checkout/styles/software/guided-first-run.md",
+      "sha256": "943bb3653f347a554a940099b8b83ca2b39c1628ece3ee1571cf9fbf6cb71503"
+    }
+  },
+  "parameters": {
+    "caption_style": {
+      "font_size": 48,
+      "margin_v": 96,
+      "color_rgb": "FFF4CC"
+    }
+  }
+}

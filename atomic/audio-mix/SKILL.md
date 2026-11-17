@@ -16,3 +16,5 @@ description: 将指定音频区间按明确时间位置和增益混入已有视�
 如需只在指定旁白窗口降低原声，提供可选 `base_gain_windows: [{start,end,gain_db}]`，gain_db 为该窗口绝对目标增益。窗口必须有序且不重叠；执行精度为 FFmpeg 音频帧边界，当前不提供平滑包络。不得以整片压低原声替代局部声部让位。
 
 执行器：[editing_runtime.py](../../runtime/editing_runtime.py)。TTS 生成本身不在此操作内。
+
+独立音轨可显式提供 `envelope: {sample_rate:48000, fade_in_samples:整数, fade_out_samples:整数, curve:"tri"|"qsin"}`，在源窗首尾执行淡变。入出点与输出位置须精确落在48kHz采样点；两段淡变之和不得超过源窗。省略字段保留旧混音路径。实现验证完整解码样本数，不补静音伪造覆盖；这不是自动配乐、自动对白避让或听感验收。Work绑定、保护与局部撤销限制见[作品合同](../../contracts/work-contract.md)。原声 `base_gain_windows` 仍为帧边界阶跃，不因新增独立轨淡变成为平滑原声包络。

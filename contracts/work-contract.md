@@ -109,3 +109,147 @@ scope: {
 work-render 的当前作品和 preview_candidate 可传入 operation-contract 定义的 audio_backend；只传播到本次子时间线和 render-binding，不更改 WorkDocument/版本。省略时按实际有效源窗选择默认流式R3或无需DSP的身份/静音路径；旧atempo可显式选，真实听感和R01完整声学验收仍未闭合。helper 只在实际 DSP 时需要，preview/current 共用 render_document；当前组合仅以隔离短预览和完整原源文档恢复验证，不代表真实项目成片、人评或宿主验收。
 
 同样接受 [原媒体消费绑定 v1](operation-contract.md#原媒体消费绑定-v1) 的 `source_consumption`。省略时完整前后复核；显式快照必须在渲染验证前准备，主轨与附加音轨／视觉层／字幕字体使用同一份任务内副本。字段通过 Work 与批次逐层保留，最终绑定关联实际模式、来源记录与子回执 SHA。来源或副本发生可观察变化时父操作失败，不发布 `render-binding.json`，失败子预览不能成为有效作品产物。保护范围限于合同中声明的本地条件，不授予内容、听检或逐样本冻结验收。
+
+## 候选预览批次与复用
+
+`work-batch-render` 的 `prepare.jobs[]` 可带 `preview_candidate: {path, sha256}`，其余 `store`、`expected_version`、`audio_backend`、`source_consumption` 沿用现有批次请求。候选必须是现有 `work-candidate/1`，与当前 Work 基线版本及文档摘要一致，完整范围、素材及保护校验通过，且文档确有变化。prepare 记录 `candidate_document_sha256`，只建立批队列，不提交候选。
+
+同一 Work/基线版本允许多个不同候选 SHA；同一候选 SHA 重复任务拒绝。运行与恢复始终重新验证候选字节、当前头及范围。成功复用还须匹配候选结果身份、完整产物/原素材/运行时/工具/后端/消费绑定，与普通批次相同；存在 MP4、成功字符串或仅预览 ID 均不构成命中。当前头已变化或候选/源被同路径替换时，不重用、不渲染旧候选，返回 `PREVIEW_VALIDATION_FAILED`，保留旧文件。它不是自动 rebase，也不自动采纳历史预览。
+
+首次也通过 batch prepare/run 生成的预览才能由同一队列复用。独立 `work-render` 已产出的预览不会被批队列自动收编；重新创建批次可能重新渲染。完整回执已写但队列未完成时沿用 `RECOVERED_RECEIPT`；缺回执的中断尝试保留，并创建新 attempt，不把零散子产物视作可复用结果。状态查询仍只读且 `artifact_integrity: NOT_RECHECKED_STATUS_ONLY`。
+
+本增量是整份候选预览复用，不是局部片段缓存、增量编码或风格效果验收。不生成第二份作品账本，不更新 Work 头，不绕过既有 QA。
+
+### `prepare-local-undo`: preserve later edits while preparing a narrow undo
+
+This action does **not** restore a whole historical document and does not commit.
+Required input fields are `operation:work-version`, `action:prepare-local-undo`,
+`store`, current `expected_version`, integer `undo_sequence`, nonempty `fields`,
+and the existing explicit `scope` (never inferred or widened).
+A field selector is either `{kind:caption_style, field:font_size|margin_v|color_rgb}`
+or `{kind:audio_track, id:<existing track ID>, field:gain_db}`. Duplicate selectors,
+font changes, unknown fields, missing fields and added/deleted tracks are unsupported.
+
+The selected sequence must be an ordinary `commit` with an existing immediate
+parent, on the current linear ancestry. Historical documents and version tokens
+are verified with the same authoritative Work loader, not imported snapshots.
+For each exact selected field, compare the parent (before), selected revision
+(after), and current head: current equal to after restores before; current equal
+to before is already restored; any third value conflicts and produces no candidate.
+All unselected current content stays unchanged. Audio track identity must match
+in all three documents apart from gain, including source reference, source window,
+anchor, offset, anchored clip and its source. Equal gain alone is not identity.
+
+A changed candidate with current `style_bindings` is rejected as
+`UNDO_STYLE_BINDING_REQUIRES_EXPLICIT_RESOLUTION`: this entry point does not support
+local undo of bound recipe works. Use the existing explicit recipe/scope workflow
+and revalidate; do not clear bindings or constraints merely to bypass this guard.
+No old recipe/constraint endorsement is silently rewritten or inherited.
+
+The complete current and candidate documents still pass ordinary `revision_diff`
+source validation, scope/CAS and persistent protection rules. A successful change
+writes ordinary `work-candidate/1` `candidate.json`, `local-undo-report.json` and
+an unchanged current `work-state.json`; the report binds before/after/current
+sequence, version and document digest plus exact field values. `NO_OP` emits no
+candidate. Conflicts emit no candidate. Commit is a separate existing action,
+which must recheck the current version and candidate. No render, delivery choice,
+semantic acceptance or media/listening approval is implied. As with other Work
+operations, use a fresh operation output directory.
+
+#### Explicit compatible recipe resolution for local undo
+
+The default bound-work rejection above remains. A caller may explicitly supply
+`binding_resolution: {recipe, expected_recipe_sha256, derived_recipe_id,
+derived_recipe_version}` to resolve the narrowly supported case. `recipe` must be
+the complete current `style-recipe/1`, including any original `layout_constraints`;
+its canonical digest and compiler-produced global `*` binding must match exactly.
+Only one global binding and caption presentation / existing audio gain parameters
+are supported. All original mapped parameters must still match the current Work.
+An unrelated manual edit to a mapped parameter makes the binding divergent and
+is refused; unrelated notes or unmapped presentation values are preserved.
+
+The selected fields must already occur in that recipe's parameter map. Explicit
+scope must authorize `style_keys:["*"]` as well as the selected document fields.
+A derived recipe changes only selected values and its explicitly supplied id/version
+pair, which must differ from the original pair. The card, other mapped values and
+original constraints remain byte-equivalent as JSON values. Original and candidate
+caption layouts are both checked under those same constraints before any candidate
+is emitted. No weakening, dropping or substitution of constraints is supported.
+
+A successful change emits `derived-recipe.json`; the candidate binding records this
+new recipe digest and mapped values, not a false assertion that the old recipe is
+still fully applied. `local-undo-report.json.binding_resolution` records
+`derived_from` (original recipe id/version/digest), both binding digests, derived
+recipe/digest and layout results. This audit is not a new Work authority or proof
+of visual quality. A NO_OP never changes the binding or emits a derived recipe,
+even when resolution was supplied. Multiple/clip bindings, custom compiler metadata,
+unknown parameters, absent original recipe, stale binding, unmapped selected fields
+and identity-changing audio edits remain unsupported. No render or commit is run;
+layout masks, when required, are an explicit local validation step only.
+
+#### Local cue override undo
+
+`prepare-local-undo.fields` additionally accepts
+`{kind:caption_override, id:<existing caption ID>, field:font_size|margin_v|color_rgb}`.
+The caption ID must exist before, after and currently; its text, anchor, timing and
+other non-override fields must be identical. This is not permission to restore
+caption content or deleted cues. `scope.caption_ids` must include the selected ID;
+`caption_style:true` alone does not authorize a local override edit.
+
+The three-way comparison includes **field presence**, not only its value. Restoring
+a previously absent field removes that override; if no overrides remain, the
+`style_override` object is removed rather than storing an invalid empty map.
+A missing override means inheritance from the **final candidate's current global
+style**, not preservation of a historical visual appearance. The per-field report
+contains before/after/current `presence`, `inheritance`, and
+`restored_effective_value`, computed after every selected change so combined global
+and local undo is independent of selector order. Unselected overrides, other cues,
+later notes and protections remain unchanged. A third current value conflicts.
+
+Compatible explicit bound-recipe resolution also accepts the `caption_overrides`
+parameter map. The selected cue/field must be present in that original recipe,
+and all its declared overrides must still match current stored overrides. Undo
+removes only the selected recipe mapping when restoring absence, retaining other
+mapped values and original constraints. Empty cue/group maps are removed from the
+derived recipe; if this would leave no recipe parameters at all,
+`UNDO_EMPTY_DERIVED_RECIPE_UNSUPPORTED` rejects the action. It never silently clears
+the Work binding. Existing explicit derived identity, scope, layout revalidation,
+CAS and no-auto-commit rules continue to apply.
+
+## Explicit independent-track sample envelope
+
+An independent audio track may declare optional `envelope` with exactly
+`sample_rate: 48000`, nonnegative integer (not boolean) `fade_in_samples` and
+`fade_out_samples`, and `curve: tri|qsin`. Source window length must be an exact
+positive 48 kHz sample count; fades must fit without overlap. Envelope absence
+preserves the old render path. No source replacement, clip-original-audio change,
+automatic ducking, limiter, normalization or semantic endorsement occurs.
+
+The envelope is applied after source trim/resampling/gain and before placement.
+Precise full source audio coverage and independently decoded unpadded sample
+count are required. Audio evidence intersecting either nonzero fade is rejected;
+zero fades may touch evidence boundaries. Current style bindings with an envelope
+are unsupported and rejected rather than cleared. Scope remains `audio_ids`;
+existing CAS and review invalidation remain mandatory.
+
+Local undo supports `{kind:audio_track,id:<id>,field:envelope}` as a whole-field
+three-way selection including restoring absence; later independent gain/notes
+are retained, source/anchor changes and conflicting envelopes reject. Batch reuse
+may share only the verified underlying timeline; mixing and final checks rerun.
+Technical sample comparisons are not listening acceptance.
+
+For this first envelope implementation, source start/end and placed output start
+must also be exact 48 kHz sample boundaries. The envelope branch decodes the
+selected source window without asynchronous padding into a checked stereo
+`pcm_f32le` raw intermediate, then mixes that same intermediate. Its hash, sample
+count and quantization format are recorded; Work continues to reference the
+original source. The float32 intermediate avoids an unnecessary 16-bit quantization step; the
+legacy branch without an envelope remains unchanged. The receipt grants no original-sound or
+listening evidence.
+
+Work placement uses the original frame clock plus the declared offset before
+serializing seconds. Decimal JSON floats may differ from an integral sample by
+at most two floating-point ULPs, capped at 0.000001 sample; larger deviations are
+rejected, not rounded. Each source endpoint is validated independently before
+subtracting integer sample counts, so floating-point cancellation cannot turn a
+valid source window into a false alignment failure.

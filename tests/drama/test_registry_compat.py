@@ -149,7 +149,12 @@ class ExplicitV2Scope(unittest.TestCase):
 class RegistryIntegration(unittest.TestCase):
     def test_new_workflow_preserves_old_ids_and_dependency_kind(self):
         registry = json.loads((ROOT / 'registry/skills.json').read_text())
-        entries = registry['entries']
+        additions = {'style-recipe-compile', 'revision-impact-inspect', 'style-recipe-preview', 'result-preview-compile', 'creation-brief-prepare', 'creation-recommendation', 'reference-transfer-prepare', 'tutorial-artifact-check'}
+        self.assertEqual({e['id'] for e in registry['entries'] if e['id'] in additions}, additions)
+        self.assertTrue(all(e['layer'] == 'atomic' for e in registry['entries'] if e['id'] in additions))
+        # Keep the original W17 compatibility snapshot unchanged while allowing
+        # the explicitly registered presentation/revision operations.
+        entries = [e for e in registry['entries'] if e['id'] not in additions]
         self.assertEqual(len(entries), 52)
         self.assertEqual(len({e['id'] for e in entries}), 52)
         self.assertEqual(sum(e['layer'] == 'complex' for e in entries), 17)

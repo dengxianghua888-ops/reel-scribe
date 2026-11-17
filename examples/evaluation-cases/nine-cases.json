@@ -1,0 +1,513 @@
+{
+  "schema": "evaluation-cases/1",
+  "date": "2026-11-12",
+  "scope": "Nine semantic challenge candidates in three classes; not nine accepted edits. Reused overlapping windows intentionally test different dependencies. Technical failures are supporting evidence, never semantic complexity or semantic PASS.",
+  "sources": {
+    "film": {
+      "asset_path": "reel-test-media/narrative.mov",
+      "sha256": "efa9062d9cdb7a338e40ad530dfdf234806743f29ae6a1a136b97ece4e588e8f",
+      "bytes": 372178639,
+      "duration_seconds": 734.166667,
+      "credit": "Blender Foundation | mango.blender.org",
+      "source_url": "https://download.blender.org/demo/movies/ToS/tears_of_steel_720p.mov",
+      "license_url": "https://creativecommons.org/licenses/by/3.0/"
+    },
+    "tutorial": {
+      "asset_path": "reel-test-media/software-tutorial.webm",
+      "sha256": "45aca1b97d9dd5fe30b316c532c106be11026204abfba4bc73339d1b63a49c16",
+      "bytes": 8756574,
+      "duration_seconds": 114.569,
+      "credit": "Nikkimaria",
+      "source_url": "https://commons.wikimedia.org/w/index.php?title=File:WikEdtutorial1.webm&oldid=1131672871",
+      "license_url": "https://creativecommons.org/licenses/by-sa/3.0/"
+    },
+    "fleurs-8": {
+      "asset_path": "reel-public-media-20261112/fleurs-cmn-validation-08-id1523.wav",
+      "sha256": "602f0fc4a334f4927b221b836f1735a09888f017956d02e1aaf97526a10cc964",
+      "bytes": 733498,
+      "duration_seconds": 11.46,
+      "credit": "Google FLEURS; Alexis Conneau, Min Ma, Simran Khanuja, Yu Zhang, Vera Axelrod, Siddharth Dalmia, Jason Riesa, Clara Rivera, Ankur Bapna (2022). FLEURS: Few-shot Learning Evaluation of Universal Representations of Speech. https://arxiv.org/abs/2205.12446. CC BY 4.0.",
+      "source_url": "https://datasets-server.huggingface.co/cached-assets/google/fleurs/--/70bb2e84b976b7e960aa89f1c648e09c59f894dd/--/cmn_hans_cn/validation/8/audio/audio.wav",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "reference_text": "最后结果是一分险胜，比分为 21 比 20，结束了全黑队连胜 15 场的局面。",
+      "reference_kind": "dataset annotation; NOT independently heard"
+    },
+    "fleurs-10": {
+      "asset_path": "reel-public-media-20261112/fleurs-cmn-validation-10-id1640.wav",
+      "sha256": "9517fcaf0f74eaa21083438b52c5a36efdef0c2c6473be21c1315af153e19d56",
+      "bytes": 890938,
+      "duration_seconds": 13.92,
+      "credit": "Google FLEURS; Alexis Conneau, Min Ma, Simran Khanuja, Yu Zhang, Vera Axelrod, Siddharth Dalmia, Jason Riesa, Clara Rivera, Ankur Bapna (2022). FLEURS: Few-shot Learning Evaluation of Universal Representations of Speech. https://arxiv.org/abs/2205.12446. CC BY 4.0.",
+      "source_url": "https://datasets-server.huggingface.co/cached-assets/google/fleurs/--/70bb2e84b976b7e960aa89f1c648e09c59f894dd/--/cmn_hans_cn/validation/10/audio/audio.wav",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "reference_text": "在冰雪覆盖的路面上，摩擦力很小，你不能像在光洁的柏油路上一样开车。",
+      "reference_kind": "dataset annotation; NOT independently heard"
+    },
+    "fleurs-11": {
+      "asset_path": "reel-public-media-20261112/fleurs-cmn-validation-11-id1554.wav",
+      "sha256": "740b099bcbe2ef18d0605505bdf34494086b2422ce9677b4ab92bc056780aeff",
+      "bytes": 357178,
+      "duration_seconds": 5.58,
+      "credit": "Google FLEURS; Alexis Conneau, Min Ma, Simran Khanuja, Yu Zhang, Vera Axelrod, Siddharth Dalmia, Jason Riesa, Clara Rivera, Ankur Bapna (2022). FLEURS: Few-shot Learning Evaluation of Universal Representations of Speech. https://arxiv.org/abs/2205.12446. CC BY 4.0.",
+      "source_url": "https://datasets-server.huggingface.co/cached-assets/google/fleurs/--/70bb2e84b976b7e960aa89f1c648e09c59f894dd/--/cmn_hans_cn/validation/11/audio/audio.wav",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "reference_text": "他称，他制作了一个 WiFi 门铃。",
+      "reference_kind": "dataset annotation; NOT independently heard"
+    }
+  },
+  "evidence": {
+    "film-en": {
+      "asset_path": "reel-test-media/narrative.en.srt",
+      "sha256": "ce9578f6fe098a5821045a38884b229160f9e7ba27890448a92f5be330c6e6fe",
+      "bytes": 4764
+    },
+    "film-zh": {
+      "asset_path": "reel-test-media/narrative.zh.srt",
+      "sha256": "456152557f85f5874ec7c96c99a68ff05c325013972ca059b193f0d93f036d45",
+      "bytes": 4945
+    },
+    "work-init": {
+      "asset_path": "reel-real-evaluation/narrative/init/receipt.json",
+      "sha256": "ea927951a1bdecb516e789c73afc42d85ac7c266cbd2634dbe94a6e288244872",
+      "bytes": 15692
+    },
+    "work-apply": {
+      "asset_path": "reel-real-evaluation/narrative/apply/receipt.json",
+      "sha256": "2ca7b6e0e58834c5f0c40e6fac5a7848047e6940785271522e2c99352d3a53f9",
+      "bytes": 18401
+    },
+    "work-restore": {
+      "asset_path": "reel-real-evaluation/narrative/restore/receipt.json",
+      "sha256": "91949c682f6dde80d3b2032f6ba65b02a6e4351a0d03b3b103ceeea8e87fc657",
+      "bytes": 16964
+    },
+    "work-stale": {
+      "asset_path": "reel-real-evaluation/narrative/stale/receipt.json",
+      "sha256": "82a905eb6abd9f3827272a0c4f64ba6156ad503f85c4f718c2a9fcfafedb2987",
+      "bytes": 12182
+    },
+    "real-report": {
+      "asset_path": "reel-real-evaluation/final-report.json",
+      "sha256": "0603a86b8183d249e006a5b04d5274ba33b9e146f3d26fc63d9d425b499ef93b",
+      "bytes": 47358
+    },
+    "tutorial-rejected": {
+      "asset_path": "reel-real-evaluation/software/init/receipt.json",
+      "sha256": "ce6bc76fbeb32f4fa00c50b643a02f465620cc7cb112390e622722bdd1aa9eb0",
+      "bytes": 12188
+    },
+    "speech-captions": {
+      "asset_path": "reel-mandarin-caption-evaluation/results.json",
+      "sha256": "9b5687829ace2f9627f19e722fe552b44a42954359850e95c81dc1e00240de13",
+      "bytes": 4066
+    },
+    "film-frame43": {
+      "asset_path": "reel-ninegrid-source-review-stage10-final/frame43.png",
+      "sha256": "0e173f03b25a0fd5d75ff15a96ce278e0b9daa696c168413d208e2bf02a22bb9",
+      "bytes": 1080667
+    },
+    "film-frame43-observation": {
+      "asset_path": "reel-ninegrid-source-review-stage10-final/visual-observation.json",
+      "sha256": "15ca07f0b78bbc970edc8a085937e705b896a44d6aeec0e00457586750fb3b7b",
+      "bytes": 926
+    },
+    "film-context-regression-report": {
+      "asset_path": "reel-ninegrid-source-review-stage10-final/report.json",
+      "sha256": "8424288275d8b23be37c83d14f02a57545838396fa79e72289d46ce83694c9f0",
+      "bytes": 3372
+    },
+    "film-context-positive-init": {
+      "asset_path": "reel-ninegrid-source-review-stage10-final/positive-init/receipt.json",
+      "sha256": "e58d4fce8788c23e31b2a756378d0fc5badd9033bfb5a4052b8a29f2b56f8e51",
+      "bytes": 23938
+    },
+    "film-context-negative-admission-truncated": {
+      "asset_path": "reel-ninegrid-source-review-stage10-final/negative-admission-truncated/receipt.json",
+      "sha256": "ce1e269a9ead12c497f3d775669e39d70e4e07d30e9d7c8416248d09994d139a",
+      "bytes": 13753
+    },
+    "film-context-negative-order-reversed": {
+      "asset_path": "reel-ninegrid-source-review-stage10-final/negative-order-reversed/receipt.json",
+      "sha256": "1d80c8d710fdc8b1bc33c0ef985efff801e0cea48d52be47d52c10b1288da4a1",
+      "bytes": 13754
+    },
+    "film-context-negative-protection-removed": {
+      "asset_path": "reel-ninegrid-source-review-stage10-final/negative-protection-removed/receipt.json",
+      "sha256": "f0b1503d3a5d7c2fb46a96565b46ca6e4d162b8050d72fbef50bf15b78143471",
+      "bytes": 13760
+    },
+    "film-context-positive-render": {
+      "asset_path": "reel-ninegrid-source-review-stage10-final/positive-render/receipt.json",
+      "sha256": "477801b854a39da236fe82e45b66becbf1e087a0cc6f90c8f061e26e61a41263",
+      "bytes": 19871
+    },
+    "tutorial-stage11-observations": {
+      "asset_path": "reel-stage11-tutorial-observation/report.json",
+      "sha256": "2e52f3bf562ab406655f5e8d9589d362bd0aea2b4525827be5464f4eabc57fc8",
+      "bytes": 9634
+    },
+    "tutorial-stage11-observation-notes": {
+      "asset_path": "reel-stage11-tutorial-observation/README.md",
+      "sha256": "7e973750b7dfc5b6a7461c175d185ae066a2c8ef22342b237cf384f5e6e184f5",
+      "bytes": 4259
+    }
+  },
+  "cases": [
+    {
+      "id": "film-normal",
+      "category": "narrative",
+      "difficulty": "normal",
+      "source_id": "film",
+      "window_seconds": [
+        30,
+        36
+      ],
+      "text": "Why don't you just admit that you're freaked out by my robot hand? / I'm not freaked out by- it's...",
+      "evidence_basis": "Official English subtitle30.8–34 question and34.5–36 interrupted response; prior frame32s shows two people on bridge, not independently heard.",
+      "dependencies": [
+        "retain question and response ownership; do not turn a question into established fact",
+        "style-only transformation may not replace dialogue with an invented explanation"
+      ],
+      "expected": [
+        "question remains question, interrupted reply not upgraded to a complete confident claim",
+        "reuse existing Work receipts to verify unchanged plan/captions/audio and restoration; this technical check does not establish correct dialogue semantics"
+      ],
+      "runnable_mechanism": "verify_work_protection_restore",
+      "status": "NEEDS_SEMANTIC_REVIEW",
+      "unknown": [
+        "No listening, full sequence review, or correct creative style established"
+      ],
+      "evidence_refs": [
+        "work-init",
+        "work-apply",
+        "work-restore",
+        "work-stale",
+        "real-report",
+        "film-en",
+        "film-context-regression-report",
+        "film-context-positive-init",
+        "film-context-negative-admission-truncated",
+        "film-context-negative-order-reversed",
+        "film-context-negative-protection-removed",
+        "film-context-positive-render"
+      ],
+      "listening_review": "NOT_RUN",
+      "semantic_acceptance": "NOT_RUN",
+      "word_timing_gold": false
+    },
+    {
+      "id": "film-complex",
+      "category": "narrative",
+      "difficulty": "complex",
+      "source_id": "film",
+      "window_seconds": [
+        25,
+        45
+      ],
+      "text": "25–30.5: ambitions;30.8–34: robot-hand question;38–42: fear admission in official subtitle text. Direct source frame43s displays 40 YEARS LATER over a futuristic city; subtitle cue9 combines title and dialogue.",
+      "evidence_basis": "Official English subtitle source order plus directly inspected original43s frame. The42.2–45 subtitle cue combines title and dialogue and cannot establish continuous bridge-conversation imagery. No listening or exact cut onset established.",
+      "dependencies": [
+        "retain stated ambitions, robot-hand question and subsequent response as declared source-text context; do not infer sole cause of relationship outcome",
+        "retain the visible temporal-jump distinction when using43s imagery; do not portray it as simultaneous bridge conversation"
+      ],
+      "expected": [
+        "distinguish source-subtitle wording, actually observed frame content, and unverified audio/speaker timing",
+        "declared question/denial/admission source windows must retain coverage and order; this guard is not automatic semantic interpretation"
+      ],
+      "runnable_mechanism": "real-source declared dependency coverage/order negative regressions; semantic understanding NOT_IMPLEMENTED",
+      "status": "NEEDS_SEMANTIC_REVIEW",
+      "unknown": [
+        "Exact visual cut onset, continuing audio across cut, speaker identity and word-level timing remain unreviewed; no full motion/listening acceptance"
+      ],
+      "evidence_refs": [
+        "film-en",
+        "film-zh",
+        "film-frame43",
+        "film-frame43-observation",
+        "film-context-regression-report",
+        "film-context-positive-init",
+        "film-context-negative-admission-truncated",
+        "film-context-negative-order-reversed",
+        "film-context-negative-protection-removed",
+        "film-context-positive-render"
+      ],
+      "listening_review": "NOT_RUN",
+      "semantic_acceptance": "NOT_RUN",
+      "word_timing_gold": false
+    },
+    {
+      "id": "film-misleading",
+      "category": "narrative",
+      "difficulty": "misleading",
+      "source_id": "film",
+      "window_seconds": [
+        34.5,
+        41
+      ],
+      "text": "I'm not freaked out by- it's... / ...alright! Fine! / I'm freaked out!",
+      "evidence_basis": "Official English subtitle34.5–36 initial denial,37–38 concession,38–41 admission; same-source textual evidence only.",
+      "dependencies": [
+        "first denial must be read with later admission",
+        "do not select only denial and caption it as final position"
+      ],
+      "expected": [
+        "a cut asserting he is not afraid is flagged for context contradiction review"
+      ],
+      "runnable_mechanism": "textual dependency fixture; exact spoken spans/semantic classifier NOT_RUN",
+      "status": "NEEDS_SEMANTIC_REVIEW",
+      "unknown": [
+        "No listening or verified cut-point gold; Chinese/English timing differences are auxiliary provenance, not semantic complexity"
+      ],
+      "evidence_refs": [
+        "film-en",
+        "film-zh",
+        "film-context-regression-report",
+        "film-context-positive-init",
+        "film-context-negative-admission-truncated",
+        "film-context-negative-order-reversed",
+        "film-context-negative-protection-removed",
+        "film-context-positive-render"
+      ],
+      "listening_review": "NOT_RUN",
+      "semantic_acceptance": "NOT_RUN",
+      "word_timing_gold": false
+    },
+    {
+      "id": "speech-normal",
+      "category": "speech",
+      "difficulty": "normal",
+      "source_id": "fleurs-11",
+      "window_seconds": [
+        0,
+        5.58
+      ],
+      "text": "他称，他制作了一个 WiFi 门铃。",
+      "evidence_basis": "FLEURS dataset annotation; real independent read-speech recording.",
+      "dependencies": [
+        "preserve attribution 他称: a reported claim is not verified device existence",
+        "preserve WiFi and surrounding spaces/punctuation; no word-level timing invented"
+      ],
+      "expected": [
+        "output still attributes the claim rather than independently certifying it"
+      ],
+      "runnable_mechanism": "text-preservation fixture plus historical display-failure evidence",
+      "status": "NEEDS_SEMANTIC_REVIEW",
+      "unknown": [
+        "Reported creation claim not independently checked or listened",
+        "Historical caption-clipping failure retained; current fixed build status requires new render"
+      ],
+      "evidence_refs": [
+        "speech-captions"
+      ],
+      "listening_review": "NOT_RUN",
+      "semantic_acceptance": "NOT_RUN",
+      "word_timing_gold": false
+    },
+    {
+      "id": "speech-complex",
+      "category": "speech",
+      "difficulty": "complex",
+      "source_id": "fleurs-8",
+      "window_seconds": [
+        0,
+        11.46
+      ],
+      "text": "最后结果是一分险胜，比分为 21 比 20，结束了全黑队连胜 15 场的局面。",
+      "evidence_basis": "FLEURS dataset annotation:21比20、一分险胜、15场 are jointly linked claims.",
+      "dependencies": [
+        "21 and20 retain score order",
+        "15 modifies winning streak, not score",
+        "do not confuse sentence reference with recognized transcript"
+      ],
+      "expected": [
+        "captions must preserve all numbers, relations and spaces"
+      ],
+      "runnable_mechanism": "text preservation checks; audio-word alignment NOT_RUN",
+      "status": "NEEDS_SEMANTIC_REVIEW",
+      "unknown": [
+        "Reference not listened; no word-level timestamps; no numeric recognition metric"
+      ],
+      "evidence_refs": [
+        "speech-captions"
+      ],
+      "listening_review": "NOT_RUN",
+      "semantic_acceptance": "NOT_RUN",
+      "word_timing_gold": false
+    },
+    {
+      "id": "speech-misleading",
+      "category": "speech",
+      "difficulty": "misleading",
+      "source_id": "fleurs-10",
+      "window_seconds": [
+        0,
+        13.92
+      ],
+      "text": "在冰雪覆盖的路面上，摩擦力很小，你不能像在光洁的柏油路上一样开车。",
+      "evidence_basis": "FLEURS dataset annotation explicitly includes不能 and冰雪覆盖/摩擦力很小.",
+      "dependencies": [
+        "negation不能 is inseparable from开车 instruction",
+        "retain low-friction premise; do not turn warning into positive driving advice"
+      ],
+      "expected": [
+        "a candidate deleting不能 is invalid as a text-preserving edit; no exact audio cut suggested"
+      ],
+      "runnable_mechanism": "reference string negative fixture; no word-timed deletion execution",
+      "status": "NEEDS_SEMANTIC_REVIEW",
+      "unknown": [
+        "Listening and exact spoken negation boundary NOT_RUN"
+      ],
+      "evidence_refs": [
+        "speech-captions"
+      ],
+      "listening_review": "NOT_RUN",
+      "semantic_acceptance": "NOT_RUN",
+      "word_timing_gold": false
+    },
+    {
+      "id": "software-normal",
+      "category": "software",
+      "difficulty": "normal",
+      "source_id": "tutorial",
+      "window_seconds": [
+        25,
+        31
+      ],
+      "text": "Editing Irving K. Barber Learning Centre: page source, toolbar and edit-summary area visible at27s.",
+      "evidence_basis": "This worker inspected source27s still: a Wikipedia edit form with page source and basic toolbar; no motion/listening review.",
+      "dependencies": [
+        "retain which page is being edited and the relevant source/edit-summary context",
+        "do not invent a completed save action from merely seeing an edit form"
+      ],
+      "expected": [
+        "describe an editing state, not successful publication; human labels must supply exact action/goal"
+      ],
+      "runnable_mechanism": "source/window integrity + existing technical failure receipt; action correctness NEEDS_MANUAL_LABEL",
+      "status": "NEEDS_SEMANTIC_REVIEW",
+      "unknown": [
+        "User action and completion signal not observed; native WebM failure retained as separate technical evidence"
+      ],
+      "evidence_refs": [
+        "tutorial-rejected",
+        "real-report"
+      ],
+      "listening_review": "NOT_RUN",
+      "semantic_acceptance": "NOT_RUN",
+      "word_timing_gold": false
+    },
+    {
+      "id": "software-complex",
+      "category": "software",
+      "difficulty": "complex",
+      "source_id": "tutorial",
+      "window_seconds": [
+        32,
+        60.04
+      ],
+      "text": "Observed sparse states: basic editor/Preferences hover32.003s; Preferences36.003s; Gadgets40.003s; wikEd unchecked44.003s then checked48.003s; Preferences Save affordance49.503s; article Read52.003s, Edit hover58.003s; enhanced toolbar59.003/60.003s.",
+      "evidence_basis": "Stage11 individually viewed source stills, with source/frame SHA and actual PTS in bound report; 21 frames overall, not a continuous observed interval. The51.003s darkened article frame indicates a transition, not a visible settings-save confirmation.",
+      "dependencies": [
+        "retain declared setup/navigation anchors when presenting later enhanced-toolbar state, or explicitly label omitted steps",
+        "distinguish visible checkbox/button/editor state from an observed click or server-side successful action",
+        "preserve toolbar and bottom controls from caption occlusion"
+      ],
+      "expected": [
+        "limited supported result: additional toolbar controls visibly appear in later editor frames",
+        "do not infer persistent preference save, complete enablement procedure, or article publication from sparse states"
+      ],
+      "runnable_mechanism": "existing source/evidence identity validation only; ordered source-anchor and unsupported-save-claim artifact-check proposed, NOT_IMPLEMENTED; no machine semantic acceptance",
+      "status": "NEEDS_SEMANTIC_REVIEW",
+      "unknown": [
+        "No continuous motion/listening review or verified click events; exact transition actions and successful server responses unknown",
+        "Fresh-session preference persistence, article-save success and current UI applicability unverified",
+        "Prior25–31s caption occlusion FAIL retained independently, not complex semantic evidence"
+      ],
+      "evidence_refs": [
+        "real-report",
+        "tutorial-stage11-observations",
+        "tutorial-stage11-observation-notes"
+      ],
+      "listening_review": "NOT_RUN",
+      "semantic_acceptance": "NOT_RUN",
+      "word_timing_gold": false,
+      "history": [
+        {
+          "stage": "before-stage11-sparse-observations",
+          "window_seconds": [
+            25,
+            85
+          ],
+          "evidence_basis": "This worker independently inspected only27s and80s stills; different toolbar states are visible. Transition actions are not observed.",
+          "unknown": [
+            "No full motion/listening review; cannot claim a particular button enabled the toolbar",
+            "Prior25–31s caption occlusion FAIL retained independently, not treated as complex semantics"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "software-misleading",
+      "category": "software",
+      "difficulty": "misleading",
+      "source_id": "tutorial",
+      "window_seconds": [
+        49.45,
+        113.04
+      ],
+      "text": "Preferences Save at49.503/50.003s is not article Save page at60.003s or113.003s. Late edit-summary happy editing! is entered text, not publication confirmation. Historical wikEd is not a current guide.",
+      "evidence_basis": "Outer envelope covers two sparse observation groups, NOT full-span watching: Preferences Save affordance and subsequent editor states;110.003/113.003s editor states. Bound report also includes separately observed72/80/90/100s frames, none establish successful publication.",
+      "dependencies": [
+        "distinguish preference-saving and article-publication controls",
+        "button/cursor appearance and entered summary must not be upgraded to successful save or persistent state",
+        "retain historical software-version context and label gaps between observed frames"
+      ],
+      "expected": [
+        "claims that preferences persisted after relogin or article was published remain unsupported",
+        "do not infer no save ever occurred between samples either; absence of observed confirmation is not proof of failure"
+      ],
+      "runnable_mechanism": "existing source/evidence identity validation only; ordered source-anchor and unsupported-save-claim artifact-check proposed, NOT_IMPLEMENTED; no machine semantic acceptance",
+      "status": "NEEDS_SEMANTIC_REVIEW",
+      "unknown": [
+        "No listening, continuous observation, verified click/server response, fresh-session reopen, publication history or current-site check",
+        "Exact actions between sparse frames remain unknown; outer envelope is not claimed observation coverage"
+      ],
+      "evidence_refs": [
+        "tutorial-stage11-observations",
+        "tutorial-stage11-observation-notes"
+      ],
+      "listening_review": "NOT_RUN",
+      "semantic_acceptance": "NOT_RUN",
+      "word_timing_gold": false,
+      "history": [
+        {
+          "stage": "before-stage11-sparse-observations",
+          "window_seconds": [
+            75,
+            85
+          ],
+          "evidence_basis": "This worker inspected source80s static frame: Wikipedia editing page, wikEd toolbar and bottom Save page/Preview/Changes controls.",
+          "unknown": [
+            "No listening; only80s frame inspected; no current-site lookup or full-motion check"
+          ]
+        }
+      ],
+      "sparse_observation_groups_seconds": [
+        [
+          49.45,
+          60.04
+        ],
+        [
+          110,
+          113.04
+        ]
+      ]
+    }
+  ],
+  "work_receipt_keys": {
+    "init": "work-init",
+    "apply": "work-apply",
+    "restore": "work-restore",
+    "stale": "work-stale"
+  },
+  "license_notes": "Media not bundled. Credit sources; tutorial derivatives CC BY-SA3.0. Examples are local test metadata, not third-party material uploads."
+}

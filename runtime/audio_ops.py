@@ -37,3 +37,39 @@ def envelope(request,directory,tools):
         'provenance':'derived audio; retain this receipt to map output sample zero to declared source start; resampling/decoder timing may need independent calibration',
         'source_audio_evidence':'NOT_GRANTED_BY_ENVELOPE'}
     write_json(directory/'audio-envelope.json',result);return result
+
+
+def envelope_sample_count(seconds, error='ENVELOPE_PLACEMENT_NOT_SAMPLE_ALIGNED'):
+    """Accept only integral samples, allowing at most two float representation ULPs."""
+    import math
+    from fractions import Fraction
+    from editing_runtime import require
+    value=Fraction(str(seconds))*48000
+    if value.denominator==1:
+        return int(value)
+    number=float(value)
+    require(math.isfinite(number),error)
+    nearest=round(number)
+    # This is numerical representation tolerance, not an audible time rounding policy.
+    require(abs(value-nearest)<=min(Fraction(1,1000000),Fraction.from_float(2*math.ulp(number))),error)
+    return nearest
+
+
+def validate_work_envelope(value, duration):
+    from editing_runtime import exact_keys, require
+    keys=['sample_rate','fade_in_samples','fade_out_samples','curve']
+    exact_keys(value,keys,keys)
+    require(type(value['sample_rate']) is int and value['sample_rate']==48000,'ENVELOPE_SAMPLE_RATE_INVALID')
+    for key in keys[1:3]:
+        require(type(value[key]) is int and value[key]>=0,'ENVELOPE_SAMPLES_INVALID')
+    count=envelope_sample_count(duration,'ENVELOPE_SOURCE_WINDOW_NOT_SAMPLE_ALIGNED')
+    require(count>0,'ENVELOPE_SOURCE_WINDOW_NOT_SAMPLE_ALIGNED')
+    require(value['fade_in_samples']+value['fade_out_samples']<=count,'FADES_EXCEED_INTERVAL')
+    require(value['curve'] in ('tri','qsin'),'FADE_CURVE_UNSUPPORTED')
+    return int(count)
+
+
+def work_envelope_filters(value, count):
+    fi=value['fade_in_samples'];fo=value['fade_out_samples'];curve=value['curve']
+    return ((f',afade=t=in:ss=0:ns={fi}:curve={curve}' if fi else '')+
+            (f',afade=t=out:ss={count-fo}:ns={fo}:curve={curve}' if fo else ''))

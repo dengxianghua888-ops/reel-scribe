@@ -124,3 +124,13 @@ flowchart LR
 欢迎在 [Issues](https://github.com/dengxianghua888-ops/reel-scribe/issues) 分享实际剪辑需求、适配经验或可复现问题。如果这套方法对你有用，可以 Star 收藏；订阅版本更新请使用 Watch → Releases。
 
 **许可：** 影视解说制作子集沿用 MIT；通用库及部分参考材料有独立使用条件，商用或再分发前请查看[许可与来源说明](LICENSES.md)。
+
+## 显式风格包装与受控修改（实验性）
+
+新增 [包装配方编译](atomic/style-recipe-compile/SKILL.md) 与 [修改影响检查](atomic/revision-impact-inspect/SKILL.md)，复用现有 Work 候选、范围保护、预览与版本提交。前者只把已确定的字幕参数和指定音轨增益落实为文档操作，后者说明处理依赖及复验影响；都不自动执行渲染或继承真实效果验收。迭代范围与后续里程碑见[实施说明](docs/product-iteration-20261112.md)。
+
+需要比较明确包装方案时，可用 [同内容配方预览](atomic/style-recipe-preview/SKILL.md)生成候选视频及本地参数对照，复用现有批队列恢复机制。仅限已声明的字幕/音轨参数，不自动选择审美胜者，也不改正式作品头。
+
+完整迭代范围、已验证切片和未完成项见[产品验收矩阵](docs/product-acceptance-matrix-20261112.md)。明确教程后段预览可用[result-preview-compile](atomic/result-preview-compile/SKILL.md)；不自动认定操作因果或代替真实参考观察。
+
+明确简报可经[创作简报准备](atomic/creation-brief-prepare/SKILL.md)交接到既有字幕包装/教程校验/显式口播计划，不自动解析、推荐或执行。公开真实案例与未验项见[九格案例](docs/evaluation-cases-20261112.md)。
