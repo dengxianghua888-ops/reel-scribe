@@ -18,3 +18,16 @@ python3 scripts/build_codex_plugin.py --out /absolute/new-plugin
 在输出目录分别运行 `python3 scripts/verify_library.py structure`、`scripts/install_doctor.py --root <包目录>` 和实际 stdio 调用。将包迁移到包含中文和空格的新路径，使用输出自身脚本及新工作目录，清除原 checkout 的 `PYTHONPATH` 和库根配置。缺依赖继续记录未知或未执行；固定 helper、实际客户端安装和真实作品验收各有独立要求。
 
 两类成功状态仍分别为 `BUILT_NOT_HOST_INSTALLED` 和 `BUILT_NOT_INSTALLED`。构建过程不联网、不付费、不修改用户 marketplace。
+
+## 版本号的含义
+
+仓库内几个版本号各自标识不同对象，不需要相同，也不互相推导：
+
+| 版本 | 位置 | 标识对象 |
+|---|---|---|
+| `v0.3.0-alpha.1` | `CHANGELOG.md` | 整个技能库源码预览的发行条目 |
+| `0.3.0` | 影视子集 `pyproject.toml` | `douyin-film-recap` Python 包 |
+| `0.17.0-dev` | `runtime/editing_runtime.py` 的 `VERSION` | 本地执行器；写入每份 receipt 的 `runtime_version`，随操作协议演进 |
+| `0.1.0` | `.codex-plugin/plugin.json`、MCP `serverInfo` | 插件与 stdio MCP 桥接；客户端安装验收前保持 `0.1.x` |
+
+发布新的库条目时，在 CHANGELOG 记录这几个组件当时的版本；单独修改某个组件时，只提升该组件自身的版本号。

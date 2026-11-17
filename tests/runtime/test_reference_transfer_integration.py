@@ -3,10 +3,9 @@ import copy
 import json
 from pathlib import Path
 import sys
-import pytest
 sys.path[:0]=[str(Path(__file__).resolve().parents[2]/'runtime'),str(Path(__file__).resolve().parent)]
-from test_creation_brief import case,work_case,caption_case
-from test_reference_transfer import reference
+from test_creation_brief import case,work_case,caption_case  # noqa: F401 - pytest fixture registration, including transitive fixtures
+from test_reference_transfer import reference  # noqa: F401 - pytest fixture registration, including transitive fixtures
 import editing_runtime as rt
 import work_ops
 

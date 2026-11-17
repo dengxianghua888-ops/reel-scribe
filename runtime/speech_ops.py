@@ -3,7 +3,6 @@
 This module does not transcribe, detect fillers, rank takes, or rewrite speech.
 """
 import copy
-import json
 
 
 def validate_transcript(document, tools):

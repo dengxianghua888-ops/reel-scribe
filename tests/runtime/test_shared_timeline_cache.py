@@ -7,8 +7,8 @@ import sys
 from unittest.mock import patch
 import pytest
 sys.path.insert(0,str(Path(__file__).resolve().parent))
-from test_batch_preview import case as base_case, prepare, run
-from test_source_binding import tools, media
+from test_batch_preview import case as base_case, prepare, run  # noqa: F401 - pytest fixture registration, including transitive fixtures
+from test_source_binding import tools, media  # noqa: F401 - pytest fixture registration, including transitive fixtures
 import editing_runtime as rt
 import work_ops
 import shared_timeline

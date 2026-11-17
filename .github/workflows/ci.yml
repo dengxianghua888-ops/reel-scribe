@@ -1,8 +1,11 @@
 name: CI
 
 on:
+  # PR branches are covered by pull_request; avoid running the matrix twice.
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -39,8 +42,10 @@ jobs:
           name: runtime-packaging-junit-attempt-${{ github.run_attempt }}
           path: ${{ runner.temp }}/runtime-packaging-junit.xml
           if-no-files-found: warn
-      - name: Check fatal Python errors in shared runtime and packaging
-        run: python -m ruff check runtime scripts tests tools/editor-adapters --select F821,F822,F823,E9
+      - name: Check fatal Python errors and unused names in shared runtime and packaging
+        run: |
+          python -m ruff check runtime scripts tests --select F821,F822,F823,E9,F401,F841
+          python -m ruff check tools/editor-adapters --select F821,F822,F823,E9
   test:
     runs-on: ubuntu-latest
     defaults:
@@ -68,8 +73,8 @@ jobs:
           name: film-junit-attempt-${{ github.run_attempt }}
           path: ${{ runner.temp }}/film-junit.xml
           if-no-files-found: warn
-      - name: Check fatal Python errors
-        run: python -m ruff check src tests scripts --select F821,F822,F823,E9
+      - name: Check fatal Python errors and unused names
+        run: python -m ruff check src tests scripts --select F821,F822,F823,E9,F401,F841
   tts-offline-compatibility:
     runs-on: ubuntu-latest
     strategy:

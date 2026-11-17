@@ -8,7 +8,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'runtime'))
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 import editing_runtime as rt
 import work_ops
-from test_result_preview import case, reinitialize
+from test_result_preview import case, reinitialize  # noqa: F401 - pytest fixture registration, including transitive fixtures
 
 
 def state(q):

@@ -1,7 +1,7 @@
 """Cue recipe scope/identity tests; synthetic media, not visual acceptance."""
 import copy,json
 import pytest
-from test_style_recipe import case
+from test_style_recipe import case  # noqa: F401 - pytest fixture registration, including transitive fixtures
 import editing_runtime as rt
 import style_recipe_ops as mod
 

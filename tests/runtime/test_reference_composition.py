@@ -2,7 +2,7 @@
 import copy,json
 from pathlib import Path
 import pytest
-from test_reference_transfer import narrative,work_case
+from test_reference_transfer import narrative,work_case  # noqa: F401 - pytest fixture registration, including transitive fixtures
 import reference_transfer_ops as mod
 import editing_runtime as rt
 import work_ops

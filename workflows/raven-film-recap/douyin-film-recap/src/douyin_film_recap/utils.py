@@ -142,6 +142,8 @@ def run_command(
             cwd=str(cwd) if cwd else None,
             check=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             stdout=subprocess.PIPE if capture else None,
             stderr=subprocess.PIPE if capture else None,
             timeout=timeout,

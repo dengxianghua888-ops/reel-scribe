@@ -223,7 +223,7 @@ def _bundle_core_binding(root: Path):
         return {'status': 'WORKTREE_OR_UNMANIFESTED_ROOT',
                 'limit': 'No built-bundle identity claim.'}
     try:
-        data = json.loads(manifest.read_text())
+        data = json.loads(manifest.read_text(encoding='utf-8'))
         if data.get('schema') not in ('editing-portable-bundle/1', 'editing-codex-plugin-package/1'):
             raise ValueError('BUNDLE_MANIFEST_SCHEMA_INVALID')
         rows = {row['path']: row for row in data['files']}
@@ -563,7 +563,7 @@ def inspect(root, *, ffmpeg=None, ffprobe=None, bindings=None, env=None, request
     registry = root / 'registry' / 'skills.json'
     if not registry.is_file():
         raise ValueError('REGISTRY_MISSING: ' + str(registry))
-    data = json.loads(registry.read_text())
+    data = json.loads(registry.read_text(encoding='utf-8'))
     if data.get('schema') != 'skill-registry/1' or not isinstance(data.get('entries'), list):
         raise ValueError('REGISTRY_SCHEMA_INVALID')
     bindings = {} if bindings is None else bindings

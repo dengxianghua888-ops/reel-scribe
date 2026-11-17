@@ -7,7 +7,7 @@ import pytest
 from douyin_film_recap.media import find_sidecar_subtitle, merge_shots_to_units, build_scene_index
 from douyin_film_recap.models import SourceInfo, SourceManifest, Storyboard, StoryboardSegment, TranscriptDocument, VisualReference
 from douyin_film_recap.pipeline import FilmRecapPipeline
-from douyin_film_recap.state import StateStore, STAGES
+from douyin_film_recap.state import STAGES
 from douyin_film_recap.tts import synthesize_storyboard
 from douyin_film_recap.utils import content_fingerprint, write_json
 

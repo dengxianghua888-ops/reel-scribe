@@ -7,9 +7,9 @@ import editing_runtime as rt
 import work_ops
 import caption_style
 import caption_layout
-from test_result_preview import case as work_case
-from test_caption_layout import layout_case
-from test_source_binding import media,tools
+from test_result_preview import case as work_case  # noqa: F401 - pytest fixture registration, including transitive fixtures
+from test_caption_layout import layout_case  # noqa: F401 - pytest fixture registration, including transitive fixtures
+from test_source_binding import media,tools  # noqa: F401 - pytest fixture registration, including transitive fixtures
 
 @pytest.mark.parametrize('override',[{},None,{'font':'x'},{'text':'x'},{'font_size':True},{'font_size':12.5},{'font_size':7},{'font_size':65},{'margin_v':True},{'margin_v':64},{'margin_v':-1},{'color_rgb':'<red>'}])
 def test_strict_override(override):

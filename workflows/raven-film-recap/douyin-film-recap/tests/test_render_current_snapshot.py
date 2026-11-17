@@ -1,12 +1,10 @@
 """An edit after snapshot parsing must never become the older render's base hash."""
-from pathlib import Path
 import unittest
 from unittest.mock import patch
 
 import test_protected_revision as protected_fixture
 from douyin_film_recap.models import QCReport, Storyboard
 from douyin_film_recap.pipeline import FilmRecapPipeline
-from douyin_film_recap.revision import BOARD
 from douyin_film_recap import workspace as w
 
 

@@ -1,7 +1,6 @@
 """Explicit coordinate conversion, not automatic UI understanding."""
 import copy
 import hashlib
-import json
 import re
 from pathlib import Path
 import shutil

@@ -11,7 +11,7 @@ from douyin_film_recap.revision import BOARD, freeze_revision
 from douyin_film_recap.revision_preview import preview_revision
 from douyin_film_recap.revision_report import render_preview_html
 from douyin_film_recap.workspace import atomic, read
-from test_revision_preview import workspace, inventory, local_proposal, rendered_evidence
+from test_revision_preview import workspace, inventory, local_proposal, rendered_evidence  # noqa: F401 - workspace is a pytest fixture
 
 
 class Document(HTMLParser):

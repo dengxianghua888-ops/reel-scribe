@@ -1,7 +1,7 @@
 """Explicit local caption selection in a preparation-only brief."""
-import copy,json
+import json
 import pytest
-from test_creation_brief import case,caption_case,work_case
+from test_creation_brief import case,caption_case,work_case  # noqa: F401 - pytest fixture registration, including transitive fixtures
 import creation_brief_ops as mod
 import editing_runtime as rt
 

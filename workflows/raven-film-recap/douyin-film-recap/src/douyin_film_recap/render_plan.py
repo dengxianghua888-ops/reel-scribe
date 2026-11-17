@@ -16,7 +16,7 @@ from .config import AppConfig
 from .models import Storyboard
 from .render_contracts import (PLAN_SCHEMA, PLANNER_REVISION, RENDERER_REVISION,
     ROUNDING_REVISION, RenderContractError, authority_payload, content_binding,
-    digest, quantize, ratio, rational, validate_sha)
+    digest, ratio, rational, validate_sha)
 from .subtitles import build_cues, resolved_visual_spans
 from .render_timeline import time_entry as _time_entry, realized_duration
 from .utils import content_fingerprint, content_identity, run_command

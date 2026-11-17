@@ -2,7 +2,7 @@
 import copy
 import json
 import pytest
-from test_local_undo import case, reinitialize, state, request, run
+from test_local_undo import case, reinitialize, state, request, run  # noqa: F401 - pytest fixture registration, including transitive fixtures
 import test_local_undo as helper
 import editing_runtime as rt
 import shared_timeline
@@ -145,8 +145,8 @@ def test_shared_invalid_canvas_does_not_strip_override(cue_case,mutate):
 
 
 # Real generated-tone media plumbing; not real speech/semantic acceptance.
-from test_shared_timeline_cache import case as shared_case
-from test_shared_timeline_cache import base_case, tools, media
+from test_shared_timeline_cache import case as shared_case  # noqa: F401 - pytest fixture registration, including transitive fixtures
+from test_shared_timeline_cache import base_case, tools, media  # noqa: F401 - pytest fixture registration, including transitive fixtures
 
 
 def test_local_override_shared_render_matches_unshared(shared_case):

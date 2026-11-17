@@ -1,19 +1,16 @@
 """Explicit source-audio cue to timeline-frame arithmetic. No beat or action inference."""
-import json
 from fractions import Fraction
 
 
 def alignment_check(request, directory, tools):
-    from editing_runtime import exact_keys, require, fingerprint, source, number, write_json
+    from editing_runtime import exact_keys, require, fingerprint, source, number, write_json, verified_json
     from work_ops import validate_document
     fields = ['operation', 'document', 'expected_document_sha256', 'markers', 'checks']
     exact_keys(request, fields, fields)
     doc = request['document']
     require(fingerprint(doc) == request['expected_document_sha256'], 'DOCUMENT_REVISION_CONFLICT')
     norm, _, tracks = validate_document(doc, tools)
-    marker_ref = source(request['markers'])
-    with open(marker_ref['path']) as stream:
-        markers = json.load(stream)
+    marker_ref, markers = verified_json(request['markers'], 'MARKER')
     exact_keys(markers, ['schema', 'source', 'basis', 'points'], ['schema', 'source', 'basis', 'points'])
     require(markers['schema'] == 'audio-cue-markers/1', 'MARKER_SCHEMA_UNSUPPORTED')
     audio = source(markers['source']); media = tools.probe(audio['path'])

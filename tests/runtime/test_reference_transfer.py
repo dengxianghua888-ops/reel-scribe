@@ -4,7 +4,7 @@ from pathlib import Path
 import sys
 import pytest
 sys.path[:0]=[str(Path(__file__).resolve().parents[2]/'runtime'),str(Path(__file__).resolve().parent)]
-from test_creation_brief import case,work_case,caption_case
+from test_creation_brief import case,work_case,caption_case  # noqa: F401 - pytest fixture registration, including transitive fixtures
 import reference_transfer_ops as mod
 import editing_runtime as rt
 import work_ops

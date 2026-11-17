@@ -39,7 +39,7 @@ def frame_clock(path,tools):
 
 def apply_lut(request,directory,tools):
     from pathlib import Path
-    from editing_runtime import exact_keys,source,require,write_json,sha256,exec_tool
+    from editing_runtime import exact_keys,source,require,write_json,sha256,exec_tool,frame_rate
     keys=['operation','source','lut','input_color','interpolation']
     exact_keys(request,keys,keys);asset=source(request['source']);lut=source(request['lut'])
     color=request['input_color'];exact_keys(color,['space','range','basis'],['space','range','basis'])
@@ -60,8 +60,8 @@ def apply_lut(request,directory,tools):
         require(observed in unknown or observed==value,'COLOR_METADATA_CONFLICT: '+key)
         if color['basis']=='verified-metadata':require(observed==value,'COLOR_METADATA_REQUIRED: '+key)
     if video['pix_fmt'].startswith('yuvj'):require(color['range']=='full','COLOR_METADATA_CONFLICT: full-range pixel format')
-    fps=Fraction(video.get('avg_frame_rate','0/1'));require(0<fps<=120,'COLOR_FRAME_RATE_UNSUPPORTED')
-    require(Fraction(video.get('r_frame_rate','0/1'))==fps,'COLOR_CFR_REQUIRED')
+    fps=frame_rate(video.get('avg_frame_rate'));require(0<fps<=120,'COLOR_FRAME_RATE_UNSUPPORTED')
+    require(frame_rate(video.get('r_frame_rate'))==fps,'COLOR_CFR_REQUIRED')
     times=frame_clock(asset['path'],tools)
     require(all(abs(t-float(Fraction(i,1)/fps))<=.00001 for i,t in enumerate(times)),'COLOR_ZERO_ORIGIN_CFR_REQUIRED')
     # Local fixed name prevents LUT paths from being interpreted as filter code.

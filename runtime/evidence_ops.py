@@ -56,13 +56,13 @@ def compile_evidence(request, directory, tools, *, normalized_document=None, val
         require(any(s['codec_type']==unit['modality'] for s in media['streams']),'EVIDENCE_STREAM_MISSING')
         a,b=span(unit['start'],unit['end'],media['duration'])
         if unit['modality']=='video':
-            clock=windowed_mix_clock(tools,asset['path'],media,b,kind='video',start=a)
+            clock=windowed_mix_clock(tools,asset['path'],media,b,kind='video',start=a,identity=asset['sha256'])
             require_video_coverage(clock,a,b,playback=validation_mode=='ordinary_protection')
             observed_complete=any(Fraction(x)<=Fraction(str(a)) and Fraction(str(b))<=Fraction(y)
                                   for x,y in clock['observed_intervals'])
             video_unit_coverage_basis[uid]='OBSERVED_FRAMES' if observed_complete else 'PLAYBACK_QUANTIZED_UNCERTAIN'
         else:
-            clock=windowed_mix_clock(tools,asset['path'],media,b,kind='audio',start=a,
+            clock=windowed_mix_clock(tools,asset['path'],media,b,kind='audio',start=a,identity=asset['sha256'],
                                      playback=validation_mode=='ordinary_protection')
             audio_unit_clock_precision[uid]=clock['source_time_precision']
             audio_intersection(clock,a,b,require_full=True,require_precise=validation_mode=='strict',

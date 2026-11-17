@@ -3,7 +3,7 @@ from fractions import Fraction
 
 
 def video_info(ref, tools):
-    from editing_runtime import source, require
+    from editing_runtime import source, require, frame_rate
     from color_ops import frame_clock
     asset=source(ref);media=tools.probe(asset['path'])
     videos=[s for s in media['streams'] if s['codec_type']=='video']
@@ -15,8 +15,8 @@ def video_info(ref, tools):
     require(all(float(x)%360==0 for x in rotations),'OVERLAY_ROTATION_UNSUPPORTED')
     for key,expected in {'color_space':'bt709','color_transfer':'bt709','color_primaries':'bt709','color_range':'tv'}.items():
         require(v.get(key) in [None,'unknown','unspecified',expected],'OVERLAY_COLOR_CONFLICT: '+key)
-    fps=Fraction(v.get('avg_frame_rate','0/1'))
-    require(0<fps<=120 and Fraction(v.get('r_frame_rate','0/1'))==fps,'OVERLAY_CFR_REQUIRED')
+    fps=frame_rate(v.get('avg_frame_rate'))
+    require(0<fps<=120 and frame_rate(v.get('r_frame_rate'))==fps,'OVERLAY_CFR_REQUIRED')
     times=frame_clock(asset['path'],tools)
     require(all(abs(t-float(Fraction(i,1)/fps))<.00001 for i,t in enumerate(times)),'OVERLAY_ZERO_ORIGIN_REQUIRED')
     return {'asset':asset,'media':media,'video':v,'fps':fps,'frames':len(times),'clock':times}

@@ -9,7 +9,7 @@ from douyin_film_recap.models import Storyboard
 from douyin_film_recap.revision import BOARD
 from douyin_film_recap.revision_preview import preview_revision
 from douyin_film_recap.workspace import atomic, read, sha, WorkspaceError
-from test_revision_preview import workspace, inventory, rendered_evidence
+from test_revision_preview import workspace, inventory, rendered_evidence  # noqa: F401 - pytest fixture registration, including transitive fixtures
 
 
 def spec(root, start=0, end=2):

@@ -89,7 +89,7 @@ audio-mix 的每轨为 `{source,start,end,output_start,gain_db}`，可选独立�
 
 caption-burn 的 cues 使用输出时间，字段为 start/end/text，可选非空 style_override 仅允许 font_size、color_rgb、margin_v，未覆盖字段继承全局。字号与边距仍按实际画布校验，局部字体及任意 ASS 指令不支持；font 是带哈希的本地字体。color_rgb 使用六位十六进制 RGB，font_size/margin_v 按视频画布像素；当前底部居中、黑色 1px 描边。不支持的 ASS 控制字符拒绝而不改写。字体 fallback 与字形完整性必须检查实际输出。
 
-每个运行写 request.json 与 receipt.json，绑定代码版本/哈希、工具二进制哈希、请求指纹、实际产物哈希、成功或错误。SUCCEEDED 只说明该原子操作完成；技术 QC 即使全部通过也返回交付 DEGRADED，因为内容/画面/听检尚未完成。
+每个运行写 request.json 与 receipt.json，绑定代码版本/哈希、工具二进制哈希、请求指纹、实际产物哈希、成功或错误。含 NaN/Infinity 等非 JSON 值的请求在创建目录前以 `REQUEST_JSON_INVALID` 拒绝；运行中出现未归类的实现缺陷时，仍写 FAILED receipt（`INTERNAL_ERROR: <类型>`、`internal_error: true`）与 `internal-error-traceback.txt`，不留下只有请求的目录。调用方提供的 JSON 控制文件（标记、同步证据、本地化源稿、ASR 锁）按同一有界缓冲完成哈希与解析，不再按路径二次读取。静帧输入同样从已哈希的缓冲解码。单次运行内，对同一已验证内容 SHA、路径、观察窗口与工具实例的解码时钟观察可复用（例如 timeline-patch 的基线与修订计划）；复用不跨来源消费绑定、嵌套运行或不同 ffprobe，来源字节变化仍先在 SHA 检查处失败。SUCCEEDED 只说明该原子操作完成；技术 QC 即使全部通过也返回交付 DEGRADED，因为内容/画面/听检尚未完成。
 
 技术 QC 的 expected 显式给出 duration、duration_tolerance、width、height、audio_required，并真实完整解码。当前不检测黑帧、静音、峰值、口型或内容错误，不能声称这些检查已通过。
 

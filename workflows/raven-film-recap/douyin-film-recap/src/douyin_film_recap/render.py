@@ -472,8 +472,18 @@ def _render_original_segment(
 
 
 def _escape_subtitle_path(path: Path) -> str:
-    value = str(path.resolve()).replace("\\", "/")
-    value = value.replace(":", "\\:").replace("'", "\\'")
+    """Escape an unquoted path for one filter option inside an FFmpeg filtergraph.
+
+    FFmpeg applies two escaping levels: the option value (``\\ ' :``) and then
+    the whole filtergraph description (``\\ ' [ ] , ;``). A backslash inside a
+    single-quoted span is literal, so the former ``'...\\'...'`` form broke on
+    any apostrophe in a POSIX path (for example ``~/Movies/John's project``).
+    """
+    value = str(path.resolve())
+    for character in ("\\", "'", ":"):
+        value = value.replace(character, "\\" + character)
+    for character in ("\\", "'", "[", "]", ",", ";"):
+        value = value.replace(character, "\\" + character)
     return value
 
 
@@ -558,9 +568,9 @@ def _finalize(
         with _subtitle_font_source(config) as (family, fonts_dir, font_file):
             if any(character in family for character in "\n\r,[]'"):
                 raise ValueError("Subtitle font family contains unsupported filter/style characters")
-            subtitle_filter = f"subtitles='{_escape_subtitle_path(subtitle_path)}':"
+            subtitle_filter = f"subtitles=filename={_escape_subtitle_path(subtitle_path)}:"
             if fonts_dir:
-                subtitle_filter += f"fontsdir='{_escape_subtitle_path(fonts_dir)}':"
+                subtitle_filter += f"fontsdir={_escape_subtitle_path(fonts_dir)}:"
             subtitle_filter += f"force_style='{_subtitle_style(config, family)}'"
             args.extend(["-vf", subtitle_filter, "-af", audio_filter, *_video_encode_args(config)])
             args.extend([*_audio_encode_args(config), "-movflags", "+faststart", final_path])

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -132,12 +133,42 @@ def _scene_payload(
     return payload
 
 
+STORY_CONTEXT_CHARS = 30000
+
+
+def read_story_context(config: AppConfig, expected_identity: dict[str, Any] | None = None, *,
+                       bound: bool = False) -> str:
+    """Return the enabled story context decoded from one verified buffer.
+
+    With ``bound=True`` the bytes must equal the identity recorded in the input
+    binding; a file that was absent at binding time cannot be consumed later.
+    """
+    if not (config.story.allow_external_context and config.project.context_file):
+        return ""
+    context_path = Path(config.project.context_file).expanduser()
+    if not context_path.is_file():
+        # An enabled, configured context must not silently become "no context".
+        raise FileNotFoundError(f"Configured story context file not found: {context_path}")
+    payload = context_path.read_bytes()
+    if bound and (expected_identity is None
+                  or hashlib.sha256(payload).hexdigest() != expected_identity.get("sha256")
+                  or len(payload) != expected_identity.get("bytes")):
+        raise ValueError("CONTEXT_BINDING_CHANGED: story context bytes differ from the bound identity")
+    return payload.decode("utf-8", errors="replace")[:STORY_CONTEXT_CHARS]
+
+
 def build_story(
     scene_index: SceneIndex,
     scene_analysis: SceneAnalysisDocument,
     config: AppConfig,
     client: OpenAICompatibleClient,
+    *,
+    context: str | None = None,
 ) -> StoryBundle:
+    # Resolve context before any paid chunk request; callers that bound the
+    # input identity pass the verified text instead of letting this re-read it.
+    if context is None:
+        context = read_story_context(config)
     payload = _scene_payload(scene_index, scene_analysis)
     chunk_summaries: list[StoryChunkSummary] = []
     for index, group in enumerate(chunks(payload, config.story.chunk_units), start=1):
@@ -152,12 +183,6 @@ def build_story(
         )
         summary.chunk_id = chunk_id
         chunk_summaries.append(summary)
-
-    context = ""
-    if config.story.allow_external_context and config.project.context_file:
-        context_path = Path(config.project.context_file).expanduser()
-        if context_path.exists():
-            context = context_path.read_text(encoding="utf-8", errors="replace")[:30000]
 
     bundle = client.chat_json(
         intent_key="story:global",

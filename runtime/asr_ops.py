@@ -1,6 +1,5 @@
 """Pinned local speech recognition observations; no editorial deletion or rewriting."""
 import importlib.metadata
-import json
 import math
 from pathlib import Path
 import sys
@@ -29,8 +28,8 @@ def json_safe_metadata(value, path='$'):
 
 
 def verify_model(reference):
-    from editing_runtime import source, require
-    lock_ref=source(reference); lock=json.loads(Path(lock_ref['path']).read_text())
+    from editing_runtime import source, require, verified_json
+    lock_ref,lock=verified_json(reference,'ASR_MODEL_LOCK')
     require(lock.get('schema')=='local-asr-model/1' and lock.get('provider')=='faster-whisper','ASR_MODEL_LOCK_INVALID')
     root=Path(lock_ref['path']).parent; names=set()
     for row in lock['files']:
@@ -47,8 +46,8 @@ def verify_model(reference):
 
 
 def verify_environment(reference):
-    from editing_runtime import source,require
-    ref=source(reference); lock=json.loads(Path(ref['path']).read_text())
+    from editing_runtime import source,require,verified_json
+    ref,lock=verified_json(reference,'ASR_ENVIRONMENT_LOCK')
     require(lock.get('schema')=='asr-environment/1','ASR_ENVIRONMENT_LOCK_INVALID')
     require(lock.get('python')==sys.version,'ASR_PYTHON_VERSION_MISMATCH')
     names=set()

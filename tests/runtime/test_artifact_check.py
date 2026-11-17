@@ -1,11 +1,11 @@
 """Declared linkage is not artifact production, screenshot provenance or saved state."""
-import copy,json,sys
+import copy,sys
 from pathlib import Path
 import pytest
 sys.path[:0]=[str(Path(__file__).resolve().parents[2]/'runtime'),str(Path(__file__).resolve().parent)]
 import editing_runtime as rt
 import artifact_check_ops as mod
-from test_result_preview import case as work_case
+from test_result_preview import case as work_case  # noqa: F401 - pytest fixture registration, including transitive fixtures
 
 @pytest.fixture
 def case(work_case):

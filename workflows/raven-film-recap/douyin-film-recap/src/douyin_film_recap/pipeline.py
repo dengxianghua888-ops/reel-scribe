@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 from pathlib import Path
 from typing import Callable
 
-from .analysis import build_story, load_story_bundle, analyze_scenes
+from .analysis import build_story, load_story_bundle, analyze_scenes, read_story_context
 from .asr import build_transcript
 from .config import AppConfig
 from .highlight import build_highlights
@@ -679,7 +679,8 @@ class FilmRecapPipeline:
 
     def _stage_story(self) -> Path:
         bundle = build_story(
-            self._scene_index(), self._scene_analysis(), self.config, self.client
+            self._scene_index(), self._scene_analysis(), self.config, self.client,
+            context=read_story_context(self.config, self.binding["context_identity"], bound=True),
         )
         write_json(self.paths["characters"], bundle.character_registry)
         write_json(self.paths["story"], bundle.story_graph)

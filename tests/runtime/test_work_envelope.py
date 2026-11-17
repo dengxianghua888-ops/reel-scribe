@@ -2,7 +2,7 @@
 import copy
 from fractions import Fraction
 import pytest
-from test_local_undo import case, commit, state, request, run, audio_case
+from test_local_undo import case, commit, state, request, run, audio_case  # noqa: F401 - pytest fixture registration, including transitive fixtures
 from audio_ops import validate_work_envelope, work_envelope_filters
 import work_ops
 import shared_timeline

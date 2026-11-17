@@ -1,5 +1,4 @@
 import unittest
-from copy import deepcopy
 from test_boundary_contract import boundary_fixture
 from douyin_film_recap.boundary import candidate_revision, proposal_hash
 from douyin_film_recap.boundary_apply import prepare_boundary_revision, BoundaryApplyError, HIGHLIGHTS, PLAN, BOARD, SIDECAR

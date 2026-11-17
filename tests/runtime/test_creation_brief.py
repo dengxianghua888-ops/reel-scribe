@@ -9,7 +9,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parent))
 import creation_brief_ops as mod
 import editing_runtime as rt
 import work_ops
-from test_result_preview import case as work_case
+from test_result_preview import case as work_case  # noqa: F401 - pytest fixture registration, including transitive fixtures
 
 @pytest.fixture
 def case(work_case):

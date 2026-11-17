@@ -29,8 +29,8 @@ def main(argv=None):
         module = importlib.util.module_from_spec(spec)
         exec(compile(raw, str(source), 'exec'), module.__dict__)
         inspect = module.inspect
-        bindings = json.loads(args.bindings.read_text()) if args.bindings else None
-        request = json.loads(args.request.read_text()) if args.request else None
+        bindings = json.loads(args.bindings.read_text(encoding='utf-8')) if args.bindings else None
+        request = json.loads(args.request.read_text(encoding='utf-8')) if args.request else None
         result = inspect(root, ffmpeg=args.ffmpeg, ffprobe=args.ffprobe, bindings=bindings, request=request)
         if hashlib.sha256(source.read_bytes()).hexdigest() != expected:
             raise ValueError('TARGET_DIAGNOSTIC_MODULE_DRIFT')

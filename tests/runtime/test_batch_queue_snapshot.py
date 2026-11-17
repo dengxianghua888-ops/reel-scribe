@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_batch_manifest_binding import batch, invoke, queue_state
+from test_batch_manifest_binding import batch, invoke, queue_state  # noqa: F401 - batch is a pytest fixture
 import batch_ops
 
 

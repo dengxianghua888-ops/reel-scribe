@@ -282,6 +282,13 @@ class McpRequestTests(unittest.TestCase):
             else:
                 self.assertEqual(response['result'], {})
 
+    def test_unknown_protocol_version_is_answered_with_latest_supported(self):
+        responses = self.exchange([
+            {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {'protocolVersion': '2099-01-01'}},
+            {'jsonrpc': '2.0', 'id': 2, 'method': 'initialize', 'params': {'protocolVersion': '2024-11-05'}},
+        ])
+        self.assertEqual([r['result']['protocolVersion'] for r in responses], ['2025-06-18', '2024-11-05'])
+
     def test_omitted_and_object_arguments_and_initialize_remain_supported(self):
         messages = [
             {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize'},
@@ -294,7 +301,8 @@ class McpRequestTests(unittest.TestCase):
         ]
         responses = self.exchange(messages)
         self.assertEqual(len(responses), 4)
-        self.assertEqual(responses[0]['result']['protocolVersion'], '2025-03-26')
+        # No requested version: offer the latest supported one.
+        self.assertEqual(responses[0]['result']['protocolVersion'], '2025-06-18')
         self.assertEqual(responses[1]['result']['protocolVersion'], '2025-06-18')
         for response in responses[2:]:
             self.assertFalse(response['result']['isError'])

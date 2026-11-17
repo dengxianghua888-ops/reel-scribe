@@ -15,6 +15,9 @@ from .utils import extract_json_object
 
 T = TypeVar("T", bound=BaseModel)
 
+# Intent-key namespace for chat_json requests whose schema prompt is rendered as JSON.
+SCHEMA_PROMPT_FORMAT = "schema-json"
+
 
 class ProviderError(RuntimeError):
     """Raised when a model provider cannot return a usable response."""
@@ -87,6 +90,7 @@ class OpenAICompatibleClient:
         max_tokens: int | None = None,
         response_format: dict[str, Any] | None = None,
         intent_key: str | None = None,
+        superseded_intent_key: str | None = None,
     ) -> str:
         model = self.config.vlm_model if vision else self.config.llm_model
         user_content: str | list[dict[str, Any]]
@@ -122,7 +126,8 @@ class OpenAICompatibleClient:
 
             observed = guarded_send("chat", {"endpoint": f"{self.base_url}/chat/completions",
                                              "body": payload}, send,
-                intent_key=f"{intent_key}:format-{fallback}" if intent_key else None)
+                intent_key=f"{intent_key}:format-{fallback}" if intent_key else None,
+                superseded_keys=(f"{superseded_intent_key}:format-{fallback}",) if superseded_intent_key else ())
             if observed["status_code"] >= 400:
                 # Only an observed rejection can trigger this separately reserved send.
                 if observed["status_code"] in {400, 404, 422} and "response_format" in payload:
@@ -152,10 +157,17 @@ class OpenAICompatibleClient:
         max_tokens: int | None = None,
         intent_key: str | None = None,
     ) -> T:
-        schema = model_type.model_json_schema()
+        # Render the schema as JSON, not a Python dict repr (single quotes, True,
+        # None), which invites invalid JSON replies and paid repair requests.
+        schema = json.dumps(model_type.model_json_schema(), ensure_ascii=False, sort_keys=True)
         schema_prompt = (
             f"\n\n你必须只输出满足下列 JSON Schema 的 JSON，不要输出 Markdown 或解释：\n{schema}"
         )
+        # Prompt bytes changed with the JSON rendering; a separate key namespace
+        # keeps old intents from turning reruns into SEND_INTENT_PAYLOAD_CHANGED,
+        # while UNKNOWN sends under the former keys still block the replacement.
+        legacy_key = intent_key
+        intent_key = f"{intent_key}:{SCHEMA_PROMPT_FORMAT}" if intent_key else None
         raw = self.chat(
             system=system,
             prompt=prompt + schema_prompt,
@@ -165,6 +177,7 @@ class OpenAICompatibleClient:
             max_tokens=max_tokens,
             response_format={"type": "json_object"},
             intent_key=intent_key,
+            superseded_intent_key=legacy_key,
         )
         try:
             return model_type.model_validate(extract_json_object(raw))
@@ -182,6 +195,7 @@ class OpenAICompatibleClient:
                 max_tokens=max_tokens,
                 response_format={"type": "json_object"},
                 intent_key=f"{intent_key}:json-repair" if intent_key else None,
+                superseded_intent_key=f"{legacy_key}:json-repair" if legacy_key else None,
             )
             try:
                 return model_type.model_validate(extract_json_object(repaired))

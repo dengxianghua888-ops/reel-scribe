@@ -11,8 +11,8 @@ import work_ops
 import creation_brief_ops as brief
 import style_recipe_ops
 import style_preview_ops
-from test_creation_brief import case
-from test_result_preview import case as work_case
+from test_creation_brief import case  # noqa: F401 - pytest fixture registration, including transitive fixtures
+from test_result_preview import case as work_case  # noqa: F401 - pytest fixture registration, including transitive fixtures
 
 
 def state(q):

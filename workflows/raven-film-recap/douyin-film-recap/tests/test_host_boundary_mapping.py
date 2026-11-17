@@ -2,7 +2,7 @@
 import pytest
 from copy import deepcopy
 from pathlib import Path
-import json,sys,subprocess
+import json,subprocess
 from test_boundary_apply import apply_fixture
 from douyin_film_recap import otio_exchange as x,otio_readback as r,workspace as w
 from douyin_film_recap.boundary_apply import prepare_boundary_revision,collect_boundary_timebases

@@ -654,7 +654,7 @@ def collect_media_facts(storyboard: dict, *, base_dir: str | Path = ".", timeout
     targets = [(s["source_id"], s["path"], s["fingerprint"], True) for s in storyboard["sources"]]
     targets += [(f"narration:{s['segment_id']}", s["audio_file"], None, False)
                 for s in storyboard["segments"] if s["mode"] == "voiceover" and s.get("audio_file")]
-    version = subprocess.run(["ffprobe", "-version"], check=True, capture_output=True, text=True,
+    version = subprocess.run(["ffprobe", "-version"], check=True, capture_output=True, text=True, encoding="utf-8", errors="replace",
                              timeout=30).stdout.splitlines()[0]
     for rid, name, expected, video_required in targets:
         path = Path(name)

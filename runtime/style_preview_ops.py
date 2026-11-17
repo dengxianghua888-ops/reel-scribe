@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 from urllib.parse import quote
 
-from editing_runtime import exact_keys, fingerprint, require, run, sha256, source, write_json
+from editing_runtime import exact_keys, require, run, sha256, source, write_json
 from work_ops import connect, load
 import style_recipe_ops
 from source_binding import document_references

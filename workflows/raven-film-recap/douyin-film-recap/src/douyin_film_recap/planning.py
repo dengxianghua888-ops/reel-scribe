@@ -15,7 +15,6 @@ from .models import (
     SourceManifest,
     StoryBundle,
     Storyboard,
-    StoryboardSegment,
     TranscriptDocument,
     VisualReference,
 )

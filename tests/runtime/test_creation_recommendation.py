@@ -7,7 +7,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parent))
 import editing_runtime as rt
 import creation_recommendation_ops as mod
 import work_ops
-from test_result_preview import case as work_case
+from test_result_preview import case as work_case  # noqa: F401 - pytest fixture registration, including transitive fixtures
 
 @pytest.fixture
 def case(work_case):
@@ -197,7 +197,7 @@ def test_refine_bound_never_relaxed(case):
     assert not result['options'] and result['issues'][0]['code']=='REFINEMENT_BOUND_REACHED'
 
 def test_refine_second_round_rejected(case):
-    q,out,tools=refinement(case);r=mod.execute(q,out,tools)
+    q,out,tools=refinement(case);mod.execute(q,out,tools)
     q['recommendation']={'path':str(out/'recommendation.json'),'sha256':rt.sha256(out/'recommendation.json')}
     dest=out.parent/'round2';dest.mkdir()
     with pytest.raises(rt.ContractError,match='DEPTH_EXCEEDED'):mod.execute(q,dest,tools)

@@ -1,7 +1,7 @@
 """Explicit scope projection contracts, not editorial or real-host approval."""
 import copy,json
 import pytest
-from test_blender_cut_readback import a,case
+from test_blender_cut_readback import a,case  # noqa: F401 - pytest fixture registration, including transitive fixtures
 from test_blender_cut_import import probe,seal
 
 @pytest.fixture

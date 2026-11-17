@@ -1,7 +1,5 @@
 """Static libass glyph coverage, never automatic scene/UI understanding."""
-import copy
 from pathlib import Path
-import shutil
 import sys
 import pytest
 

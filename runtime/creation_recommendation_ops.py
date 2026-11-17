@@ -110,7 +110,7 @@ def _verify_bindings(report):
 
 
 def _read_bound_json(ref):
-    from editing_runtime import source, require, fingerprint
+    from editing_runtime import source, require
     identity=source(ref)
     require(identity['bytes']<=1024*1024,'RECOMMENDATION_REPORT_TOO_LARGE')
     with Path(identity['path']).open('rb') as handle:raw=handle.read(1024*1024+1)
