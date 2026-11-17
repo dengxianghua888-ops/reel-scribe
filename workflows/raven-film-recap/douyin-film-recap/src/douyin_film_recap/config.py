@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import os
+import re
+from fractions import Fraction
 from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .utils import content_identity, fingerprint_json
 
@@ -160,7 +162,8 @@ class RenderConfig(FlexibleModel):
     incremental_cache: bool = False
     width: int = Field(default=1080, gt=0)
     height: int = Field(default=1920, gt=0)
-    fps: int = Field(default=30, gt=0)
+    # Positive integer, or an exact rational string such as "30000/1001" (NTSC).
+    fps: int | str = 30
     video_codec: str = "libx264"
     crf: int = 19
     preset: str = "medium"
@@ -182,6 +185,28 @@ class RenderConfig(FlexibleModel):
     subtitle_max_chars_per_line: int = Field(default=16, gt=0)
     subtitle_max_lines: int = Field(default=2, gt=0)
     subtitle_outline: int = 3
+
+    @field_validator("fps", mode="before")
+    @classmethod
+    def validate_fps(cls, value: Any) -> int | str:
+        # Binary floats such as 29.97 are rejected: render plans need the exact clock.
+        if isinstance(value, float) and value.is_integer():
+            value = int(value)
+        rate = None
+        if isinstance(value, int) and not isinstance(value, bool):
+            rate = Fraction(value)
+        elif isinstance(value, str) and re.fullmatch(r"\s*\d+\s*(/\s*\d+\s*)?", value):
+            numerator, _, denominator = value.replace(" ", "").partition("/")
+            if int(denominator or 1) != 0:
+                rate = Fraction(int(numerator), int(denominator or 1))
+        if rate is None or rate <= 0:
+            raise ValueError("fps must be a positive integer or an exact rational string such as 30000/1001")
+        # Integer rates stay integers so existing config fingerprints are unchanged.
+        return int(rate) if rate.denominator == 1 else f"{rate.numerator}/{rate.denominator}"
+
+    @property
+    def fps_rational(self) -> Fraction:
+        return Fraction(str(self.fps))
 
 
 class QCConfig(FlexibleModel):

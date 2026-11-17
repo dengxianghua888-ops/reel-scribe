@@ -1,6 +1,6 @@
 """Render an explicitly specified crop path over a still image; no shot design or generation."""
 from fractions import Fraction
-import json,subprocess
+import hashlib,io,json,subprocess
 import os
 import signal
 import threading
@@ -9,9 +9,9 @@ import time
 ENCODER_TIMEOUT_SEC = 120
 MAX_FRAMES = 36000
 MAX_RENDER_PIXELS = 30_000_000_000
+MAX_STILL_BYTES = 512 * 1024 * 1024
 
 def render_still(request,directory,tools):
-    from pathlib import Path
     from editing_runtime import exact_keys,source,require,number,sha256,write_json,ContractError,exec_tool,RUN_CANCELLATION,OperationCancelled,frame_rate
     try:
         from PIL import Image, __version__ as pillow_version
@@ -29,7 +29,11 @@ def render_still(request,directory,tools):
     require(type(request['allow_upscale']) is bool,'STILL_UPSCALE_FLAG_REQUIRED')
     require(request['interpolation'] in ['linear','smoothstep'],'STILL_INTERPOLATION_UNSUPPORTED')
     bg=request['background_rgb'];require(isinstance(bg,list) and len(bg)==3 and all(type(v) is int and 0<=v<=255 for v in bg),'STILL_BACKGROUND_INVALID')
-    with Image.open(asset['path']) as opened:
+    # Decode the same bounded buffer that was hashed, not a second path read.
+    with open(asset['path'],'rb') as stream:payload=stream.read(MAX_STILL_BYTES+1)
+    require(len(payload)<=MAX_STILL_BYTES,'STILL_FILE_TOO_LARGE')
+    require(hashlib.sha256(payload).hexdigest()==asset['sha256'],'SOURCE_HASH_MISMATCH: '+asset['path'])
+    with Image.open(io.BytesIO(payload)) as opened:
         require(opened.format in ['PNG','JPEG','WEBP'],'STILL_FORMAT_UNSUPPORTED')
         require(getattr(opened,'n_frames',1)==1,'ANIMATED_IMAGE_UNSUPPORTED')
         require(opened.mode in ['RGB','RGBA','L','LA'],'STILL_PIXEL_MODE_UNSUPPORTED')

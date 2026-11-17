@@ -108,3 +108,109 @@ def test_verified_json_reports_invalid_and_oversized_payloads(tmp_path):
     large.write_bytes(b'[' + b'0,' * 10 + b'0]')
     with pytest.raises(ContractError, match='ASR_MODEL_LOCK_FILE_TOO_LARGE'):
         verified_json(reference(large), 'ASR_MODEL_LOCK', limit=8)
+
+
+def test_still_image_decodes_the_hashed_buffer(tmp_path, monkeypatch):
+    Image = pytest.importorskip('PIL.Image')
+    import still_ops
+    path = tmp_path / 'still.png'
+    Image.new('RGB', (8, 8), (10, 20, 30)).save(path)
+    ref = reference(path)
+    substitute = tmp_path / 'other.png'
+    Image.new('RGB', (8, 8), (200, 0, 0)).save(substitute)
+    original_source = editing_runtime.source
+
+    def replace_after_hash(value, *args, **kwargs):
+        result = original_source(value, *args, **kwargs)
+        if value == ref:
+            path.write_bytes(substitute.read_bytes())
+        return result
+
+    monkeypatch.setattr(editing_runtime, 'source', replace_after_hash)
+    request = {'operation': 'still-image-render', 'source': ref, 'frames': 2, 'fps': '24',
+               'width': 8, 'height': 8, 'interpolation': 'linear', 'background_rgb': [0, 0, 0],
+               'allow_upscale': False, 'input_color': 'srgb',
+               'crop_keyframes': [{'frame': 0, 'rect': [0, 0, 8, 8]}, {'frame': 1, 'rect': [0, 0, 8, 8]}]}
+    with pytest.raises(ContractError, match='SOURCE_HASH_MISMATCH'):
+        still_ops.render_still(request, tmp_path, NoTools())
+
+
+class CountingClockTools:
+    """ffprobe-shaped metadata and decoded-clock observations; no media is read."""
+    def __init__(self):
+        self.clock_calls = []
+
+    def doctor(self):
+        return {}
+
+    def probe(self, path):
+        return {'duration': 10.0, 'format': {}, 'streams': [{'index': 0, 'codec_type': 'video'}]}
+
+    def selected_video_clock(self, path, media, start, end):
+        self.clock_calls.append((str(path), start, end))
+        return {'clock_policy_version': 'selected-video-frames/1', 'stream_index': 0, 'stream_selector': 'v:0',
+                'time_base': '1/25', 'observation_window': [str(start), str(end)],
+                'observed_intervals': [['0', '10']], 'playback_intervals': [['0', '10']],
+                'max_observed_frame_duration': '1/25'}
+
+
+def _plan(media):
+    return {'schema': 'execution-plan/1', 'fps': 25, 'width': 64, 'height': 64, 'fit': 'contain',
+            'sources': {'a': reference(media)},
+            'clips': [{'id': 'c1', 'source_id': 'a', 'start': 0, 'end': 2, 'gain_db': 0},
+                      {'id': 'c2', 'source_id': 'a', 'start': 3, 'end': 5, 'gain_db': 0}]}
+
+
+def test_timeline_patch_reuses_identical_clock_observations_within_one_run(tmp_path):
+    media = tmp_path / 'source.mp4'
+    media.write_bytes(b'metadata supplied by fake tools')
+    plan = _plan(media)
+    tools = CountingClockTools()
+    request = {'operation': 'timeline-patch', 'plan': plan, 'expected_revision': editing_runtime.fingerprint(plan),
+               'allowed_clip_ids': ['c1'], 'changes': [{'clip_id': 'c1', 'set': {'gain_db': -3}}]}
+    receipt = editing_runtime.run(request, tmp_path / 'run', tools)
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    assert receipt['result']['changed_clip_ids'] == ['c1']
+    # Base and patched plans share both source windows: observed once each, not twice.
+    assert len(tools.clock_calls) == 2
+
+
+def test_clock_observations_are_not_reused_outside_a_run_or_after_it(tmp_path):
+    media = tmp_path / 'source.mp4'
+    media.write_bytes(b'metadata supplied by fake tools')
+    tools = CountingClockTools()
+    first = editing_runtime.normalize_plan(_plan(media), tools)
+    second = editing_runtime.normalize_plan(_plan(media), tools)
+    assert len(tools.clock_calls) == 4
+    assert first['clips'] == second['clips']
+    assert editing_runtime.CLOCK_OBSERVATIONS.get() is None
+
+
+def test_changed_source_bytes_are_rejected_before_cached_clock_reuse(tmp_path, monkeypatch):
+    media = tmp_path / 'source.mp4'
+    media.write_bytes(b'version one')
+    plan = _plan(media)
+    tools = CountingClockTools()
+    original_normalize = editing_runtime.normalize_plan
+    calls = []
+
+    def normalize_then_mutate(value, bound_tools):
+        result = original_normalize(value, bound_tools)
+        calls.append(True)
+        media.write_bytes(b'version two')  # The patched-plan normalization must not reuse.
+        return result
+
+    monkeypatch.setattr(editing_runtime, 'normalize_plan', normalize_then_mutate)
+    request = {'operation': 'timeline-patch', 'plan': plan, 'expected_revision': editing_runtime.fingerprint(plan),
+               'allowed_clip_ids': ['c1'], 'changes': [{'clip_id': 'c1', 'set': {'gain_db': -3}}]}
+    receipt = editing_runtime.run(request, tmp_path / 'run', tools)
+    assert receipt['status'] == 'FAILED' and 'SOURCE_HASH_MISMATCH' in receipt['error']
+    assert len(calls) == 1
+
+
+def test_tool_output_decoding_is_utf8_and_never_aborts_on_invalid_bytes():
+    command = [sys.executable, '-c',
+               "import sys; sys.stdout.buffer.write(b'tag:\\xe4\\xb8\\xad\\xff\\n'); sys.stderr.buffer.write(b'\\xfe')"]
+    result = editing_runtime.owned_process(command, timeout=30)
+    assert result.returncode == 0
+    assert result.stdout == 'tag:中�\n' and result.stderr == '�'

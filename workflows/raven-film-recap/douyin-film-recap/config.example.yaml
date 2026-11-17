@@ -111,7 +111,7 @@ render:
   incremental_cache: false
   width: 1080
   height: 1920
-  fps: 30
+  fps: 30  # 正整数，或精确有理数字符串，如 "30000/1001"
   video_codec: libx264
   crf: 19
   preset: medium

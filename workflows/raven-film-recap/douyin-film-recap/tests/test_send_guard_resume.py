@@ -166,7 +166,7 @@ def test_analysis_workers_share_session_and_stable_keys_replay(
     assert len(calls) == 3 and all(call["session"] is session for call in calls)
     assert session.sent == 3
     assert {read(path)["logical_key"] for path in (tmp_path / ".remote-intents").glob("*.json")} == {
-        f"scene-analysis:batch:{index:04d}:format-0" for index in range(3)
+        f"scene-analysis:batch:{index:04d}:schema-json:format-0" for index in range(3)
     }
     with work_lock(tmp_path), guard.send_session(tmp_path, scope) as replay:
         repeated = analyze_scenes(scenes, app_config, provider)

@@ -11,7 +11,7 @@
 - 影视子集：`validate_skill.py` 通过；pytest 全部通过（约 25 项因可选依赖跳过），
   有 PySceneDetect `get_seconds()` 弃用警告和一条测试内 Pydantic 序列化警告。
 - `ruff --select F821,F822,F823,E9`：通过。扩大到 `F,B` 后多为测试 fixture 与“循环内立即调用的闭包”误报，
-  另有 25 处未使用导入（未在本次清理）。
+  另有 27 处未使用导入/变量（第二轮清理，见 #17）。
 
 ## 已修复
 
@@ -27,21 +27,25 @@
 | 8 | 影视 `doctor` 的 libass 检查包含 `"subtitles" in output`，`-filters` 输出的任何描述文字只要含该词就会判 PASS。 | 可能误报字幕烧录可用。 | 改为按滤镜名列匹配 `subtitles`。 |
 | 9 | runtime/scripts 中有 30 余处 `read_text()` / `write_text()` 未指定编码，而写入端统一是 UTF-8（`ensure_ascii=False`）。 | 在非 UTF-8 locale（如 GB18030）下读取中文 receipt、注册表或清单会失败，`build_portable_bundle` 写 `external-evidence.json` 也会出错。 | 统一显式使用 `encoding='utf-8'`。 |
 
-新增回归测试：`tests/runtime/test_review_20261117.py`（12 项）和影视子集
-`tests/test_review_20261117.py`（11 项，含真实 FFmpeg 滤镜图）。
+新增回归测试：`tests/runtime/test_review_20261117.py` 和影视子集 `tests/test_review_20261117.py`
+（含真实 FFmpeg 滤镜图）。
 `contracts/operation-contract.md` 已同步记录 #1、#2、#4 的行为。
 
-## 建议（本次未改，需维护者决定）
+## 第二轮：按审查建议落实
 
-1. **模型提示中的 JSON Schema 是 Python repr**：`providers.py` 的 `chat_json` 用 f-string 嵌入 `{schema}`，输出单引号、`True`、`None`，不是 JSON。这可能诱导模型输出无效 JSON，多一次付费修复请求。建议改用 `json.dumps(schema, ensure_ascii=False)`。未改的原因：提示体变化会改变 send-intent 载荷哈希，已有工作区重算该阶段时会触发 `SEND_INTENT_PAYLOAD_CHANGED`，需要决定是否提升 `PIPELINE_REVISION` 或提供迁移。
-2. **故事上下文字节未绑定**：`analysis.build_story` 消费时重新读取 `context_file`，没有和 `binding.context_identity` 对比。阶段前后的边界检查能发现大多数变化，但发现不了 A→B→A 的替换，而且远程请求已经发出。建议在管线中只读一次并校验哈希，再传入已验证的文本。`still_ops` 的 `Image.open(path)` 同样会在哈希后重读像素。
-3. **帧率配置不一致**：`RenderConfig.fps: int`，而 `render_plan` 已支持有理数帧率，用户配置无法设置 `30000/1001`。测试中直接给它赋字符串，引发 Pydantic 警告。
-4. **重复解码开销**：`normalize_plan` 对每个 clip 用 `ffprobe -show_frames` 观察帧时钟（会解码），并对来源做全量 SHA。`timeline-patch` 会规范化两次，`caption-map` 再做一次。可考虑在单次运行内按（内容 SHA、选择器、窗口）缓存观察结果，同时保持失败即关闭。
-5. **子进程文本解码依赖 locale**：`owned_process(text=True)` 未指定编码。ffprobe 标签或 stderr 中出现非 UTF-8 字节时，会在解码阶段抛 `UnicodeDecodeError`。建议 stderr 使用 `errors='replace'`，stdout 保持严格并报出明确错误码。
-6. **版本与变更记录**：`plugin.json` 和 MCP `serverInfo` 是 0.1.0，runtime 是 `0.17.0-dev`，影视包是 0.3.0，CHANGELOG 最新条目是 v0.3.0-alpha.1（写“16 条复杂工作流”，注册表现为 17 条，新增了剧情制作）。建议补充 Unreleased 段并说明各版本号的含义。
-7. **MCP 协议协商**：客户端请求未知版本时回退到 `2025-03-26`。规范建议回退到服务器支持的最新版本（这里是 `2025-06-18`）。现有测试明确断言当前行为，可能是有意的兼容选择。
-8. **可维护性**：`runtime/*_ops.py` 和 `batch_ops.py` 大量使用分号拼接的超长单行，审查成本高。建议对改动到的文件逐步执行 `ruff format`。CI 只检查致命 lint 子集，可在清理 25 处未使用导入后加入 `F401/F841`。
-9. **CI 触发**：`on: [push, pull_request]` 会让 PR 分支重复运行全部矩阵（含 torch 安装），建议把 `push` 限制为 main。
+维护者确认按建议处理，以下各项均已实现并附回归测试。
+
+| # | 建议 | 决定与实现 |
+|---|---|---|
+| 10 | 模型提示中的 JSON Schema 是 Python repr | `chat_json` 改用 `json.dumps(schema, ensure_ascii=False, sort_keys=True)`。为避免已有工作区重算时卡在 `SEND_INTENT_PAYLOAD_CHANGED`，结构化请求改用 `:schema-json` 意图键命名空间。没有采用提升 `PIPELINE_REVISION` 的方案：那会让所有旧工作区的 `render-current` 被拒，并强制生成新代际。为保持“改变载荷不能掩盖 UNKNOWN 发送”的不变量，`send_guard` 新增 `superseded_keys`：旧键下仍为 UNKNOWN 的发送会阻止替代请求，直到 `reconcile-send` 核对；旧键下已成功的回复不会被重放，替代请求需要重新授权。 |
+| 11 | 故事上下文与静帧字节未绑定 | 新增 `read_story_context()`。管线以 `bound=True` 读取一次上下文，并与输入绑定中记录的 SHA、字节数比对，再把同一份文本传给 `build_story`。上下文改为在任何付费分块请求之前解析。`still_ops` 从已哈希的有界缓冲（512 MiB）解码。 |
+| 12 | `RenderConfig.fps` 只能是整数 | 接受正整数或精确的 `N/D` 字符串，如 `30000/1001`。拒绝 `29.97` 这类二进制浮点数。整数值仍存为整数，已有配置指纹不变。QC 的帧率与时长容差改用 `fps_rational`。 |
+| 13 | 重复解码开销 | `windowed_mix_clock` 在单次 `run()` 内按（已验证内容 SHA、路径、窗口、选项、活动来源绑定、工具实例）复用观察结果，返回深拷贝。`timeline-patch` 的时钟观察次数由 4 次降为 2 次。来源字节一旦变化，仍会先在 SHA 检查处失败。 |
+| 14 | 子进程解码依赖 locale | `owned_process`、`tool_identity`、影视 `run_command` 与 OTIO 版本探测统一使用 `encoding='utf-8', errors='replace'`。 |
+| 15 | 版本与变更记录 | CHANGELOG 增加 Unreleased 段（含兼容性说明）。`docs/packaging.md` 增加“版本号的含义”表。各组件版本号本身不改动，以免伪造发行语义。 |
+| 16 | MCP 协议回退 | 对未知或缺省的协议版本回退到最新支持的 `2025-06-18`，测试同步更新。 |
+| 17 | 可维护性与 lint | 清理 25 处未使用的导入和变量，另有 2 处 pytest fixture 导入改为显式 `noqa`。CI 两个 lint 步骤加入 `F401,F841`。未对分号风格的文件做整体 `ruff format`，因为仅 `runtime/` 就会产生约 2 万行纯格式差异，会掩盖行为修复，建议单独发一个只做格式化的 PR。 |
+| 18 | CI 重复运行 | `push` 只在 `main` 触发，PR 分支由 `pull_request` 覆盖，并新增 `workflow_dispatch`。 |
 
 ## 已检查、未发现问题
 

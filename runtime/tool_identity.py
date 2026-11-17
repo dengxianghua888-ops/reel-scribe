@@ -83,7 +83,7 @@ def inspect_tool(path, max_wrappers=8, run_version=True):
             wrappers += 1
         if run_version:
             completed = subprocess.run([report["resolved_binary"]["path"], "-version"],
-                                       capture_output=True, text=True, timeout=15)
+                                       capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=15)
             report["version_probe"] = "SUCCEEDED" if completed.returncode == 0 and completed.stdout.splitlines() else "FAILED"
             report["version_returncode"] = completed.returncode
             if report["version_probe"] == "SUCCEEDED":

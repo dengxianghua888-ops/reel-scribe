@@ -35,6 +35,8 @@ RUN_CANCELLATION = ContextVar('editing_run_cancellation', default=None)
 RUN_PROGRESS = ContextVar('editing_run_progress', default=None)
 RUN_DIRECTORY = ContextVar('editing_run_directory', default=None)
 TOOL_DIAGNOSTIC_SEQUENCE = ContextVar('editing_tool_diagnostic_sequence', default=0)
+# Per-run reuse of identical decoded-clock observations (see windowed_mix_clock).
+CLOCK_OBSERVATIONS = ContextVar('editing_clock_observations', default=None)
 
 
 class ContractError(ValueError):
@@ -129,7 +131,9 @@ def frame_rate(value):
 
 def owned_process(command, timeout=300, cwd=None):
     """Stop only this invocation's process group on catchable cancellation."""
-    proc = subprocess.Popen(command, text=True, stdout=subprocess.PIPE,
+    # Decode as UTF-8 regardless of locale; undecodable bytes in tool output
+    # (for example container tags) become U+FFFD instead of aborting the run.
+    proc = subprocess.Popen(command, text=True, encoding='utf-8', errors='replace', stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, cwd=cwd,
                             pass_fds=SUBPROCESS_LOCK_FDS.get(), start_new_session=True)
     reason = None
@@ -505,14 +509,16 @@ def normalize_plan(plan, tools):
         sid = item['source_id']
         require(sid in sources, 'UNKNOWN_SOURCE: ' + str(sid))
         a, b = span(item['start'], item['end'], sources[sid]['media']['duration'])
-        clock = windowed_mix_clock(tools, sources[sid]['path'], sources[sid]['media'], b, kind='video', start=a)
+        clock = windowed_mix_clock(tools, sources[sid]['path'], sources[sid]['media'], b, kind='video', start=a,
+                                   identity=sources[sid]['sha256'])
         require_video_coverage(clock, a, b, playback=True)
         gain = number(item['gain_db'], 'gain_db')
         audio_clock = None
         if not item.get('mute', False) and gain > -120 and any(
                 s['codec_type'] == 'audio' for s in sources[sid]['media']['streams']):
             audio_clock = windowed_mix_clock(tools, sources[sid]['path'], sources[sid]['media'], b,
-                                             kind='audio', start=a, allow_no_audio=True, playback=True)
+                                             kind='audio', start=a, allow_no_audio=True, playback=True,
+                                             identity=sources[sid]['sha256'])
             audio_intersection(audio_clock, a, b, playback=True)
         require(-120 <= gain <= 24, 'GAIN_OUT_OF_RANGE')
         # Source IDs and paths are aliases, not permission to reuse identical media.
@@ -906,7 +912,31 @@ def patch_plan(request, directory, tools):
 
 
 def windowed_mix_clock(tools, path, media, end, *, kind, start=0, window_seconds=240,
-                       allow_no_audio=False, playback=False):
+                       allow_no_audio=False, playback=False, identity=None):
+    """Reuse an identical observation within one run when the caller supplies
+    the content SHA it has just verified for ``path``.
+
+    The key also binds the active source-consumption binding and tool instance,
+    so observations never cross a consumption boundary, nested run or another
+    ffprobe. Results are deep copies; a changed file fails its SHA check upstream.
+    """
+    cache = CLOCK_OBSERVATIONS.get()
+    key = None
+    if cache is not None and identity is not None:
+        from source_binding import ACTIVE_BINDING
+        key = (identity, str(path), kind, str(start), str(end), window_seconds, allow_no_audio, playback,
+               id(ACTIVE_BINDING.get()), id(getattr(tools, 'tools', tools)))
+        if key in cache:
+            return copy.deepcopy(cache[key])
+    result = _windowed_mix_clock(tools, path, media, end, kind=kind, start=start,
+                                 window_seconds=window_seconds, allow_no_audio=allow_no_audio, playback=playback)
+    if key is not None:
+        cache[key] = copy.deepcopy(result)
+    return result
+
+
+def _windowed_mix_clock(tools, path, media, end, *, kind, start=0, window_seconds=240,
+                        allow_no_audio=False, playback=False):
     """Observe a complete mix input in bounded, overlapping presentation windows.
 
     Source selectors retain their per-call frame cap. The overlapping decoded
@@ -1269,6 +1299,7 @@ def run(request, directory, tools):
                'operation': request.get('operation')}
     directory_token = RUN_DIRECTORY.set(directory)
     sequence_token = TOOL_DIAGNOSTIC_SEQUENCE.set(0)
+    clock_token = CLOCK_OBSERVATIONS.set({})
     try:
         snapshot = {}
         try:
@@ -1316,6 +1347,7 @@ def run(request, directory, tools):
         return receipt
 
     finally:
+        CLOCK_OBSERVATIONS.reset(clock_token)
         TOOL_DIAGNOSTIC_SEQUENCE.reset(sequence_token)
         RUN_DIRECTORY.reset(directory_token)
 
