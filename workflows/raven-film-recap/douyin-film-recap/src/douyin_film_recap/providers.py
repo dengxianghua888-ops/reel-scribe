@@ -17,6 +17,17 @@ T = TypeVar("T", bound=BaseModel)
 
 # Intent-key namespace for chat_json requests whose schema prompt is rendered as JSON.
 SCHEMA_PROMPT_FORMAT = "schema-json"
+# chat() makes at most two attempts per role: format-0, then format-1 after an
+# observed structured-output rejection.
+FORMAT_ATTEMPTS = 2
+
+
+def _legacy_chat_json_keys(intent_key: str | None) -> tuple[str, ...]:
+    """Logical keys the pre-``schema-json`` chat_json used for one request."""
+    if not intent_key:
+        return ()
+    return tuple(f"{intent_key}{role}:format-{attempt}"
+                 for role in ("", ":json-repair") for attempt in range(FORMAT_ATTEMPTS))
 
 
 class ProviderError(RuntimeError):
@@ -90,7 +101,7 @@ class OpenAICompatibleClient:
         max_tokens: int | None = None,
         response_format: dict[str, Any] | None = None,
         intent_key: str | None = None,
-        superseded_intent_key: str | None = None,
+        superseded_intent_keys: tuple[str, ...] = (),
     ) -> str:
         model = self.config.vlm_model if vision else self.config.llm_model
         user_content: str | list[dict[str, Any]]
@@ -113,7 +124,7 @@ class OpenAICompatibleClient:
         if response_format is not None:
             payload["response_format"] = response_format
 
-        for fallback in range(2):
+        for fallback in range(FORMAT_ATTEMPTS):
             def send():
                 with httpx.Client(timeout=self.timeout) as client:
                     check_active_send()
@@ -127,7 +138,7 @@ class OpenAICompatibleClient:
             observed = guarded_send("chat", {"endpoint": f"{self.base_url}/chat/completions",
                                              "body": payload}, send,
                 intent_key=f"{intent_key}:format-{fallback}" if intent_key else None,
-                superseded_keys=(f"{superseded_intent_key}:format-{fallback}",) if superseded_intent_key else ())
+                superseded_keys=superseded_intent_keys)
             if observed["status_code"] >= 400:
                 # Only an observed rejection can trigger this separately reserved send.
                 if observed["status_code"] in {400, 404, 422} and "response_format" in payload:
@@ -164,9 +175,11 @@ class OpenAICompatibleClient:
             f"\n\n你必须只输出满足下列 JSON Schema 的 JSON，不要输出 Markdown 或解释：\n{schema}"
         )
         # Prompt bytes changed with the JSON rendering; a separate key namespace
-        # keeps old intents from turning reruns into SEND_INTENT_PAYLOAD_CHANGED,
-        # while UNKNOWN sends under the former keys still block the replacement.
-        legacy_key = intent_key
+        # keeps old intents from turning reruns into SEND_INTENT_PAYLOAD_CHANGED.
+        # Every attempt the former release could have made for this logical
+        # request (both format fallbacks, primary and JSON repair) is checked
+        # before *each* replacement send: an UNKNOWN anywhere blocks them all.
+        legacy_keys = _legacy_chat_json_keys(intent_key)
         intent_key = f"{intent_key}:{SCHEMA_PROMPT_FORMAT}" if intent_key else None
         raw = self.chat(
             system=system,
@@ -177,7 +190,7 @@ class OpenAICompatibleClient:
             max_tokens=max_tokens,
             response_format={"type": "json_object"},
             intent_key=intent_key,
-            superseded_intent_key=legacy_key,
+            superseded_intent_keys=legacy_keys,
         )
         try:
             return model_type.model_validate(extract_json_object(raw))
@@ -195,7 +208,7 @@ class OpenAICompatibleClient:
                 max_tokens=max_tokens,
                 response_format={"type": "json_object"},
                 intent_key=f"{intent_key}:json-repair" if intent_key else None,
-                superseded_intent_key=f"{legacy_key}:json-repair" if legacy_key else None,
+                superseded_intent_keys=legacy_keys,
             )
             try:
                 return model_type.model_validate(extract_json_object(repaired))

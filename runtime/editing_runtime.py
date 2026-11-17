@@ -922,22 +922,26 @@ def windowed_mix_clock(tools, path, media, end, *, kind, start=0, window_seconds
     """Reuse an identical observation within one run when the caller supplies
     the content SHA it has just verified for ``path``.
 
-    The key also binds the active source-consumption binding and tool instance,
-    so observations never cross a consumption boundary, nested run or another
-    ffprobe. Results are deep copies; a changed file fails its SHA check upstream.
+    The entry also binds the active source-consumption binding and tool
+    instance, so observations never cross a consumption boundary, nested run or
+    another ffprobe. Entries hold strong references to both objects and are
+    compared by identity, so a recycled ``id()`` cannot alias a different one.
+    Results are deep copies; a changed file fails its SHA check upstream.
     """
     cache = CLOCK_OBSERVATIONS.get()
     key = None
     if cache is not None and identity is not None:
         from source_binding import ACTIVE_BINDING
+        binding, owner = ACTIVE_BINDING.get(), getattr(tools, 'tools', tools)
         key = (identity, str(path), kind, str(start), str(end), window_seconds, allow_no_audio, playback,
-               id(ACTIVE_BINDING.get()), id(getattr(tools, 'tools', tools)))
-        if key in cache:
-            return copy.deepcopy(cache[key])
+               id(binding), id(owner))
+        entry = cache.get(key)
+        if entry is not None and entry[0] is binding and entry[1] is owner:
+            return copy.deepcopy(entry[2])
     result = _windowed_mix_clock(tools, path, media, end, kind=kind, start=start,
                                  window_seconds=window_seconds, allow_no_audio=allow_no_audio, playback=playback)
     if key is not None:
-        cache[key] = copy.deepcopy(result)
+        cache[key] = (binding, owner, copy.deepcopy(result))
     return result
 
 
@@ -1412,7 +1416,7 @@ def run(request, directory, tools):
             receipt['error'] = 'INTERNAL_ERROR: ' + type(exc).__name__ + ': ' + str(exc)
             receipt['internal_error'] = True
             (directory / 'internal-error-traceback.txt').write_text(traceback.format_exc(), encoding='utf-8')
-        receipt['artifacts'] =[{'path': str(p.relative_to(directory)), 'sha256': sha256(p), 'bytes': p.stat().st_size}
+        receipt['artifacts'] = [{'path': str(p.relative_to(directory)), 'sha256': sha256(p), 'bytes': p.stat().st_size}
                                 for p in sorted(directory.rglob('*')) if p.is_file()]
         write_json(directory / 'receipt.json', receipt)
         return receipt

@@ -214,3 +214,24 @@ def test_tool_output_decoding_is_utf8_and_never_aborts_on_invalid_bytes():
     result = editing_runtime.owned_process(command, timeout=30)
     assert result.returncode == 0
     assert result.stdout == 'tag:中�\n' and result.stderr == '�'
+
+
+def test_clock_cache_entry_must_belong_to_the_same_binding_and_tools_objects(tmp_path):
+    media = tmp_path / 'source.mp4'
+    media.write_bytes(b'metadata supplied by fake tools')
+    tools = CountingClockTools()
+    probe = tools.probe(media)
+    token = editing_runtime.CLOCK_OBSERVATIONS.set({})
+    try:
+        cache = editing_runtime.CLOCK_OBSERVATIONS.get()
+        key = ('a' * 64, str(media), 'video', '0', '2', 240, False, False, id(None), id(tools))
+        # Simulates a recycled id(): same key, but recorded for another tools object.
+        cache[key] = (None, object(), {'stale': True})
+        clock = editing_runtime.windowed_mix_clock(tools, str(media), probe, 2, kind='video', start=0,
+                                                   identity='a' * 64)
+        assert 'stale' not in clock and len(tools.clock_calls) == 1
+        again = editing_runtime.windowed_mix_clock(tools, str(media), probe, 2, kind='video', start=0,
+                                                   identity='a' * 64)
+        assert again == clock and len(tools.clock_calls) == 1
+    finally:
+        editing_runtime.CLOCK_OBSERVATIONS.reset(token)
