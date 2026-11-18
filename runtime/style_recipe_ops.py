@@ -58,7 +58,7 @@ def validate_envelope_binding(document):
             if group=='caption_overrides':
                 require(key in document['captions'],'CAPTION_TARGET_UNKNOWN')
                 from caption_style import validate_override
-                validate_override(value,document['plan']['height'])
+                validate_override(value,document['plan']['height'],document['captions'][key]['text'])
             if group=='audio_envelope':
                 require(isinstance(value,dict) and key in document['audio_tracks'],'AUDIO_ENVELOPE_MAP_REQUIRED')
             actual=(document['caption_style'].get(key) if group=='caption_style' else
@@ -206,7 +206,7 @@ def execute(request, directory, tools):
         from caption_style import validate_override
         required.append('caption-cue-style')
         for cid,values in parameters['caption_overrides'].items():
-            validated=validate_override(values,document['plan']['height'])
+            validated=validate_override(values,document['plan']['height'],document['captions'][cid]['text'])
             previous=candidate['captions'][cid].get('style_override',{})
             require(set(previous)<=set(validated),'CUE_RECIPE_OVERRIDE_FIELDS_DROPPED')
             candidate['captions'][cid]['style_override']=copy.deepcopy(validated)

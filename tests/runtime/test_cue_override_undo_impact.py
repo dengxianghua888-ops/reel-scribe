@@ -162,3 +162,46 @@ def test_local_override_shared_render_matches_unshared(shared_case):
         refs.append({'path':str(path),'sha256':rt.sha256(path)})
     c['candidates']=refs
     test_two_candidates_share_once_and_match_unshared_decoded_output(c)
+
+
+def test_line_break_undo_preserves_source_and_later_manual_notes(cue_case):
+    import hashlib
+    c=cue_case
+    # Existing ASCII word must remain whole; a presentation break at a space.
+    helper.commit(c,lambda d:d['captions']['a'].update(text='first second'))
+    text='first second'
+    value={'text_sha256':hashlib.sha256(text.encode()).hexdigest(),'offsets':[6]}
+    helper.commit(c,lambda d:d['captions']['a'].update(style_override={'line_breaks':value}))
+    helper.commit(c,lambda d:d['notes'].update(manual='keep'))
+    q=undo_request(c);q['undo_sequence']=3;q['fields'][0]['field']='line_breaks'
+    before=state(q);r=run(c,q)
+    doc=json.loads((c[1]/'candidate.json').read_bytes())['document']
+    assert doc['captions']['a']['text']==text and 'style_override' not in doc['captions']['a']
+    assert doc['notes']==before['document']['notes'] and state(q)==before
+    assert r['fields'][0]['restored_effective_value']=={**value,'offsets':[]}
+
+
+def test_line_break_undo_refuses_later_different_break(cue_case):
+    import hashlib
+    c=cue_case
+    helper.commit(c,lambda d:d['captions']['a'].update(text='first second third'))
+    value={'text_sha256':hashlib.sha256(b'first second third').hexdigest(),'offsets':[6]}
+    helper.commit(c,lambda d:d['captions']['a'].update(style_override={'line_breaks':value}))
+    helper.commit(c,lambda d:d['captions']['a']['style_override']['line_breaks'].update(offsets=[13]))
+    q=undo_request(c);q['undo_sequence']=3;q['fields'][0]['field']='line_breaks'
+    with pytest.raises(rt.ContractError,match='UNDO_FIELD_CONFLICT'):run(c,q)
+
+
+def test_explicit_empty_binding_detach(cue_case,monkeypatch):
+    q=bound_override(cue_case,monkeypatch,False)
+    q['binding_resolution']['detach_empty_binding']=True
+    result=run(cue_case,q)
+    doc=json.loads((cue_case[1]/'candidate.json').read_bytes())['document']
+    assert doc['style_bindings']=={} and 'style_override' not in doc['captions']['a']
+    assert result['binding_resolution']['policy']=='EXPLICIT_EMPTY_BINDING_DETACHED'
+
+
+def test_detach_cannot_remove_nonempty_mapping(cue_case,monkeypatch):
+    q=bound_override(cue_case,monkeypatch,True)
+    q['binding_resolution']['detach_empty_binding']=True
+    with pytest.raises(rt.ContractError,match='UNDO_DETACH_NONEMPTY_RECIPE_FORBIDDEN'):run(cue_case,q)

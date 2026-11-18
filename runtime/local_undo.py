@@ -1,5 +1,12 @@
 """Three-way, field-limited undo preparation. SQLite Work remains authoritative."""
 import copy
+import hashlib
+
+
+def inherited_value(document, cid, key):
+    if key=="line_breaks":
+        return {"text_sha256":hashlib.sha256(document["captions"][cid]["text"].encode("utf-8")).hexdigest(),"offsets":[]}
+    return document["caption_style"][key]
 
 
 def prepare(db, current, request, tools, *, directory=None):
@@ -28,7 +35,7 @@ def prepare(db, current, request, tools, *, directory=None):
         if kind == 'caption_override':
             exact_keys(selection, ['kind','id','field'], ['kind','id','field'])
             cid, key = selection['id'], selection['field']
-            require(isinstance(cid,str) and cid and key in ['font_size','margin_v','color_rgb'], 'UNDO_FIELD_UNSUPPORTED')
+            require(isinstance(cid,str) and cid and key in ['font_size','margin_v','color_rgb','line_breaks'], 'UNDO_FIELD_UNSUPPORTED')
             path = ('captions',cid,'style_override',key)
             require(path not in seen, 'UNDO_FIELD_DUPLICATE');seen.add(path)
             cues = [state['document']['captions'].get(cid) for state in [before,after,current]]
@@ -47,7 +54,7 @@ def prepare(db, current, request, tools, *, directory=None):
                 if not target['style_override']:target.pop('style_override')
             records.append({'selection':selection,'before':old['value'],'after':edited['value'],'current':now['value'],
                 'presence':{'before':old['present'],'after':edited['present'],'current':now['present']},
-                'restored_effective_value':target.get('style_override',{}).get(key,current['document']['caption_style'][key]),
+                'restored_effective_value':target.get('style_override',{}).get(key,inherited_value(current['document'],cid,key)),
                 'inheritance':'current-global-not-historical-appearance' if not old['present'] else 'explicit-override',
                 'status':'ALREADY_RESTORED' if fingerprint(old)==fingerprint(now) else 'RESTORE_BEFORE'})
             continue
@@ -104,7 +111,7 @@ def prepare(db, current, request, tools, *, directory=None):
     for record in records:
         selection=record['selection']
         if selection['kind']=='caption_override':
-            record['restored_effective_value']=candidate['captions'][selection['id']].get('style_override',{}).get(selection['field'],candidate['caption_style'][selection['field']])
+            record['restored_effective_value']=candidate['captions'][selection['id']].get('style_override',{}).get(selection['field'],inherited_value(candidate,selection['id'],selection['field']))
     changed = fingerprint(candidate) != current['document_sha256']
     # A recipe's parameters/constraints cannot silently remain an endorsement of
     # altered values. Binding changes require a separate explicit operation.
@@ -131,7 +138,7 @@ def prepare(db, current, request, tools, *, directory=None):
 def resolve_binding(current, candidate, records, resolution, tools, directory):
     """Derive a new explicit recipe, never relabel the old recipe as still applied."""
     from editing_runtime import exact_keys, require, fingerprint, source, number
-    exact_keys(resolution, ['recipe', 'expected_recipe_sha256', 'derived_recipe_id', 'derived_recipe_version'],
+    exact_keys(resolution, ['recipe', 'expected_recipe_sha256', 'derived_recipe_id', 'derived_recipe_version', 'detach_empty_binding'],
                ['recipe', 'expected_recipe_sha256', 'derived_recipe_id', 'derived_recipe_version'])
     recipe = resolution['recipe']
     exact_keys(recipe, ['schema', 'id', 'version', 'style', 'parameters', 'layout_constraints'],
@@ -167,7 +174,7 @@ def resolve_binding(current, candidate, records, resolution, tools, directory):
         require(isinstance(overrides,dict) and bool(overrides), 'UNDO_RECIPE_PARAMETERS_REQUIRED')
         for cid, values in overrides.items():
             require(isinstance(cid,str) and cid in current['captions'], 'UNDO_BINDING_ALREADY_DIVERGED')
-            exact_keys(values, ['font_size','margin_v','color_rgb'])
+            exact_keys(values, ['font_size','margin_v','color_rgb','line_breaks'])
             require(bool(values), 'UNDO_RECIPE_PARAMETERS_REQUIRED')
             stored=current['captions'][cid].get('style_override',{})
             require(all(k in stored and fingerprint(stored[k])==fingerprint(v) for k,v in values.items()), 'UNDO_BINDING_ALREADY_DIVERGED')
@@ -201,11 +208,17 @@ def resolve_binding(current, candidate, records, resolution, tools, directory):
         key = selection['field'] if group == 'caption_style' else selection['id']
         require(group in parameters and key in parameters[group], 'UNDO_SELECTED_FIELD_NOT_RECIPE_MAPPED')
         derived['parameters'][group][key] = copy.deepcopy(record['before'])
-    require(bool(derived['parameters']), 'UNDO_EMPTY_DERIVED_RECIPE_UNSUPPORTED')
+    detach=resolution.get('detach_empty_binding',False)
+    require(type(detach) is bool,'UNDO_DETACH_BOOLEAN_REQUIRED')
+    require(not detach or not derived['parameters'],'UNDO_DETACH_NONEMPTY_RECIPE_FORBIDDEN')
+    require(bool(derived['parameters']) or detach, 'UNDO_EMPTY_DERIVED_RECIPE_UNSUPPORTED')
     binding = copy.deepcopy(expected)
     binding['parameters'].update(recipe_id=derived['id'], recipe_version=derived['version'],
                                  recipe_sha256=fingerprint(derived), presentation=copy.deepcopy(derived['parameters']))
-    candidate['style_bindings']['*'] = binding
+    if detach:
+        candidate['style_bindings'].pop('*')
+    else:
+        candidate['style_bindings']['*'] = binding
     layout = {'status': 'NOT_APPLICABLE', 'reason': 'Original recipe has no layout constraints'}
     if 'layout_constraints' in derived:
         require(directory is not None, 'UNDO_LAYOUT_OUTPUT_REQUIRED')
@@ -214,9 +227,9 @@ def resolve_binding(current, candidate, records, resolution, tools, directory):
         layout = {'current': current_layout,
                   'candidate': check(candidate, derived['layout_constraints'], directory/'undo-layout', tools)}
     require(source(style['card']) == card_identity, 'UNDO_RECIPE_CARD_CHANGED_DURING_VALIDATION')
-    return {'policy': 'EXPLICIT_DERIVED_RECIPE', 'original_recipe_sha256': fingerprint(recipe),
+    return {'policy': 'EXPLICIT_EMPTY_BINDING_DETACHED' if detach else 'EXPLICIT_DERIVED_RECIPE', 'original_recipe_sha256': fingerprint(recipe),
             'derived_recipe_sha256': fingerprint(derived), 'derived_recipe': derived,
             'derived_from': {'recipe_id': recipe['id'], 'recipe_version': recipe['version'],
                              'recipe_sha256': fingerprint(recipe)},
-            'original_binding_sha256': fingerprint(expected), 'derived_binding_sha256': fingerprint(binding),
+            'original_binding_sha256': fingerprint(expected), 'derived_binding_sha256': None if detach else fingerprint(binding),
             'constraints_preserved': True, 'caption_layout': layout, 'style_effect': 'NOT_VERIFIED'}

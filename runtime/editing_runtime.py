@@ -129,12 +129,12 @@ def frame_rate(value):
         return Fraction(0)
 
 
-def owned_process(command, timeout=300, cwd=None):
+def owned_process(command, timeout=300, cwd=None, env=None):
     """Stop only this invocation's process group on catchable cancellation."""
     # Decode as UTF-8 regardless of locale; undecodable bytes in tool output
     # (for example container tags) become U+FFFD instead of aborting the run.
     proc = subprocess.Popen(command, text=True, encoding='utf-8', errors='replace', stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, cwd=cwd,
+                            stderr=subprocess.PIPE, cwd=cwd, env=env,
                             pass_fds=SUBPROCESS_LOCK_FDS.get(), start_new_session=True)
     reason = None
     deadline = time.monotonic() + timeout
@@ -174,7 +174,7 @@ def owned_process(command, timeout=300, cwd=None):
     return result
 
 
-def exec_tool(command, timeout=300, cwd=None):
+def exec_tool(command, timeout=300, cwd=None, env=None):
     from source_binding import ACTIVE_BINDING
     binding = ACTIVE_BINDING.get()
     touched = []
@@ -182,7 +182,7 @@ def exec_tool(command, timeout=300, cwd=None):
         command, touched = binding.command(command)
         binding.observe('before-tool-consumption', touched)
     try:
-        result = owned_process(command, timeout=timeout, cwd=cwd)
+        result = owned_process(command, timeout=timeout, cwd=cwd, **({"env":env} if env is not None else {}))
     finally:
         if binding is not None:
             binding.observe('after-tool-consumption', touched)
@@ -423,9 +423,9 @@ class Tools:
             clock['playback_basis']['header_read_errors'] = header_errors
         return clock
 
-    def ff(self, args, cwd=None, timeout=300):
+    def ff(self, args, cwd=None, timeout=300, env=None):
         binary = self.binary('ffmpeg')
-        result = exec_tool([binary, '-nostdin', '-hide_banner', '-v', 'error', '-n'] + args, cwd=cwd, timeout=timeout)
+        result = exec_tool([binary, '-nostdin', '-hide_banner', '-v', 'error', '-n'] + args, cwd=cwd, timeout=timeout, **({'env':env} if env is not None else {}))
         self.binary('ffmpeg')
         return result
 
@@ -854,7 +854,7 @@ def map_captions(request, directory, tools):
         ids.add(cue['id'])
         if 'style_override' in cue:
             from caption_style import validate_override
-            validate_override(cue['style_override'],normalized['height'])
+            validate_override(cue['style_override'],normalized['height'],cue['text'])
         require(isinstance(cue['text'], str) and cue['text'].strip(), 'CUE_TEXT_REQUIRED')
         require(cue['source_id'] in normalized['sources'], 'CUE_SOURCE_UNKNOWN')
         a, b = span(cue['start'], cue['end'], normalized['sources'][cue['source_id']]['media']['duration'])
@@ -1119,7 +1119,8 @@ def caption_ass(request, width, height, duration, *, layout_padding=0):
         require(isinstance(cue['text'],str) and cue['text'].strip(),'CUE_TEXT_REQUIRED')
         # ASS override syntax must not be accepted through ordinary text.
         require(not any(x in cue['text'] for x in ['{','}','\\','\r']),'ASS_CONTROL_CHARACTERS_UNSUPPORTED')
-        text=cue['text'].replace('\n',r'\N')
+        from caption_style import presentation_text
+        text=presentation_text(cue['text'],cue.get('style_override')).replace('\n',r'\N')
         ass+=f'Dialogue: 0,{ts(a)},{ts(b)},{local_names.get(index,"Default")},{text}\n'
     return ass
 
@@ -1142,10 +1143,17 @@ def caption_burn(request, directory, tools):
     shutil.copyfile(execution_path(font['path']),directory/'fonts'/('specified'+suffix))
     ass=caption_ass(request,video['width'],video['height'],media['duration'])
     (directory/'captions.ass').write_text(ass,encoding='utf-8')
-    tools.ff(['-i',asset['path'],'-vf','ass=captions.ass:fontsdir=fonts','-map','0:v:0','-map','0:a?',
-              '-c:v','libx264','-crf','18','-preset','medium','-c:a','copy','captioned.mp4'],cwd=directory)
+    strict=any('line_breaks' in c.get('style_override',{}) for c in request['cues'])
+    binding=None
+    if strict:
+        from caption_font_binding import prepare, verify
+        require(sha256(directory/'fonts'/('specified'+suffix))==font['sha256'],'CAPTION_FONT_CHANGED')
+        binding=prepare(directory/'fonts'/('specified'+suffix),directory/'font-binding',family)
+    rendered=tools.ff((['-loglevel','verbose'] if strict else [])+['-i',asset['path'],'-vf','ass=captions.ass:fontsdir=fonts','-map','0:v:0','-map','0:a?',
+              '-c:v','libx264','-crf','18','-preset','medium','-c:a','copy','captioned.mp4'],cwd=directory, **({'env':binding['env']} if strict else {}))
+    font_check=verify(rendered.stderr,binding,'burn') if strict else None
     return {'source':asset,'font':font,'font_family':family,'cue_count':len(request['cues']),
-            'visual_review':'NOT_RUN','font_fallback_verified':False,
+            'visual_review':'NOT_RUN','font_fallback_verified':strict,'font_binding':font_check,
             'note':'Burn performed; glyph/fallback and composition must be inspected on actual output'}
 
 

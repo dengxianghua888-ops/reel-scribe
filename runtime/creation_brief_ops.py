@@ -61,7 +61,7 @@ def execute(request, directory, tools):
                     from style_recipe_ops import cue_recipe_guard
                     cue_recipe_guard(state['document'],recipe,v['scope'])
                     from caption_style import validate_override
-                    for values in rp['caption_overrides'].values():validate_override(values,state['document']['plan']['height'])
+                    for cid,values in rp['caption_overrides'].items():validate_override(values,state['document']['plan']['height'],state['document']['captions'][cid]['text'])
                     require(v['capabilities']==['caption-cue-style'],'BRIEF_CAPTION_ONLY_CAPABILITY_REQUIRED')
                 else:
                     require(set(rp)=={'caption_style'},'BRIEF_CAPTION_ONLY_PARAMETERS_REQUIRED')
