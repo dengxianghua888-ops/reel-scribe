@@ -16,7 +16,7 @@ import time
 from PIL import ImageFont
 
 from .config import AppConfig
-from .media import media_duration
+from .media import ffprobe_json, media_duration, require_sdr_source
 from .models import SourceInfo, Storyboard, StoryboardSegment, VisualReference
 from .parallel import run_parallel
 from .subtitles import build_cues, output_timeline, resolved_visual_spans, segment_output_duration, write_srt
@@ -688,6 +688,18 @@ def build_edl(storyboard: Storyboard, *, realized_timeline: list[dict] | None = 
     return entries
 
 
+def _refuse_hdr_sources(storyboard: Storyboard) -> None:
+    """Existing workspaces may predate the ingest gate; refuse HDR before any media output."""
+    for source in storyboard.sources:
+        try:
+            streams = ffprobe_json(source.path).get("streams", [])
+        except RuntimeError:
+            continue  # Unreadable media fails in the normal render path with its own error.
+        video = next((s for s in streams if s.get("codec_type") == "video"), None)
+        if video is not None:
+            require_sdr_source(source.path, video)
+
+
 def render_storyboard(
     storyboard: Storyboard,
     config: AppConfig,
@@ -702,6 +714,7 @@ def render_storyboard(
     protected = [Path(source.path) for source in storyboard.sources]
     protected.extend(Path(segment.audio_file) for segment in storyboard.segments if segment.audio_file)
     attempt = _RenderAttempt(Path(work_dir), protected)
+    _refuse_hdr_sources(storyboard)
     token = _render_attempt.set(attempt)
     try:
         result = _render_storyboard_in_attempt(storyboard, config, attempt)

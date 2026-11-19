@@ -290,6 +290,33 @@ color: null 或 {
 | T7 | WorkDocument `color` 段和修订范围的合同草案（只写文档，先评审） | — | S |
 | T8 | 风格卡参数模板 schema，先覆盖 6 张 reference 色彩卡 | T2 | S |
 
+## 7.1 C0 进展（2026-11-19）
+
+T1–T4 已实现，均有自动化测试。只完成**技术验证**；效果验证和人工验收仍为 `NOT_RUN`。
+
+| # | 状态 | 实现与证据 |
+|---|---|---|
+| T1 | 完成 | `tests/runtime/color_media.py`：生成精确 8 位 RGB 色卡、灰阶和色带图，近无损编码为 BT.709；HLG/PQ 版本是 zscale 真实编码，不只是改标签 |
+| T2 | 完成 | 原子 [color-profile-scan](../atomic/color-profile-scan/SKILL.md)，合同见[色彩特征合同](../contracts/color-profile-contract.md)；18 项测试按独立实现的解析公式核对 Lab、亮度、剪切、调色板和矢量示波角。把 γ2.4 故意改成 2.2 时，有 3 项测试失败 |
+| T3 | 完成 | `install_doctor` 新增 `ffmpeg-color-filters`：24 个色彩相关滤镜，以及 HDR 转 SDR（zscale+tonemap、libplacebo）和 cube LUT 路线的可用性。只记录名称，不执行变换；另有 2 项测试 |
+| T4 | 完成 | 实测结果和门禁见下文 |
+
+**T4 实测（合成色卡，真实 HLG/PQ 编码，经影视 `render_storyboard`，按 SDR 播放器方式解码）：**
+
+| 源 | 输出标签 | L* 均值 | 色度均值 | 鲜艳度 | 亮度 p99 |
+|---|---|---|---|---|---|
+| SDR BT.709 | 8 位，BT.709 | 34.0 | 18.7 | 83.5 | 0.99 |
+| HLG | 8 位，**仍标 BT.2020 HLG** | 21.4 | 10.2 | 35.5 | 0.62 |
+| PQ | 8 位，**仍标 BT.2020 PQ** | 20.8 | 6.9 | 23.3 | 0.50 |
+
+原渲染路径不做任何转换，并报告渲染成功：
+- 按 SDR 显示时，画面偏暗、色度减半、高光被压。
+- 按 HDR 显示时，8 位又会出现色带。
+
+现在的处理：
+- 摄取阶段（`build_manifest`，在任何付费模型调用之前）和渲染入口（覆盖已有工作区）都会拒绝 HLG、PQ 和 BT.2020 广色域源，错误码为 `SOURCE_HDR_INPUT_UNSUPPORTED`，并提示先做明确的色调映射。
+- 真正的转换留给 C4 的 `color-input-transform`。
+
 ## 8. 来源
 
 产品与工具：

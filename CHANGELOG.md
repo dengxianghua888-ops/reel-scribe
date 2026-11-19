@@ -15,6 +15,11 @@
   - 影视配置支持 `30000/1001` 等有理帧率；
   - 单次运行内复用相同的解码时钟观察；
   - CI 增加未使用名称检查，并用 `concurrency` 取消同一分支上被新推送取代的运行。
+- 色彩层 C0（[规划](docs/color-layer-plan-20261119.md)）：
+  - 新增原子 `color-profile-scan`：显式采样，测量影调、剪切、CIELAB、色度、色相分布、调色板、样本漂移和声明区域的矢量示波角；只给数字，不评价好看。
+  - `install_doctor` 记录色彩滤镜与 HDR 转换路线的可用性。
+  - 新增合成色彩测试素材生成器（tests/runtime/color_media.py）。
+  - 影视解说拒绝 HLG/PQ/BT.2020 源（`SOURCE_HDR_INPUT_UNSUPPORTED`）。原先会静默输出偏暗、发灰的 8 位视频。
 - 兼容性说明：
   - `chat_json` 请求改用 `:schema-json` 意图键，已有工作区重算模型阶段时不会重放旧结果，需要重新 `--allow-remote`；旧键下 UNKNOWN 的发送在核对前会阻止替代请求。
   - 已启用但不存在的故事上下文文件现在直接报错。
