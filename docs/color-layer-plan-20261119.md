@@ -317,6 +317,33 @@ T1–T4 已实现，均有自动化测试。只完成**技术验证**；效果�
 - 摄取阶段（`build_manifest`，在任何付费模型调用之前）和渲染入口（覆盖已有工作区）都会拒绝 HLG、PQ 和 BT.2020 广色域源，错误码为 `SOURCE_HDR_INPUT_UNSUPPORTED`，并提示先做明确的色调映射。
 - 真正的转换留给 C4 的 `color-input-transform`。
 
+## 7.2 C1 进展（2026-11-19）
+
+只完成技术验证；效果验证与人工验收仍为 `NOT_RUN`。
+
+| 交付 | 状态 | 实现与证据 |
+|---|---|---|
+| `color-grade-compile` | 完成（不含曲线和 HSL） | 支持曝光、白平衡线性增益（可保持亮度）、ASC CDL v1.2（钳位语义）、外部 cube 加 mix、整体 strength，编译为 17、33 或 65 阶 cube。合同见[调色编译合同](../contracts/color-grade-contract.md) |
+| 交换文件 | 完成 | `.cc` 仅在恰好一个 CDL 且 strength=1 时导出；CLF v3 能精确表示时为参数化链，否则为烘焙 LUT3D |
+| 编译自检 | 完成 | 4096 个离网格点上比较解析链与本库四面体插值，报告 CIEDE2000。测试链（曝光 + 白平衡 + CDL，65 阶）中位数 < 0.5、最大值 < 2；单 CDL 33 阶约为中位数 0.0007、最大值 0.59 |
+| OCIO 交叉验证 | 完成（可选依赖） | OpenColorIO 2.6 读取参数化 CLF，与解析链最大差约 1e-5。`.cc` 在 OCIO `CDL_ASC` 下一致，在 `CDL_NO_CLAMP` 下差 0.099，回执已写明这一语义差异 |
+| `color-lut-apply` 强度 | 完成 | 可选 `strength`：同一网格上派生 `identity + s×(lut−identity)` 并绑定哈希。LUT 只读一次，解析与套用使用同一份已哈希字节；不带强度时 `selected.cube` 与输入字节完全相同 |
+| 共享数值模块 | 完成 | `runtime/color_numerics.py`：显示模型、CIELAB、CIEDE2000（对照 Sharma 2005 的 8 组公开数据）、四面体和三线性插值、cube 读写；`color-profile-scan` 改为复用其中的 Lab 换算 |
+
+**端到端验证：**
+- 曝光 +1 档编译 → `color-lut-apply` → `color-profile-scan` 复测：灰度与解析值 ΔE2000 < 1.5。
+- 反相 LUT 以强度 0.5 套用到红蓝色卡，得到平坦中灰（色度均值 < 2）。
+
+**变异检查：**
+- 把 CLF 中 LUT3D 的通道顺序写反，OCIO 测试失败。
+- 让 strength 不再派生新 LUT，端到端测试失败。
+
+**C0 修正（PR #27 评审与 CI）：**
+- `color-profile-scan` 的合并统计改为按样本流式累加。原实现把所有样本像素拼接后再转 float64，在 600 帧 × 512² 上限下需数 GB；现在峰值约 73 MiB，5 帧与 40 帧实测相同。Y' 百分位用整数键直方图，与全量计算精确一致；色度 p50/p95 量化到 1/1024；调色板子样本与原实现逐点相同。
+- CI 上的 FFmpeg 没有写入输出端 `-color_trc`/`-color_primaries` 设置的标签，测试素材因此缺标签（由 CI 失败现象推断，未能读取该 FFmpeg 版本）。素材生成改用 `setparams` 在帧上打标签。运行时里 `still-image-render` 也只靠输出选项打标签，在这类 FFmpeg 上可能缺少传输特性标签，尚未在该版本上实测，列为待核实风险。
+
+**未完成，转入 C2 前补齐：** 曲线与 HSL 操作；10 位输入（`color-lut-apply` 仍只接受 8 位）。
+
 ## 8. 来源
 
 产品与工具：

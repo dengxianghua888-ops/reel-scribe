@@ -203,3 +203,69 @@ def test_doctor_filter_parser_reports_missing_hdr_routes(monkeypatch):
         {'status': 'PRESENT_IDENTITY_OBSERVED', 'identity': {'resolved_binary': {'path': '/fixture/ffmpeg'}}})
     assert probe['filters']['lut3d'] and probe['filters']['eq'] and probe['filters']['tonemap']
     assert probe['routes'] == {'hdr_to_sdr_zscale_tonemap': False, 'hdr_to_sdr_libplacebo': False, 'cube_lut': True}
+
+
+def _pooled_reference(rgb):
+    """Independent reference: every statistic over all pixels held in memory at once."""
+    import numpy as np
+    from color_numerics import lab_from_rgb01
+    lab, linear = lab_from_rgb01(rgb / 255.0)
+    v = rgb.astype(float) / 255.0
+    luma = v @ np.array([0.2126, 0.7152, 0.0722])
+    chroma = np.hypot(lab[:, 1], lab[:, 2])
+    rg = v[:, 0] * 255 - v[:, 1] * 255
+    yb = 0.5 * (v[:, 0] + v[:, 1]) * 255 - v[:, 2] * 255
+    neutral = (chroma < 10) & (lab[:, 0] >= 20) & (lab[:, 0] <= 90)
+    chromatic = chroma >= 8
+    hue = np.degrees(np.arctan2(lab[chromatic, 2], lab[chromatic, 1])) % 360
+    return {
+        'luma': [luma.mean(), *np.percentile(luma, [1, 5, 50, 95, 99])],
+        'chroma': [chroma.mean(), *np.percentile(chroma, [50, 95])],
+        'lab_mean': lab.mean(axis=0), 'linear_mean': linear.mean(axis=0),
+        'clipping': [(rgb >= 254).any(axis=1).mean(), (rgb <= 1).all(axis=1).mean()],
+        'colorfulness': math.sqrt(rg.std() ** 2 + yb.std() ** 2) + 0.3 * math.sqrt(rg.mean() ** 2 + yb.mean() ** 2),
+        'neutral': [neutral.mean(), lab[neutral, 1].mean(), lab[neutral, 2].mean()],
+        'hue': np.bincount((hue // 30).astype(int) % 12, minlength=12) / chromatic.sum(),
+        'palette_points': lab if len(lab) <= 20000 else lab[np.linspace(0, len(lab) - 1, 20000).round().astype(int)],
+    }
+
+
+@pytest.mark.parametrize('chunks,pixels', [(3, 997), (37, 4096)])
+def test_streamed_pooled_statistics_match_all_pixels_in_memory(chunks, pixels):
+    import numpy as np
+    import color_profile_ops as cp
+    rng = np.random.default_rng(chunks)
+    parts = [rng.integers(0, 256, size=(pixels, 3), dtype=np.uint8) for _ in range(chunks)]
+    parts[0][:50] = 255
+    parts[-1][:50] = 0
+    parts[1][:200] = (128, 120, 118)  # near-neutral block
+    pooled = cp.PooledStats(chunks * pixels)
+    for part in parts:
+        lab, linear = cp.lab_from_rgb8(part)
+        pooled.add(part, lab, linear, np.hypot(lab[:, 1], lab[:, 2]))
+    got = pooled.result()
+    want = _pooled_reference(np.concatenate(parts))
+    luma = got['luma']
+    assert [luma[k] for k in ('mean', 'p01', 'p05', 'p50', 'p95', 'p99')] == pytest.approx(want['luma'], abs=2e-6)
+    chroma = got['chroma']
+    assert chroma['mean'] == pytest.approx(want['chroma'][0], abs=2e-6)
+    assert [chroma['p50'], chroma['p95']] == pytest.approx(want['chroma'][1:], abs=cp.CHROMA_BIN)
+    assert [got['lab_mean'][k] for k in 'Lab'] == pytest.approx(list(want['lab_mean']), abs=2e-6)
+    assert got['gray_world_linear_ratio']['r_over_g'] == pytest.approx(want['linear_mean'][0] / want['linear_mean'][1], abs=2e-6)
+    assert [got['clipping']['highlight_channel_ratio'], got['clipping']['shadow_crush_ratio']] == pytest.approx(want['clipping'], abs=2e-6)
+    assert got['colorfulness_hasler_susstrunk'] == pytest.approx(want['colorfulness'], abs=2e-6)
+    neutral = got['neutral_estimate']
+    assert [neutral['pixel_share'], neutral['a_mean'], neutral['b_mean']] == pytest.approx(want['neutral'], abs=2e-6)
+    assert got['hue_histogram']['shares'] == pytest.approx(list(want['hue']), abs=2e-6)
+    points = pooled.palette_points()
+    assert np.array_equal(points, want['palette_points'])
+    assert len(points) == min(chunks * pixels, cp.PALETTE_POINTS)
+
+
+def test_histogram_percentiles_reproduce_numpy_linear_interpolation():
+    import numpy as np
+    import color_profile_ops as cp
+    values = np.random.default_rng(7).integers(0, 50, size=1001)
+    counts = np.bincount(values, minlength=50)
+    qs = (0, 1, 5, 33.3, 50, 95, 99, 100)
+    assert cp.histogram_percentiles(counts, float, qs) == pytest.approx(list(np.percentile(values, qs)), abs=1e-12)

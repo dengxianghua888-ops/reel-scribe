@@ -65,6 +65,7 @@ ATOMIC_REQUIREMENTS = {
     'cue-alignment-check': ('ffprobe',),
     'color-lut-apply': ('ffmpeg', 'ffprobe'),
     'color-profile-scan': ('ffmpeg', 'ffprobe', 'numpy'),
+    'color-grade-compile': ('numpy',),
     'still-image-render': ('ffmpeg', 'ffprobe', 'Pillow'),
     'localization-plan-compile': ('ffprobe',),
     'work-variant-create': ('sqlite', 'ffprobe', 'fcntl'),
@@ -137,6 +138,14 @@ def _selected_requirements(identifier, request):
             unknown.append('stored WorkDocument captions, overlays and audio tracks')
     elif identifier == 'speech-transcribe-local' and request is None:
         unknown.append('request model/environment lock identity')
+    elif identifier == 'color-lut-apply':
+        if request is None:
+            unknown.append('optional strength derives a blended cube with numpy')
+        elif 'strength' in request:
+            required.append('numpy')
+            branch = 'strength-derived-cube'
+        else:
+            branch = 'verified-cube-as-is'
     return tuple(dict.fromkeys(required)), unknown, branch
 
 

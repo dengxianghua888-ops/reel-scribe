@@ -4,6 +4,11 @@ Charts are generated as exact 8-bit sRGB-coded PNGs and encoded as BT.709
 limited-range video; HLG/PQ variants are real zscale encodings of those SDR
 values. These fixtures prove arithmetic and gating behavior only. They are not
 camera footage, display calibration, or evidence of any look's quality.
+
+Color tags are set on the frames with setparams as well as on the encoder.
+On the CI runner's FFmpeg the -color_primaries/-color_trc output options alone
+left the stream without those tags (observed from CI failures), while frame
+properties set by setparams are carried into the encoder on every version.
 """
 import shutil
 import subprocess
@@ -16,6 +21,13 @@ PATCHES = [(f'gray-{v:03d}', (v, v, v)) for v in GRAY_STEPS] + [
     ('skin-light', (224, 172, 140)), ('skin-deep', (141, 85, 54)),
 ]
 SDR_TAGS = ['-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709']
+UNTAGGED = 'setparams=colorspace=unknown:color_primaries=unknown:color_trc=unknown:range=unknown'
+_SETPARAMS_KEYS = {'colorspace': 'colorspace', 'color_primaries': 'color_primaries',
+                   'color_trc': 'color_trc', 'color_range': 'range'}
+
+
+def frame_tags(**tags):
+    return 'setparams=' + ':'.join(f'{_SETPARAMS_KEYS[k]}={v}' for k, v in tags.items())
 
 
 def available():
@@ -58,8 +70,10 @@ def chart(path, columns=6, patch=16):
 def encode_sdr(png, out, *, seconds=1, fps=25, pix_fmt='yuv444p', full_range=False, tags=True):
     """Near-lossless BT.709 encode of an exact RGB still (qp 0, 4:4:4 by default)."""
     rng = 'pc' if full_range else 'tv'
+    tagging = (frame_tags(colorspace='bt709', color_primaries='bt709', color_trc='bt709', color_range=rng)
+               if tags else UNTAGGED)
     _run(['-loop', '1', '-framerate', fps, '-t', seconds, '-i', png,
-          '-vf', f'scale=out_color_matrix=bt709:out_range={rng},format={pix_fmt}',
+          '-vf', f'scale=out_color_matrix=bt709:out_range={rng},format={pix_fmt},{tagging}',
           '-c:v', 'libx264', '-qp', '0', '-preset', 'ultrafast',
           *(SDR_TAGS + ['-color_range', rng] if tags else []), out])
     return Path(out)
@@ -78,7 +92,7 @@ def encode_hdr(sdr_video, out, transfer):
 
 def retag(video, out, **tags):
     """Losslessly re-encode (qp 0, same pixel format) with different VUI color tags."""
-    args = ['-i', video, '-c:v', 'libx264', '-qp', '0', '-preset', 'ultrafast']
+    args = ['-i', video, '-vf', frame_tags(**tags), '-c:v', 'libx264', '-qp', '0', '-preset', 'ultrafast']
     for key, value in tags.items():
         args += ['-' + key, value]
     _run(args + [out])

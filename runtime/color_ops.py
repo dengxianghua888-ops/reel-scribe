@@ -1,33 +1,27 @@
 """Apply a caller-selected SDR RGB cube LUT. No look selection or color matching."""
 from fractions import Fraction
-import json,math,shutil
+import json,math
 
 def validate_cube(path):
     from editing_runtime import require
-    require(path.stat().st_size<=16*1024*1024,'LUT_TOO_LARGE')
-    size=None;rows=[];seen=set();data_started=False
-    for raw in path.read_text(encoding='utf-8-sig').splitlines():
-        line=raw.split('#',1)[0].strip()
-        if not line:continue
-        parts=line.split();key=parts[0]
-        if key in ['TITLE','LUT_3D_SIZE','DOMAIN_MIN','DOMAIN_MAX']:
-            require(not data_started and key not in seen,'LUT_DUPLICATE_OR_LATE_HEADER');seen.add(key)
-            if key=='TITLE':
-                require(line.startswith('TITLE "') and line.endswith('"'),'LUT_TITLE_INVALID')
-            elif key=='LUT_3D_SIZE':
-                require(len(parts)==2,'LUT_SIZE_INVALID')
-                size=int(parts[1]);require(2<=size<=65,'LUT_SIZE_UNSUPPORTED')
-            else:
-                require(len(parts)==4,'LUT_DOMAIN_INVALID');values=[float(x) for x in parts[1:]]
-                require(values==([0.,0.,0.] if key=='DOMAIN_MIN' else [1.,1.,1.]),'LUT_DOMAIN_UNSUPPORTED')
-        else:
-            require(size is not None,'LUT_SIZE_REQUIRED_BEFORE_DATA');data_started=True
-            require(len(parts)==3,'LUT_ROW_INVALID')
-            values=[float(x) for x in parts]
-            require(all(math.isfinite(x) and 0<=x<=1 for x in values),'LUT_VALUE_OUT_OF_RANGE')
-            rows.append(values);require(len(rows)<=size**3,'LUT_TOO_MANY_ROWS')
-    require(size is not None and len(rows)==size**3,'LUT_INCOMPLETE')
-    return {'size':size,'rows':len(rows),'domain':[0,1],'ordering':'red fastest, then green, then blue; caller supplies intended mapping'}
+    from color_numerics import parse_cube_text, MAX_CUBE_BYTES
+    require(path.stat().st_size<=MAX_CUBE_BYTES,'LUT_TOO_LARGE')
+    return parse_cube_text(path.read_text(encoding='utf-8-sig'))[0]
+
+
+def verified_cube(ref):
+    """Hash and parse one bounded buffer; return (artifact, info, rows, payload)."""
+    import hashlib
+    from editing_runtime import require, source
+    from color_numerics import parse_cube_text, MAX_CUBE_BYTES
+    artifact=source(ref)
+    with open(artifact['path'],'rb') as stream:payload=stream.read(MAX_CUBE_BYTES+1)
+    require(len(payload)<=MAX_CUBE_BYTES,'LUT_TOO_LARGE')
+    require(hashlib.sha256(payload).hexdigest()==artifact['sha256'],'SOURCE_HASH_MISMATCH: '+artifact['path'])
+    try:text=payload.decode('utf-8-sig')
+    except UnicodeDecodeError as exc:raise ValueError('LUT_TEXT_INVALID') from exc
+    info,rows=parse_cube_text(text)
+    return artifact,info,rows,payload
 
 def frame_clock(path,tools):
     from editing_runtime import exec_tool,require
@@ -38,16 +32,21 @@ def frame_clock(path,tools):
     return times
 
 def apply_lut(request,directory,tools):
-    from pathlib import Path
     from editing_runtime import exact_keys,source,require,write_json,sha256,exec_tool,frame_rate
     keys=['operation','source','lut','input_color','interpolation']
-    exact_keys(request,keys,keys);asset=source(request['source']);lut=source(request['lut'])
+    exact_keys(request,keys+['strength'],keys);asset=source(request['source'])
+    # Parse and apply the same verified bytes; strength derives a new cube on the same grid.
+    lut,cube,lut_rows,lut_payload=verified_cube(request['lut'])
+    strength=request.get('strength')
+    if strength is not None:
+        from editing_runtime import number
+        strength=number(strength,'strength',0);require(0<strength<=1,'LUT_STRENGTH_OUT_OF_RANGE')
     color=request['input_color'];exact_keys(color,['space','range','basis'],['space','range','basis'])
     require(color['space']=='bt709-sdr','COLOR_SPACE_UNSUPPORTED')
     require(color['range'] in ['limited','full'],'COLOR_RANGE_REQUIRED')
     require(color['basis'] in ['verified-metadata','caller-declared'],'COLOR_BASIS_REQUIRED')
     interpolation=request['interpolation'];require(interpolation in ['trilinear','tetrahedral'],'LUT_INTERPOLATION_UNSUPPORTED')
-    cube=validate_cube(Path(lut['path']));media=tools.probe(asset['path'])
+    media=tools.probe(asset['path'])
     video=next((s for s in media['streams'] if s['codec_type']=='video'),None);require(video is not None,'VIDEO_STREAM_REQUIRED')
     require(video.get('pix_fmt') in ['yuv420p','yuv422p','yuv444p','yuvj420p','yuvj422p','yuvj444p'],'COLOR_PIXEL_FORMAT_UNSUPPORTED')
     require(video['width']%2==0 and video['height']%2==0,'EVEN_DIMENSION_REQUIRED')
@@ -65,7 +64,12 @@ def apply_lut(request,directory,tools):
     times=frame_clock(asset['path'],tools)
     require(all(abs(t-float(Fraction(i,1)/fps))<=.00001 for i,t in enumerate(times)),'COLOR_ZERO_ORIGIN_CFR_REQUIRED')
     # Local fixed name prevents LUT paths from being interpreted as filter code.
-    shutil.copyfile(lut['path'],directory/'selected.cube')
+    if strength is None:
+        (directory/'selected.cube').write_bytes(lut_payload)
+    else:
+        from color_numerics import cube_text, identity_table, table_from_rows
+        identity=identity_table(cube['size']);table=table_from_rows(lut_rows,cube['size'])
+        (directory/'selected.cube').write_text(cube_text(identity+strength*(table-identity),'derived strength %.6f'%strength),encoding='utf-8')
     rng='tv' if color['range']=='limited' else 'pc'
     filters=f'scale=in_color_matrix=bt709:in_range={rng}:out_range=pc,format=gbrp,lut3d=file=selected.cube:interp={interpolation},scale=out_color_matrix=bt709:in_range=pc:out_range=tv,format=yuv420p'
     output=directory/'graded.mp4'
@@ -98,4 +102,7 @@ def apply_lut(request,directory,tools):
             'audio':'all source audio streams copied when present; coded payload hash and format checked; listening not performed','audio_checks':audio_checks,
             'source_interpretation':'declared bt709 SDR YUV range to nonlinear RGB LUT to limited-range bt709; no HDR/log normalization',
             'effect_review':'NOT_RUN','limits':['LUT order and creative suitability are caller decisions','unknown source color metadata may be caller-declared but is not verified','no automatic matching, white balance, skin protection or clipping repair','lossy H264 re-encode, not pixel-lossless']}
+    if strength is not None:
+        result['strength']={'value':strength,'derivation':'identity + strength * (lut - identity) on the source cube grid, rounded to 6 decimals',
+                            'applied_cube':{'path':str(directory/'selected.cube'),'sha256':sha256(directory/'selected.cube')}}
     write_json(directory/'color-lut-map.json',result);return result

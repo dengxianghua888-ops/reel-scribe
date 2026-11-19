@@ -7,6 +7,8 @@ chooses a style, or certifies that unsampled frames share these statistics.
 import hashlib
 import math
 
+from color_numerics import DISPLAY_GAMMA, LUMA_709, RGB_TO_XYZ, lab_from_rgb01, numpy as _numpy
+
 SCHEMA = 'color-profile/1'
 MAX_SAMPLES = 600
 MAX_SIDE = 512
@@ -26,22 +28,15 @@ SDR_PIXEL_FORMATS = {'yuv420p', 'yuv422p', 'yuv444p', 'yuvj420p', 'yuvj422p', 'y
 HDR_TRANSFERS = {'arib-std-b67', 'smpte2084'}
 WIDE_PRIMARIES = {'bt2020', 'smpte431', 'smpte432'}
 UNKNOWN = {None, 'unknown', 'unspecified'}
-# Linear BT.709/sRGB primaries to CIE XYZ (D65); white is the matrix row sum.
-RGB_TO_XYZ = ((0.4123908, 0.3575843, 0.1804808),
-              (0.2126390, 0.7151687, 0.0721923),
-              (0.0193308, 0.1191948, 0.9505322))
-LUMA_709 = (0.2126, 0.7152, 0.0722)
+PERCENTILES = (1, 5, 50, 95, 99)
+# Y' * 255 * 10000 is an exact integer for 8-bit codes, so pooled luma
+# percentiles come from an exact histogram rather than from retained pixels.
+LUMA_KEY = (2126, 7152, 722)
+LUMA_KEY_MAX = 255 * 10000
+CHROMA_BIN = 1.0 / 1024
+CHROMA_BINS = 192 * 1024  # BT.709 gamut chroma stays below ~134
 INTERPRETATION = ("BT.709 Y'CbCr decoded by FFmpeg swscale (area downscale) to full-range 8-bit R'G'B'; "
                   "BT.1886 display EOTF with gamma 2.4 (Lw=1, Lb=0) to linear light; BT.709 primaries to CIE XYZ D65; CIELAB")
-
-
-def _numpy():
-    from editing_runtime import ContractError
-    try:
-        import numpy as np
-    except ImportError as exc:
-        raise ContractError('DEPENDENCY_UNAVAILABLE: numpy; run with the declared analysis environment') from exc
-    return np
 
 
 def _r(value, digits=6):
@@ -51,15 +46,7 @@ def _r(value, digits=6):
 def lab_from_rgb8(rgb):
     """rgb: (N,3) uint8 array of display-referred BT.709 code values."""
     np = _numpy()
-    v = rgb.astype(np.float64) / 255.0
-    linear = v ** 2.4
-    xyz = linear @ np.array(RGB_TO_XYZ).T
-    white = np.array(RGB_TO_XYZ).sum(axis=1)
-    t = xyz / white
-    delta = 6.0 / 29.0
-    f = np.where(t > delta ** 3, np.cbrt(t), t / (3 * delta ** 2) + 4.0 / 29.0)
-    lab = np.stack([116.0 * f[:, 1] - 16.0, 500.0 * (f[:, 0] - f[:, 1]), 200.0 * (f[:, 1] - f[:, 2])], axis=1)
-    return lab, linear
+    return lab_from_rgb01(rgb.astype(np.float64) / 255.0)
 
 
 def rgb8_hex_from_lab(lab):
@@ -71,57 +58,143 @@ def rgb8_hex_from_lab(lab):
     t = np.where(f > delta, f ** 3, 3 * delta ** 2 * (f - 4.0 / 29.0))
     xyz = t * np.array(RGB_TO_XYZ).sum(axis=1)
     linear = np.linalg.solve(np.array(RGB_TO_XYZ), xyz)
-    code = np.round(np.clip(linear, 0.0, 1.0) ** (1 / 2.4) * 255).astype(int)
+    code = np.round(np.clip(linear, 0.0, 1.0) ** (1 / DISPLAY_GAMMA) * 255).astype(int)
     return '#%02X%02X%02X' % tuple(int(x) for x in code)
 
 
-def frame_stats(rgb, *, full=True):
+def frame_stats(rgb, lab, chroma):
+    """Statistics of one sample's pixels (bounded by analysis_size)."""
     np = _numpy()
-    lab, linear = lab_from_rgb8(rgb)
     v = rgb.astype(np.float64) / 255.0
     luma = v @ np.array(LUMA_709)
-    chroma = np.hypot(lab[:, 1], lab[:, 2])
-    p = np.percentile(luma, [1, 5, 50, 95, 99])
+    p = np.percentile(luma, PERCENTILES)
     rgbf = rgb.astype(np.float64)
     rg = rgbf[:, 0] - rgbf[:, 1]
     yb = 0.5 * (rgbf[:, 0] + rgbf[:, 1]) - rgbf[:, 2]
     colorfulness = math.sqrt(rg.std() ** 2 + yb.std() ** 2) + 0.3 * math.sqrt(rg.mean() ** 2 + yb.mean() ** 2)
-    stats = {
+    return {
         'pixels': int(len(rgb)),
-        'luma': {'mean': _r(luma.mean()), 'p01': _r(p[0]), 'p05': _r(p[1]), 'p50': _r(p[2]),
-                 'p95': _r(p[3]), 'p99': _r(p[4])},
+        'luma': {'mean': _r(luma.mean()), **{'p%02d' % q: _r(x) for q, x in zip(PERCENTILES, p)}},
         'clipping': {'highlight_channel_ratio': _r((rgb >= HIGHLIGHT_CODE).any(axis=1).mean()),
                      'shadow_crush_ratio': _r((rgb <= SHADOW_CODE).all(axis=1).mean())},
         'lab_mean': {'L': _r(lab[:, 0].mean()), 'a': _r(lab[:, 1].mean()), 'b': _r(lab[:, 2].mean())},
         'chroma': {'mean': _r(chroma.mean()), 'p50': _r(np.percentile(chroma, 50)), 'p95': _r(np.percentile(chroma, 95))},
         'colorfulness_hasler_susstrunk': _r(colorfulness),
     }
-    if not full:
-        return stats, lab
-    neutral = (chroma < NEUTRAL_CHROMA_MAX) & (lab[:, 0] >= NEUTRAL_L_RANGE[0]) & (lab[:, 0] <= NEUTRAL_L_RANGE[1])
-    means = linear.mean(axis=0)
-    hue = np.degrees(np.arctan2(lab[:, 2], lab[:, 1])) % 360.0
-    chromatic = chroma >= CHROMATIC_MIN
-    bins = np.bincount((hue[chromatic] // (360.0 / HUE_BINS)).astype(int) % HUE_BINS, minlength=HUE_BINS)
-    total = int(chromatic.sum())
-    stats.update({
-        'neutral_estimate': {'pixel_share': _r(neutral.mean()),
-                             'a_mean': _r(lab[neutral, 1].mean()) if neutral.any() else None,
-                             'b_mean': _r(lab[neutral, 2].mean()) if neutral.any() else None,
-                             'reading': 'positive b* = yellow/warm, negative = blue/cool; positive a* = magenta, negative = green'},
-        'gray_world_linear_ratio': {'r_over_g': _r(means[0] / means[1]) if means[1] > 0 else None,
-                                    'b_over_g': _r(means[2] / means[1]) if means[1] > 0 else None},
-        'hue_histogram': {'bin_degrees': 360 // HUE_BINS, 'chromatic_min_chroma': CHROMATIC_MIN,
-                          'chromatic_share': _r(total / len(rgb)),
-                          'shares': [_r(c / total) if total else 0.0 for c in bins.tolist()]},
-    })
-    return stats, lab
 
 
-def palette(lab, k):
-    """Deterministic maximin-initialized k-means on a fixed stride subsample."""
+def histogram_percentiles(counts, value_of_bin, percentiles):
+    """np.percentile(method='linear') over the multiset a histogram describes."""
     np = _numpy()
-    points = lab if len(lab) <= PALETTE_POINTS else lab[np.linspace(0, len(lab) - 1, PALETTE_POINTS).round().astype(int)]
+    cumulative = np.cumsum(counts)
+    n = int(cumulative[-1])
+    values = []
+    for q in percentiles:
+        position = q / 100.0 * (n - 1)
+        low = math.floor(position)
+        a = value_of_bin(int(np.searchsorted(cumulative, low, side='right')))
+        b = value_of_bin(int(np.searchsorted(cumulative, min(low + 1, n - 1), side='right')))
+        values.append(a + (b - a) * (position - low))
+    return values
+
+
+def _variance(total, squares, n):
+    return (n * squares - total * total) / (n * n)  # exact integers until this division
+
+
+class PooledStats:
+    """Pooled statistics over all sampled pixels with memory independent of sample count.
+
+    Sums are exact integers where the quantity is integral; luma percentiles use
+    an exact integer-key histogram; chroma percentiles use CHROMA_BIN-wide bins;
+    the palette keeps the same fixed-stride subsample of the pooled pixel order.
+    """
+
+    def __init__(self, total_pixels):
+        np = self.np = _numpy()
+        self.n = 0
+        self.luma_hist = np.zeros(LUMA_KEY_MAX + 1, dtype=np.int64)
+        self.chroma_hist = np.zeros(CHROMA_BINS, dtype=np.int64)
+        self.luma_key_sum = self.highlight = self.shadow = 0
+        self.rg = [0, 0]
+        self.yb2 = [0, 0]  # 2 * yb = R + G - 2B keeps the sums integral
+        self.lab_sum, self.linear_sum, self.neutral_ab = np.zeros(3), np.zeros(3), np.zeros(2)
+        self.chroma_sum = 0.0
+        self.neutral = self.chromatic = 0
+        self.hue = np.zeros(HUE_BINS, dtype=np.int64)
+        self.palette_index = (None if total_pixels <= PALETTE_POINTS else
+                              np.linspace(0, total_pixels - 1, PALETTE_POINTS).round().astype(np.int64))
+        self.palette_parts = []
+
+    def add(self, rgb, lab, linear, chroma):
+        from editing_runtime import require
+        np = self.np
+        r, g, b = (rgb[:, i].astype(np.int64) for i in range(3))
+        key = LUMA_KEY[0] * r + LUMA_KEY[1] * g + LUMA_KEY[2] * b
+        self.luma_hist += np.bincount(key, minlength=LUMA_KEY_MAX + 1)
+        self.luma_key_sum += int(key.sum())
+        bins = np.floor(chroma / CHROMA_BIN).astype(np.int64)
+        require(int(bins.max()) < CHROMA_BINS, 'COLOR_PROFILE_CHROMA_OUT_OF_RANGE')
+        self.chroma_hist += np.bincount(bins, minlength=CHROMA_BINS)
+        self.chroma_sum += float(chroma.sum())
+        self.highlight += int((rgb >= HIGHLIGHT_CODE).any(axis=1).sum())
+        self.shadow += int((rgb <= SHADOW_CODE).all(axis=1).sum())
+        for acc, term in ((self.rg, r - g), (self.yb2, r + g - 2 * b)):
+            acc[0] += int(term.sum())
+            acc[1] += int((term * term).sum())
+        self.lab_sum += lab.sum(axis=0)
+        self.linear_sum += linear.sum(axis=0)
+        neutral = (chroma < NEUTRAL_CHROMA_MAX) & (lab[:, 0] >= NEUTRAL_L_RANGE[0]) & (lab[:, 0] <= NEUTRAL_L_RANGE[1])
+        self.neutral += int(neutral.sum())
+        self.neutral_ab += lab[neutral, 1:].sum(axis=0)
+        chromatic = chroma >= CHROMATIC_MIN
+        hue = np.degrees(np.arctan2(lab[chromatic, 2], lab[chromatic, 1])) % 360.0
+        self.hue += np.bincount((hue // (360.0 / HUE_BINS)).astype(int) % HUE_BINS, minlength=HUE_BINS)
+        self.chromatic += int(chromatic.sum())
+        if self.palette_index is None:
+            self.palette_parts.append(lab.copy())
+        else:
+            local = self.palette_index[(self.palette_index >= self.n) & (self.palette_index < self.n + len(lab))] - self.n
+            self.palette_parts.append(lab[local])
+        self.n += len(rgb)
+
+    def palette_points(self):
+        return self.np.concatenate(self.palette_parts)
+
+    def result(self):
+        n = self.n
+        luma = histogram_percentiles(self.luma_hist, lambda i: i / LUMA_KEY_MAX, PERCENTILES)
+        chroma = histogram_percentiles(self.chroma_hist, lambda i: (i + 0.5) * CHROMA_BIN, (50, 95))
+        lab_mean = self.lab_sum / n
+        means = self.linear_sum / n
+        colorfulness = (math.sqrt(_variance(*self.rg, n) + _variance(*self.yb2, n) / 4)
+                        + 0.3 * math.hypot(self.rg[0] / n, self.yb2[0] / (2 * n)))
+        return {
+            'pixels': n,
+            'luma': {'mean': _r(self.luma_key_sum / LUMA_KEY_MAX / n),
+                     **{'p%02d' % q: _r(x) for q, x in zip(PERCENTILES, luma)}},
+            'clipping': {'highlight_channel_ratio': _r(self.highlight / n), 'shadow_crush_ratio': _r(self.shadow / n)},
+            'lab_mean': {'L': _r(lab_mean[0]), 'a': _r(lab_mean[1]), 'b': _r(lab_mean[2])},
+            'chroma': {'mean': _r(self.chroma_sum / n), 'p50': _r(chroma[0]), 'p95': _r(chroma[1])},
+            'colorfulness_hasler_susstrunk': _r(colorfulness),
+            'neutral_estimate': {'pixel_share': _r(self.neutral / n),
+                                 'a_mean': _r(self.neutral_ab[0] / self.neutral) if self.neutral else None,
+                                 'b_mean': _r(self.neutral_ab[1] / self.neutral) if self.neutral else None,
+                                 'reading': 'positive b* = yellow/warm, negative = blue/cool; positive a* = magenta, negative = green'},
+            'gray_world_linear_ratio': {'r_over_g': _r(means[0] / means[1]) if means[1] > 0 else None,
+                                        'b_over_g': _r(means[2] / means[1]) if means[1] > 0 else None},
+            'hue_histogram': {'bin_degrees': 360 // HUE_BINS, 'chromatic_min_chroma': CHROMATIC_MIN,
+                              'chromatic_share': _r(self.chromatic / n),
+                              'shares': [_r(c / self.chromatic) if self.chromatic else 0.0 for c in self.hue.tolist()]},
+            'precision': {'pooling': 'streamed per sample; memory does not grow with samples x pixels',
+                          'luma_percentiles': "exact: histogram of the integer key 2126R'+7152G'+722B'",
+                          'chroma_percentiles': 'histogram bin centers; bin width %s chroma units' % CHROMA_BIN},
+        }
+
+
+def palette(points, k):
+    """Deterministic maximin-initialized k-means on the pooled fixed-stride subsample."""
+    np = _numpy()
     centers = [points[np.argmin(((points - points.mean(axis=0)) ** 2).sum(axis=1))]]
     while len(centers) < k:
         distance = np.min([((points - c) ** 2).sum(axis=1) for c in centers], axis=0)
@@ -146,14 +219,15 @@ def palette(lab, k):
             'max_iterations': PALETTE_ITERATIONS, 'colors': rows}
 
 
-def region_stats(rgb, lab):
+def region_stats(count, rgb_sum, lab_sum):
+    """Mean R'G'B' and mean CIELAB of a caller-declared region pooled over samples."""
     np = _numpy()
-    v = rgb.astype(np.float64).mean(axis=0) / 255.0
+    v = np.asarray(rgb_sum, dtype=np.float64) / count / 255.0
     y = float(v @ np.array(LUMA_709))
     cb, cr = (v[2] - y) / 1.8556, (v[0] - y) / 1.5748
     angle = math.degrees(math.atan2(cr, cb)) % 360.0
-    mean = lab.mean(axis=0)
-    return {'pixels': int(len(rgb)), 'lab_mean': {'L': _r(mean[0]), 'a': _r(mean[1]), 'b': _r(mean[2])},
+    mean = lab_sum / count
+    return {'pixels': int(count), 'lab_mean': {'L': _r(mean[0]), 'a': _r(mean[1]), 'b': _r(mean[2])},
             'chroma_of_mean': _r(math.hypot(mean[1], mean[2])),
             'hue_of_mean_degrees': _r(math.degrees(math.atan2(mean[2], mean[1])) % 360.0),
             'vectorscope': {'cb': _r(cb), 'cr': _r(cr), 'angle_degrees': _r(angle),
@@ -247,7 +321,9 @@ def scan(request, directory, tools):
     vf = f'scale={width}:{height}:flags=area:in_color_matrix=bt709:in_range={in_range}:out_range=pc,format=rgb24'
     folder = directory / 'samples'
     folder.mkdir()
-    samples, pooled, region_pixels, means = [], [], {rid: [] for rid in regions}, []
+    samples, means = [], []
+    pooled = PooledStats(len(times) * width * height)
+    region_sums = {rid: [0, np.zeros(3, dtype=np.int64), np.zeros(3)] for rid in regions}
     for index, t in enumerate(times):
         raw = folder / f'{index:04d}.rgb'
         tools.ff(['-ss', f'{t:.6f}', '-i', asset['path'], '-map', '0:v:0', '-frames:v', '1', '-vf', vf,
@@ -258,27 +334,29 @@ def scan(request, directory, tools):
         require(len(payload) == width * height * 3, 'COLOR_PROFILE_FRAME_SIZE_INVALID: %.6f' % t)
         grid = np.frombuffer(payload, dtype=np.uint8).reshape(height, width, 3)
         flat = grid.reshape(-1, 3)
-        stats, lab = frame_stats(flat, full=False)
+        lab, linear = lab_from_rgb8(flat)
+        chroma = np.hypot(lab[:, 1], lab[:, 2])
+        stats = frame_stats(flat, lab, chroma)
         samples.append({'requested_time': _r(t), 'rgb24_sha256': hashlib.sha256(payload).hexdigest(), **stats})
-        pooled.append(flat)
+        pooled.add(flat, lab, linear, chroma)
         means.append([stats['lab_mean'][key] for key in 'Lab'])
+        lab_grid = lab.reshape(height, width, 3)
         for rid, spec in regions.items():
             c0, r0, c1, r1 = spec['pixels']
-            region_pixels[rid].append(grid[r0:r1, c0:c1].reshape(-1, 3))
+            acc = region_sums[rid]
+            acc[0] += (r1 - r0) * (c1 - c0)
+            acc[1] += grid[r0:r1, c0:c1].reshape(-1, 3).sum(axis=0, dtype=np.int64)
+            acc[2] += lab_grid[r0:r1, c0:c1].reshape(-1, 3).sum(axis=0)
     folder.rmdir()
-    allpix = np.concatenate(pooled)
-    aggregate, lab = frame_stats(allpix, full=True)
+    aggregate = pooled.result()
     temporal = {'basis': 'per-sample mean CIELAB; sample-level drift, not per-frame flicker', 'samples': len(means)}
     if len(means) >= 2:
         array = np.array(means)
         steps = np.sqrt(((array[1:] - array[:-1]) ** 2).sum(axis=1))
         temporal.update({'max_consecutive_delta_e76': _r(steps.max()), 'mean_consecutive_delta_e76': _r(steps.mean()),
                          'std': {'L': _r(array[:, 0].std()), 'a': _r(array[:, 1].std()), 'b': _r(array[:, 2].std())}})
-    region_rows = {}
-    for rid, chunks in region_pixels.items():
-        pixels = np.concatenate(chunks)
-        region_lab, _ = lab_from_rgb8(pixels)
-        region_rows[rid] = {'box': regions[rid]['box'], 'declared_by': 'caller', **region_stats(pixels, region_lab)}
+    region_rows = {rid: {'box': regions[rid]['box'], 'declared_by': 'caller', **region_stats(*acc)}
+                   for rid, acc in region_sums.items()}
     source(request['source'])  # Bytes must still match after all decoding.
     result = {'schema': SCHEMA, 'source': asset, 'stream': {'index': videos[0].get('index'), 'selector': 'v:0', **stream},
               'input_color': request['input_color'], 'interpretation': INTERPRETATION,
@@ -290,7 +368,7 @@ def scan(request, directory, tools):
               'thresholds': {'highlight_channel_code': HIGHLIGHT_CODE, 'shadow_code': SHADOW_CODE,
                              'chromatic_min_chroma': CHROMATIC_MIN, 'neutral_max_chroma': NEUTRAL_CHROMA_MAX,
                              'neutral_l_range': list(NEUTRAL_L_RANGE), 'skin_line_reference_degrees': SKIN_LINE_DEGREES},
-              'aggregate': aggregate, 'palette': palette(lab, k), 'temporal': temporal, 'regions': region_rows,
+              'aggregate': aggregate, 'palette': palette(pooled.palette_points(), k), 'temporal': temporal, 'regions': region_rows,
               'samples': samples, 'aesthetic_judgement': 'NOT_PROVIDED', 'skin_detection': 'NOT_PERFORMED',
               'limits': ['Statistics describe sampled, downscaled frames under the recorded interpretation only.',
                          'Display-referred BT.1886 gamma 2.4 is an explicit assumption, not a measured display.',

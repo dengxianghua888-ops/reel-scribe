@@ -20,6 +20,12 @@
   - `install_doctor` 记录色彩滤镜与 HDR 转换路线的可用性。
   - 新增合成色彩测试素材生成器（tests/runtime/color_media.py）。
   - 影视解说拒绝 HLG/PQ/BT.2020 源（`SOURCE_HDR_INPUT_UNSUPPORTED`）。原先会静默输出偏暗、发灰的 8 位视频。
+- 色彩层 C1：
+  - 新增原子 `color-grade-compile`，把曝光、白平衡增益、ASC CDL、外部 LUT（含 mix）和整体强度编译为 cube，按可表示性导出 `.cc` 和 CLF，并报告 CIEDE2000 编译误差。
+  - `color-lut-apply` 新增可选 `strength`，并改为解析与套用同一份已验证的 LUT 字节。
+  - 共享数值模块 `color_numerics`。
+  - `color-profile-scan` 合并统计改为按样本流式累加，峰值内存与样本数无关（原实现在 600 帧 × 512² 上限下需数 GB）。
+  - 色彩测试素材改用 `setparams` 在帧上写色彩标签；CI 上的 FFmpeg 没有写入输出端 `-color_trc`/`-color_primaries` 设置的标签，导致测试失败。
 - 兼容性说明：
   - `chat_json` 请求改用 `:schema-json` 意图键，已有工作区重算模型阶段时不会重放旧结果，需要重新 `--allow-remote`；旧键下 UNKNOWN 的发送在核对前会阻止替代请求。
   - 已启用但不存在的故事上下文文件现在直接报错。

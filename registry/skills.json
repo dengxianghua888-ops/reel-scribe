@@ -448,6 +448,13 @@
       ]
     },
     {
+      "id": "color-grade-compile",
+      "layer": "atomic",
+      "entry": "atomic/color-grade-compile/SKILL.md",
+      "description": "把明确的曝光、白平衡增益、ASC CDL、外部LUT与强度编译为3D cube并按可表示性导出.cc和CLF，报告编译误差；不选风格、不测量或修改媒体。",
+      "status": "local-synthetic-tested"
+    },
+    {
       "id": "color-lut-apply",
       "layer": "atomic",
       "entry": "atomic/color-lut-apply/SKILL.md",
