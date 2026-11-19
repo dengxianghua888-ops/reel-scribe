@@ -1239,6 +1239,9 @@ def execute(request, directory, tools):
     if op == 'color-lut-apply':
         from color_ops import apply_lut
         return apply_lut(request,directory,tools)
+    if op == 'color-profile-scan':
+        from color_profile_ops import scan
+        return scan(request, directory, tools)
     if op == 'cue-alignment-check':
         from cue_ops import alignment_check
         return alignment_check(request,directory,tools)

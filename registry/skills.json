@@ -455,6 +455,13 @@
       "status": "local-synthetic-tested"
     },
     {
+      "id": "color-profile-scan",
+      "layer": "atomic",
+      "entry": "atomic/color-profile-scan/SKILL.md",
+      "description": "按明确区间与显式采样测量已声明BT.709 SDR视频的影调、剪切、CIELAB、色度、色相分布、调色板与样本漂移；只返回数值，不评价好看、不识别肤色、不推荐风格。",
+      "status": "local-synthetic-tested"
+    },
+    {
       "id": "raven-reference-style",
       "layer": "complex",
       "entry": "workflows/raven-reference-style/SKILL.md",
