@@ -2,6 +2,10 @@
 from fractions import Fraction
 import json,math
 
+# Source pixel format -> (bit depth, RGB working format for lut3d, output pixel format).
+PIXEL_FORMATS={**{f:(8,'gbrp','yuv420p') for f in ['yuv420p','yuv422p','yuv444p','yuvj420p','yuvj422p','yuvj444p']},
+               **{f:(10,'gbrp10le','yuv420p10le') for f in ['yuv420p10le','yuv422p10le','yuv444p10le']}}
+
 def validate_cube(path):
     from editing_runtime import require
     from color_numerics import parse_cube_text, MAX_CUBE_BYTES
@@ -48,7 +52,7 @@ def apply_lut(request,directory,tools):
     interpolation=request['interpolation'];require(interpolation in ['trilinear','tetrahedral'],'LUT_INTERPOLATION_UNSUPPORTED')
     media=tools.probe(asset['path'])
     video=next((s for s in media['streams'] if s['codec_type']=='video'),None);require(video is not None,'VIDEO_STREAM_REQUIRED')
-    require(video.get('pix_fmt') in ['yuv420p','yuv422p','yuv444p','yuvj420p','yuvj422p','yuvj444p'],'COLOR_PIXEL_FORMAT_UNSUPPORTED')
+    require(video.get('pix_fmt') in PIXEL_FORMATS,'COLOR_PIXEL_FORMAT_UNSUPPORTED');bits,working,out_fmt=PIXEL_FORMATS[video['pix_fmt']]
     require(video['width']%2==0 and video['height']%2==0,'EVEN_DIMENSION_REQUIRED')
     rotations=[video.get('tags',{}).get('rotate',0)]+[s.get('rotation',0) for s in video.get('side_data_list',[])]
     require(all(float(x)%360==0 for x in rotations),'ROTATED_COLOR_SOURCE_UNSUPPORTED')
@@ -71,13 +75,14 @@ def apply_lut(request,directory,tools):
         identity=identity_table(cube['size']);table=table_from_rows(lut_rows,cube['size'])
         (directory/'selected.cube').write_text(cube_text(identity+strength*(table-identity),'derived strength %.6f'%strength),encoding='utf-8')
     rng='tv' if color['range']=='limited' else 'pc'
-    filters=f'scale=in_color_matrix=bt709:in_range={rng}:out_range=pc,format=gbrp,lut3d=file=selected.cube:interp={interpolation},scale=out_color_matrix=bt709:in_range=pc:out_range=tv,format=yuv420p'
+    filters=f'scale=in_color_matrix=bt709:in_range={rng}:out_range=pc,format={working},lut3d=file=selected.cube:interp={interpolation},scale=out_color_matrix=bt709:in_range=pc:out_range=tv,format={out_fmt}'
     output=directory/'graded.mp4'
     tools.ff(['-i',asset['path'],'-vf',filters,'-map','0:v:0','-map','0:a?','-r',str(fps),'-fps_mode','cfr',
               '-c:v','libx264','-crf','18','-preset','medium','-c:a','copy','-colorspace','bt709','-color_trc','bt709','-color_primaries','bt709','-color_range','tv','-movflags','+faststart','graded.mp4'],cwd=directory)
     after=tools.probe(output);av=next(s for s in after['streams'] if s['codec_type']=='video');out_times=frame_clock(output,tools)
     require(len(out_times)==len(times) and all(abs(a-b)<=.00001 for a,b in zip(times,out_times)),'COLOR_FRAME_CLOCK_CHANGED')
     require(av['width']==video['width'] and av['height']==video['height'],'COLOR_GEOMETRY_CHANGED')
+    require(av.get('pix_fmt')==out_fmt,'COLOR_OUTPUT_PIXEL_FORMAT_CHANGED')
     requested_output=expected|{'color_range':'tv'}
     observed_output={key:av.get(key) for key in requested_output}
     for key,value in requested_output.items():
@@ -97,7 +102,8 @@ def apply_lut(request,directory,tools):
     # Requested output tags and actual ffprobe observations are different evidence.
     # Missing transfer/primaries fields stay unknown, even after explicitly setting tags.
     result={'schema':'color-lut-apply/1','source':asset,'lut':lut,'cube':cube,'input_color':color,'interpolation':interpolation,
-            'video':{'path':str(output),'sha256':sha256(output)},'frames':len(times),'fps':str(fps),'video_duration':float(Fraction(len(times),1)/fps),
+            'video':{'path':str(output),'sha256':sha256(output),'pix_fmt':out_fmt},
+            'bit_depth':{'source':bits,'lut_working_format':working,'output':bits,'basis':'source pixel format; no 8-bit intermediate for 10-bit sources'},'frames':len(times),'fps':str(fps),'video_duration':float(Fraction(len(times),1)/fps),
             'time_mapping':'output frame i is source frame i; no trim, reordering or speed change','output_color':{'requested':requested_output,'observed':observed_output,'unobserved_fields':[k for k,v in observed_output.items() if v in unknown]},
             'audio':'all source audio streams copied when present; coded payload hash and format checked; listening not performed','audio_checks':audio_checks,
             'source_interpretation':'declared bt709 SDR YUV range to nonlinear RGB LUT to limited-range bt709; no HDR/log normalization',

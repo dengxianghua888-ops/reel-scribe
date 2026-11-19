@@ -25,6 +25,10 @@
   - `color-lut-apply` 新增可选 `strength`，并改为解析与套用同一份已验证的 LUT 字节。
   - 共享数值模块 `color_numerics`。
   - `color-profile-scan` 合并统计改为按样本流式累加，峰值内存与样本数无关（原实现在 600 帧 × 512² 上限下需数 GB）。
+  - `color-grade-compile` 新增曲线（PCHIP，总曲线先于通道）和 HSL 八色相带（在 CIELAB 中调整，带低色度保护）；含这两种操作时 CLF 导出烘焙 LUT3D。
+  - `color-lut-apply` 支持 10 位源，全程 10 位处理和输出；结果新增 `bit_depth`，`video` 新增 `pix_fmt`。
+  - `still-image-render` 的色彩标签同时写在帧上，不再只依赖输出端选项。
+  - 新增色彩层真实素材操作记录（docs/color-real-run-20261119.md）。
   - 色彩测试素材改用 `setparams` 在帧上写色彩标签；CI 上的 FFmpeg 没有写入输出端 `-color_trc`/`-color_primaries` 设置的标签，导致测试失败。
 - 兼容性说明：
   - `chat_json` 请求改用 `:schema-json` 意图键，已有工作区重算模型阶段时不会重放旧结果，需要重新 `--allow-remote`；旧键下 UNKNOWN 的发送在核对前会阻止替代请求。

@@ -1,8 +1,9 @@
 """Compile explicit color-grade parameters to a 3D LUT and exchange files.
 
 Every operation is defined on display-referred BT.709 R'G'B' code values in
-[0, 1]; exposure and white balance act in BT.1886 gamma-2.4 linear light. Each
-operation clamps to [0, 1]. This module chooses no look, measures no footage
+[0, 1]; exposure and white balance act in BT.1886 gamma-2.4 linear light;
+curves act on code values; hsl selects hue bands on the RGB hexcone and edits
+CIELAB L*, C*ab and h_ab. Each operation clamps to [0, 1]. This module chooses no look, measures no footage
 and does not apply anything to media; color-lut-apply consumes the cube.
 """
 import json
@@ -16,9 +17,18 @@ MAX_OPS = 16
 ACCURACY_POINTS = 4096
 # Additive recurrence (Kronecker) offsets: deterministic and never aligned to 17/33/65 grids.
 ACCURACY_STEPS = (0.6180339887498949, 0.4142135623730951, 0.7320508075688772)
+CURVE_CHANNELS = ('master', 'red', 'green', 'blue')
+MAX_CURVE_POINTS = 32
+# Band centers on the RGB hexcone hue circle (degrees), as editors name them.
+HSL_BANDS = (('red', 0.0), ('orange', 30.0), ('yellow', 60.0), ('green', 120.0),
+             ('aqua', 180.0), ('blue', 240.0), ('purple', 270.0), ('magenta', 300.0))
+HSL_LIMITS = {'hue': (-30.0, 30.0), 'saturation': (0.0, 2.0), 'lightness': (-30.0, 30.0)}
+HSL_NEUTRAL_CHROMA = (2.0, 12.0)  # C*ab ramp: no edit below the first value, full edit above the second
 CHAIN_MODEL = ("Operations apply in listed order to display-referred BT.709 R'G'B' in [0,1]; exposure and "
-               "white_balance use BT.1886 gamma 2.4 linear light; every operation clamps to [0,1]; "
-               "strength blends input and chain output in code values.")
+               "white_balance use BT.1886 gamma 2.4 linear light; curves map code values with monotone cubic "
+               "(PCHIP) interpolation, master before per-channel; hsl weights hexcone-hue bands with cos^2 "
+               "cross-fades that sum to 1, ramps the edit in by CIELAB chroma, then rotates h_ab, scales C*ab "
+               "and shifts L*; every operation clamps to [0,1]; strength blends input and chain output in code values.")
 
 
 def _triple(value, name, low, high):
@@ -27,6 +37,40 @@ def _triple(value, name, low, high):
     values = [number(x, name) for x in value]
     require(all(low <= x <= high for x in values), 'COLOR_GRADE_VALUE_OUT_OF_RANGE: ' + name)
     return values
+
+
+def _curve(points, name):
+    from editing_runtime import require, number
+    require(isinstance(points, list) and 2 <= len(points) <= MAX_CURVE_POINTS, 'COLOR_GRADE_CURVE_POINTS_INVALID: ' + name)
+    pairs = []
+    for point in points:
+        require(isinstance(point, list) and len(point) == 2, 'COLOR_GRADE_CURVE_POINT_INVALID: ' + name)
+        x, y = (number(v, name) for v in point)
+        require(0 <= x <= 1 and 0 <= y <= 1, 'COLOR_GRADE_VALUE_OUT_OF_RANGE: ' + name)
+        pairs.append([x, y])
+    require(all(a[0] < b[0] for a, b in zip(pairs, pairs[1:])), 'COLOR_GRADE_CURVE_X_NOT_INCREASING: ' + name)
+    require(pairs[0][0] == 0 and pairs[-1][0] == 1, 'COLOR_GRADE_CURVE_DOMAIN_INCOMPLETE: ' + name)
+    return pairs
+
+
+def _hsl_bands(bands):
+    from editing_runtime import exact_keys, require, number
+    names = [name for name, _ in HSL_BANDS]
+    require(isinstance(bands, dict) and bands and set(bands) <= set(names), 'COLOR_GRADE_HSL_BANDS_INVALID')
+    result = {}
+    for name in names:
+        if name not in bands:
+            continue
+        band = bands[name]
+        exact_keys(band, list(HSL_LIMITS), [])
+        require(band, 'COLOR_GRADE_HSL_BAND_EMPTY: ' + name)
+        values = {'hue': 0.0, 'saturation': 1.0, 'lightness': 0.0}
+        for key, (low, high) in HSL_LIMITS.items():
+            if key in band:
+                values[key] = number(band[key], key)
+                require(low <= values[key] <= high, 'COLOR_GRADE_VALUE_OUT_OF_RANGE: %s.%s' % (name, key))
+        result[name] = values
+    return result
 
 
 def normalize(grade):
@@ -42,7 +86,7 @@ def normalize(grade):
     require(0 <= strength <= 1, 'COLOR_GRADE_STRENGTH_OUT_OF_RANGE')
     ops, luts = [], {}
     for index, op in enumerate(grade['ops']):
-        require(isinstance(op, dict) and op.get('type') in ('exposure', 'white_balance', 'cdl', 'lut'),
+        require(isinstance(op, dict) and op.get('type') in ('exposure', 'white_balance', 'cdl', 'lut', 'curves', 'hsl'),
                 'COLOR_GRADE_OP_UNSUPPORTED: %d' % index)
         kind = op['type']
         if kind == 'exposure':
@@ -63,6 +107,13 @@ def normalize(grade):
             ops.append({'type': kind, 'slope': _triple(op['slope'], 'slope', 0, 4),
                         'offset': _triple(op['offset'], 'offset', -1, 1),
                         'power': _triple(op['power'], 'power', 0.1, 4), 'saturation': saturation})
+        elif kind == 'curves':
+            exact_keys(op, ['type', *CURVE_CHANNELS], ['type'])
+            require(len(op) > 1, 'COLOR_GRADE_CURVE_REQUIRED')
+            ops.append({'type': kind, **{name: _curve(op[name], name) for name in CURVE_CHANNELS if name in op}})
+        elif kind == 'hsl':
+            exact_keys(op, ['type', 'bands'], ['type', 'bands'])
+            ops.append({'type': kind, 'bands': _hsl_bands(op['bands'])})
         else:
             exact_keys(op, ['type', 'source', 'interpolation', 'mix'], ['type', 'source', 'interpolation'])
             require(op['interpolation'] in ('tetrahedral', 'trilinear'), 'LUT_INTERPOLATION_UNSUPPORTED')
@@ -84,6 +135,53 @@ def _luminance_gains(gains):
     return [g / scale for g in gains]
 
 
+def _apply_curves(op, x):
+    from color_numerics import numpy, pchip
+    np = numpy()
+    out = x
+    if 'master' in op:
+        xs, ys = zip(*op['master'])
+        out = pchip(xs, ys, out)
+    for channel, name in enumerate(('red', 'green', 'blue')):
+        if name in op:
+            xs, ys = zip(*op[name])
+            out = out.copy()
+            out[:, channel] = pchip(xs, ys, out[:, channel])
+    return np.clip(out, 0.0, 1.0)
+
+
+def hsl_weights(hue):
+    """(N,) hexcone hue in degrees -> (N, 8) band weights; cos^2 cross-fades between adjacent centers."""
+    from color_numerics import numpy
+    np = numpy()
+    centers = np.array([c for _, c in HSL_BANDS] + [360.0])
+    index = np.clip(np.searchsorted(centers, hue, side='right') - 1, 0, len(HSL_BANDS) - 1)
+    t = (hue - centers[index]) / (centers[index + 1] - centers[index])
+    weights = np.zeros((len(hue), len(HSL_BANDS)))
+    rows = np.arange(len(hue))
+    weights[rows, index] = np.cos(np.pi * t / 2) ** 2
+    weights[rows, (index + 1) % len(HSL_BANDS)] += np.sin(np.pi * t / 2) ** 2
+    return weights
+
+
+def _apply_hsl(op, x):
+    from color_numerics import numpy, lab_from_rgb01, rgb01_from_lab, hexcone_hue
+    np = numpy()
+    adjust = np.array([[op['bands'].get(name, {}).get(key, default) for key, default in
+                        (('hue', 0.0), ('saturation', 1.0), ('lightness', 0.0))] for name, _ in HSL_BANDS])
+    lab, _ = lab_from_rgb01(x)
+    chroma = np.hypot(lab[:, 1], lab[:, 2])
+    low, high = HSL_NEUTRAL_CHROMA
+    ramp = np.clip((chroma - low) / (high - low), 0.0, 1.0)
+    ramp = ramp * ramp * (3 - 2 * ramp)  # smoothstep keeps near-neutral pixels continuous
+    per_pixel = hsl_weights(hexcone_hue(x)) @ adjust
+    hue = np.arctan2(lab[:, 2], lab[:, 1]) + np.radians(ramp * per_pixel[:, 0])
+    chroma = chroma * (1 + ramp * (per_pixel[:, 1] - 1))
+    lightness = np.clip(lab[:, 0] + ramp * per_pixel[:, 2], 0.0, 100.0)
+    edited = np.stack([lightness, chroma * np.cos(hue), chroma * np.sin(hue)], axis=1)
+    return np.clip(rgb01_from_lab(edited), 0.0, 1.0)
+
+
 def evaluate(spec, luts, rgb):
     """Analytic chain on (N,3) code values; the reference the LUT is checked against."""
     from color_numerics import numpy, DISPLAY_GAMMA, LUMA_709, interpolate
@@ -100,6 +198,10 @@ def evaluate(spec, luts, rgb):
             sop = np.clip(out * np.array(op['slope']) + np.array(op['offset']), 0.0, 1.0) ** np.array(op['power'])
             luma = (sop @ np.array(LUMA_709))[:, None]
             out = np.clip(luma + op['saturation'] * (sop - luma), 0.0, 1.0)
+        elif op['type'] == 'curves':
+            out = _apply_curves(op, out)
+        elif op['type'] == 'hsl':
+            out = _apply_hsl(op, out)
         else:
             mapped = interpolate(luts[index], out, op['interpolation'])
             out = np.clip(out + op['mix'] * (mapped - out), 0.0, 1.0)
@@ -156,7 +258,8 @@ def clf_text(spec, luts, table):
     """Parametric ProcessList when exactly representable, else the compiled cube baked as LUT3D."""
     from color_numerics import DISPLAY_GAMMA
     pad = '  '
-    parametric = spec['strength'] == 1 and all(op['type'] != 'lut' or op['mix'] == 1 for op in spec['ops'])
+    parametric = spec['strength'] == 1 and all(op['type'] in ('exposure', 'white_balance', 'cdl')
+                                               or (op['type'] == 'lut' and op['mix'] == 1) for op in spec['ops'])
     nodes = []
     if parametric:
         for index, op in enumerate(spec['ops']):
@@ -230,6 +333,9 @@ def compile_grade(request, directory, tools):
               'effect_review': 'NOT_RUN',
               'limits': ['Grades are defined on display-referred BT.709 SDR code values only; no HDR/log/wide gamut.',
                          'Clamping after each operation discards out-of-range values; it is not a soft roll-off.',
+                         'hsl bands are hexcone hue regions, not skin, sky or object detection; edits that leave '
+                         'the BT.709 gamut are clipped per channel, which can shift hue near the gamut boundary; near a '
+                         'clipped channel the gamma-2.4 toe is steep, so use lut_size 65 and read the accuracy report.',
                          'Exchange files describe this chain; host applications may interpolate or clamp differently.']}
     write_json(directory / 'color-grade.json', json.loads(json.dumps(result)))
     return result

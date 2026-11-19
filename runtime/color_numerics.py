@@ -36,6 +36,64 @@ def lab_from_rgb01(rgb):
     return lab, linear
 
 
+def rgb01_from_lab(lab):
+    """Inverse of lab_from_rgb01; linear values outside [0,1] are clipped (simple gamut clip)."""
+    np = numpy()
+    lab = np.atleast_2d(lab).astype(float)
+    delta = 6.0 / 29.0
+    fy = (lab[:, 0] + 16.0) / 116.0
+    f = np.stack([fy + lab[:, 1] / 500.0, fy, fy - lab[:, 2] / 200.0], axis=1)
+    t = np.where(f > delta, f ** 3, 3 * delta ** 2 * (f - 4.0 / 29.0))
+    matrix = np.array(RGB_TO_XYZ)
+    linear = (t * matrix.sum(axis=1)) @ np.linalg.inv(matrix).T
+    return np.clip(linear, 0.0, 1.0) ** (1.0 / DISPLAY_GAMMA)
+
+
+def pchip_slopes(x, y):
+    """Fritsch-Carlson monotone slopes (the PCHIP rule); no overshoot between nodes."""
+    np = numpy()
+    h, delta = np.diff(x), np.diff(y) / np.diff(x)
+    slopes = np.zeros(len(x))
+    if len(x) == 2:
+        return slopes + delta[0]
+    for k in range(1, len(x) - 1):
+        if delta[k - 1] * delta[k] > 0:
+            w1, w2 = 2 * h[k] + h[k - 1], h[k] + 2 * h[k - 1]
+            slopes[k] = (w1 + w2) / (w1 / delta[k - 1] + w2 / delta[k])
+    for end, d0, d1, h0, h1 in ((0, delta[0], delta[1], h[0], h[1]), (-1, delta[-1], delta[-2], h[-1], h[-2])):
+        s = ((2 * h0 + h1) * d0 - h0 * d1) / (h0 + h1)
+        if s * d0 <= 0:
+            s = 0.0
+        elif d0 * d1 <= 0 and abs(s) > abs(3 * d0):
+            s = 3 * d0
+        slopes[end] = s
+    return slopes
+
+
+def pchip(x, y, values):
+    """Evaluate the monotone piecewise cubic Hermite interpolant through (x, y)."""
+    np = numpy()
+    x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+    m = pchip_slopes(x, y)
+    v = np.clip(values, x[0], x[-1])
+    k = np.clip(np.searchsorted(x, v, side='right') - 1, 0, len(x) - 2)
+    h = x[k + 1] - x[k]
+    t = (v - x[k]) / h
+    h00, h10 = 2 * t ** 3 - 3 * t ** 2 + 1, t ** 3 - 2 * t ** 2 + t
+    h01, h11 = -2 * t ** 3 + 3 * t ** 2, t ** 3 - t ** 2
+    return h00 * y[k] + h10 * h * m[k] + h01 * y[k + 1] + h11 * h * m[k + 1]
+
+
+def hexcone_hue(rgb):
+    """HSV/HSL hexcone hue in degrees [0, 360) of (N,3) code values; 0 where the pixel is neutral."""
+    np = numpy()
+    r, g, b = rgb[:, 0], rgb[:, 1], rgb[:, 2]
+    high, low = rgb.max(axis=1), rgb.min(axis=1)
+    span = np.where(high > low, high - low, 1.0)
+    hue = np.where(high == r, ((g - b) / span) % 6.0, np.where(high == g, (b - r) / span + 2.0, (r - g) / span + 4.0))
+    return np.where(high > low, hue * 60.0 % 360.0, 0.0)
+
+
 def ciede2000(lab1, lab2):
     """Vectorized CIEDE2000 (Sharma, Wu and Dalal 2005), kL = kC = kH = 1."""
     np = numpy()
