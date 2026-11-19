@@ -7,7 +7,7 @@ chooses a style, or certifies that unsampled frames share these statistics.
 import hashlib
 import math
 
-from color_numerics import DISPLAY_GAMMA, LUMA_709, RGB_TO_XYZ, lab_from_rgb01, numpy as _numpy
+from color_numerics import LUMA_709, lab_from_rgb01, rgb01_from_lab, numpy as _numpy
 
 SCHEMA = 'color-profile/1'
 MAX_SAMPLES = 600
@@ -35,30 +35,30 @@ LUMA_KEY = (2126, 7152, 722)
 LUMA_KEY_MAX = 255 * 10000
 CHROMA_BIN = 1.0 / 1024
 CHROMA_BINS = 192 * 1024  # BT.709 gamut chroma stays below ~134
-INTERPRETATION = ("BT.709 Y'CbCr decoded by FFmpeg swscale (area downscale) to full-range 8-bit R'G'B'; "
-                  "BT.1886 display EOTF with gamma 2.4 (Lw=1, Lb=0) to linear light; BT.709 primaries to CIE XYZ D65; CIELAB")
+# Declared input space -> (display transfer, expected transfer tag, recorded interpretation).
+SPACES = {
+    'bt709-sdr': ('bt1886', 'bt709',
+                  "BT.709 Y'CbCr decoded by FFmpeg swscale (area downscale) to full-range 8-bit R'G'B'; "
+                  "BT.1886 display EOTF with gamma 2.4 (Lw=1, Lb=0) to linear light; BT.709 primaries to CIE XYZ D65; CIELAB"),
+    'srgb-sdr': ('srgb', 'iec61966-2-1',
+                 "BT.709-matrix Y'CbCr decoded by FFmpeg swscale (area downscale) to full-range 8-bit R'G'B'; "
+                 "IEC 61966-2-1 sRGB piecewise EOTF to linear light; BT.709/sRGB primaries to CIE XYZ D65; CIELAB"),
+}
 
 
 def _r(value, digits=6):
     return None if value is None else round(float(value), digits)
 
 
-def lab_from_rgb8(rgb):
-    """rgb: (N,3) uint8 array of display-referred BT.709 code values."""
+def lab_from_rgb8(rgb, transfer='bt1886'):
+    """rgb: (N,3) uint8 array of display-referred code values under the declared transfer."""
     np = _numpy()
-    return lab_from_rgb01(rgb.astype(np.float64) / 255.0)
+    return lab_from_rgb01(rgb.astype(np.float64) / 255.0, transfer)
 
 
-def rgb8_hex_from_lab(lab):
+def rgb8_hex_from_lab(lab, transfer='bt1886'):
     np = _numpy()
-    delta = 6.0 / 29.0
-    fy = (lab[0] + 16.0) / 116.0
-    fx, fz = fy + lab[1] / 500.0, fy - lab[2] / 200.0
-    f = np.array([fx, fy, fz])
-    t = np.where(f > delta, f ** 3, 3 * delta ** 2 * (f - 4.0 / 29.0))
-    xyz = t * np.array(RGB_TO_XYZ).sum(axis=1)
-    linear = np.linalg.solve(np.array(RGB_TO_XYZ), xyz)
-    code = np.round(np.clip(linear, 0.0, 1.0) ** (1 / DISPLAY_GAMMA) * 255).astype(int)
+    code = np.round(rgb01_from_lab(np.asarray(lab, dtype=float)[None, :], transfer)[0] * 255).astype(int)
     return '#%02X%02X%02X' % tuple(int(x) for x in code)
 
 
@@ -192,7 +192,7 @@ class PooledStats:
         }
 
 
-def palette(points, k):
+def palette(points, k, transfer='bt1886'):
     """Deterministic maximin-initialized k-means on the pooled fixed-stride subsample."""
     np = _numpy()
     centers = [points[np.argmin(((points - points.mean(axis=0)) ** 2).sum(axis=1))]]
@@ -212,7 +212,7 @@ def palette(points, k):
                 centers[index] = members.mean(axis=0)
     shares = np.bincount(assignment, minlength=k) / len(points)
     rows = [{'lab': {'L': _r(c[0], 3), 'a': _r(c[1], 3), 'b': _r(c[2], 3)}, 'share': _r(s),
-             'display_hex': rgb8_hex_from_lab(c)} for c, s in zip(centers, shares) if s > 0]
+             'display_hex': rgb8_hex_from_lab(c, transfer)} for c, s in zip(centers, shares) if s > 0]
     rows.sort(key=lambda row: -row['share'])
     return {'method': 'k-means in CIELAB; maximin initialization; fixed-stride subsample',
             'requested_colors': k, 'found_colors': len(rows), 'points': int(len(points)),
@@ -258,7 +258,7 @@ def _sample_times(spec, start, end, limit):
 def _validate_stream(video, input_color):
     from editing_runtime import exact_keys, require
     exact_keys(input_color, ['space', 'range', 'basis'], ['space', 'range', 'basis'])
-    require(input_color['space'] == 'bt709-sdr', 'COLOR_PROFILE_SPACE_UNSUPPORTED')
+    require(input_color['space'] in SPACES, 'COLOR_PROFILE_SPACE_UNSUPPORTED')
     require(input_color['range'] in ('limited', 'full'), 'COLOR_PROFILE_RANGE_REQUIRED')
     require(input_color['basis'] in ('verified-metadata', 'caller-declared'), 'COLOR_PROFILE_BASIS_REQUIRED')
     transfer, primaries = video.get('color_transfer'), video.get('color_primaries')
@@ -268,7 +268,7 @@ def _validate_stream(video, input_color):
     require(pix_fmt in SDR_PIXEL_FORMATS, 'COLOR_PROFILE_PIXEL_FORMAT_UNSUPPORTED: %s' % pix_fmt)
     if pix_fmt.startswith('yuvj'):
         require(input_color['range'] == 'full', 'COLOR_PROFILE_METADATA_CONFLICT: full-range pixel format')
-    expected = {'color_transfer': 'bt709', 'color_primaries': 'bt709', 'color_space': 'bt709',
+    expected = {'color_transfer': SPACES[input_color['space']][1], 'color_primaries': 'bt709', 'color_space': 'bt709',
                 'color_range': 'tv' if input_color['range'] == 'limited' else 'pc'}
     observed = {key: video.get(key) for key in expected}
     for key, value in expected.items():
@@ -306,6 +306,7 @@ def scan(request, directory, tools):
     videos = [s for s in media['streams'] if s.get('codec_type') == 'video']
     require(videos, 'VIDEO_STREAM_REQUIRED')
     stream = _validate_stream(videos[0], request['input_color'])
+    transfer = SPACES[request['input_color']['space']][0]
     start, end = span(request['start'], request['end'], media['duration'])
     limit = request['max_samples']
     require(type(limit) is int and 1 <= limit <= MAX_SAMPLES, 'COLOR_PROFILE_MAX_SAMPLES_INVALID')
@@ -334,7 +335,7 @@ def scan(request, directory, tools):
         require(len(payload) == width * height * 3, 'COLOR_PROFILE_FRAME_SIZE_INVALID: %.6f' % t)
         grid = np.frombuffer(payload, dtype=np.uint8).reshape(height, width, 3)
         flat = grid.reshape(-1, 3)
-        lab, linear = lab_from_rgb8(flat)
+        lab, linear = lab_from_rgb8(flat, transfer)
         chroma = np.hypot(lab[:, 1], lab[:, 2])
         stats = frame_stats(flat, lab, chroma)
         samples.append({'requested_time': _r(t), 'rgb24_sha256': hashlib.sha256(payload).hexdigest(), **stats})
@@ -359,7 +360,7 @@ def scan(request, directory, tools):
                    for rid, acc in region_sums.items()}
     source(request['source'])  # Bytes must still match after all decoding.
     result = {'schema': SCHEMA, 'source': asset, 'stream': {'index': videos[0].get('index'), 'selector': 'v:0', **stream},
-              'input_color': request['input_color'], 'interpretation': INTERPRETATION,
+              'input_color': request['input_color'], 'interpretation': SPACES[request['input_color']['space']][2],
               'sampling': {'mode': request['samples']['mode'], 'count': len(times), 'requested_times': [_r(t) for t in times],
                            'analysis_size': [width, height], 'downscale': 'swscale area',
                            'time_precision': 'decoder-selected frame at or after requested timestamp',
@@ -368,11 +369,11 @@ def scan(request, directory, tools):
               'thresholds': {'highlight_channel_code': HIGHLIGHT_CODE, 'shadow_code': SHADOW_CODE,
                              'chromatic_min_chroma': CHROMATIC_MIN, 'neutral_max_chroma': NEUTRAL_CHROMA_MAX,
                              'neutral_l_range': list(NEUTRAL_L_RANGE), 'skin_line_reference_degrees': SKIN_LINE_DEGREES},
-              'aggregate': aggregate, 'palette': palette(pooled.palette_points(), k), 'temporal': temporal, 'regions': region_rows,
+              'aggregate': aggregate, 'palette': palette(pooled.palette_points(), k, transfer), 'temporal': temporal, 'regions': region_rows,
               'samples': samples, 'aesthetic_judgement': 'NOT_PROVIDED', 'skin_detection': 'NOT_PERFORMED',
               'limits': ['Statistics describe sampled, downscaled frames under the recorded interpretation only.',
-                         'Display-referred BT.1886 gamma 2.4 is an explicit assumption, not a measured display.',
+                         'The display transfer (BT.1886 gamma 2.4 or sRGB) is the declared assumption, not a measured display.',
                          'Skin-line offsets apply only to caller-declared regions; the line is a guide, not a target.',
-                         'HDR, log, wide-gamut and non-BT.709 inputs are refused rather than reinterpreted.']}
+                         'HDR, log, wide-gamut and inputs whose tags contradict the declared space are refused rather than reinterpreted.']}
     write_json(directory / 'color-profile.json', result)
     return result

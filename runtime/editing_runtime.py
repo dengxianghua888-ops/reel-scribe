@@ -1236,6 +1236,9 @@ def execute(request, directory, tools):
     if op == 'still-image-render':
         from still_ops import render_still
         return render_still(request,directory,tools)
+    if op == 'still-color-normalize':
+        from still_color_ops import normalize_still
+        return normalize_still(request, directory, tools)
     if op == 'color-lut-apply':
         from color_ops import apply_lut
         return apply_lut(request,directory,tools)

@@ -1,6 +1,6 @@
 # 色彩特征测量（color-profile/1）
 
-`color-profile-scan` 对已声明 BT.709 SDR 的视频做**显式采样**测量，返回数值证据。它不调色、不选风格、不检测人脸或肤色，也不给出审美分数。
+`color-profile-scan` 对已声明 BT.709 或 sRGB SDR 的视频做**显式采样**测量，返回数值证据。它不调色、不选风格、不检测人脸或肤色，也不给出审美分数。
 
 ## 请求
 
@@ -11,15 +11,15 @@
 | `samples` | `{mode: interval, interval_seconds ≥ 0.01}` 或 `{mode: times, times: [严格递增, 位于 [start,end)]}` |
 | `max_samples` | 1–600；请求样本数超过即拒绝（`COLOR_PROFILE_SAMPLE_LIMIT`），不抽稀 |
 | `analysis_size` | `[width, height]`，每边 8–512；swscale area 缩小 |
-| `input_color` | `{space: bt709-sdr, range: limited 或 full, basis: verified-metadata 或 caller-declared}` |
+| `input_color` | `{space: bt709-sdr 或 srgb-sdr, range: limited 或 full, basis: verified-metadata 或 caller-declared}` |
 | `palette_colors` | 1–8 |
 | `regions`（可选） | 至多 16 个 `{id: [x0, y0, x1, y1]}`，0–1 归一化矩形，由调用者声明含义 |
 
-`verified-metadata` 要求 `color_transfer`、`color_primaries`、`color_space` 为 bt709，`color_range` 与声明一致；`caller-declared` 允许缺失标签但拒绝冲突标签。HLG（arib-std-b67）、PQ（smpte2084）、BT.2020/P3 原色拒绝；yuvj 像素格式要求声明 full。支持 8/10 位 4:2:0、4:2:2、4:4:4 YUV。
+`verified-metadata` 要求 `color_primaries`、`color_space` 为 bt709，`color_transfer` 对 `bt709-sdr` 为 bt709、对 `srgb-sdr` 为 iec61966-2-1，`color_range` 与声明一致；`caller-declared` 允许缺失标签但拒绝冲突标签。HLG（arib-std-b67）、PQ（smpte2084）、BT.2020/P3 原色拒绝；yuvj 像素格式要求声明 full。支持 8/10 位 4:2:0、4:2:2、4:4:4 YUV。
 
 ## 解释链
 
-BT.709 Y'CbCr → FFmpeg swscale area 缩小到全范围 8 位 R'G'B' → BT.1886 EOTF（γ2.4，Lw=1，Lb=0）线性化 → BT.709 原色到 CIE XYZ（D65）→ CIELAB。显示环境是**声明的假设**，不是测得的显示器。
+BT.709 矩阵 Y'CbCr → FFmpeg swscale area 缩小到全范围 8 位 R'G'B' → 按声明的显示传递函数线性化：`bt709-sdr` 用 BT.1886 EOTF（γ2.4，Lw=1，Lb=0），`srgb-sdr` 用 IEC 61966-2-1 分段 EOTF → BT.709/sRGB 原色到 CIE XYZ（D65）→ CIELAB。结果的 `interpretation` 写明所用链。显示环境是**声明的假设**，不是测得的显示器；两种解释在暗部给出不同的 L*，比较素材时必须用同一种。
 
 ## 输出 `color-profile.json`
 

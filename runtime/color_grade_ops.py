@@ -1,16 +1,19 @@
 """Compile explicit color-grade parameters to a 3D LUT and exchange files.
 
-Every operation is defined on display-referred BT.709 R'G'B' code values in
-[0, 1]; exposure and white balance act in BT.1886 gamma-2.4 linear light;
-curves act on code values; hsl selects hue bands on the RGB hexcone and edits
-CIELAB L*, C*ab and h_ab. Each operation clamps to [0, 1]. This module chooses no look, measures no footage
+Every operation is defined on display-referred R'G'B' code values with
+BT.709/sRGB primaries under a declared display transfer (BT.1886 gamma 2.4 or
+sRGB). Exposure and white balance act in that linear light and may exceed 1;
+highlight_rolloff compresses values above its knee; curves, hsl and lut read
+their input clipped to [0, 1]; the chain output is clamped to [0, 1]. This module chooses no look, measures no footage
 and does not apply anything to media; color-lut-apply consumes the cube.
 """
 import json
 from xml.sax.saxutils import escape
 
 SCHEMA = 'color-grade/1'
-INTERPRETATION = 'bt709-sdr-display'
+# Declared grade interpretation -> display transfer used for linear light and CIELAB.
+INTERPRETATIONS = {'bt709-sdr-display': 'bt1886', 'srgb-sdr-display': 'srgb'}
+ROLLOFF_MODES = ('max-rgb', 'per-channel')
 LUT_SIZES = (17, 33, 65)
 EXPORTS = ('cube', 'cc', 'clf')
 MAX_OPS = 16
@@ -24,11 +27,14 @@ HSL_BANDS = (('red', 0.0), ('orange', 30.0), ('yellow', 60.0), ('green', 120.0),
              ('aqua', 180.0), ('blue', 240.0), ('purple', 270.0), ('magenta', 300.0))
 HSL_LIMITS = {'hue': (-30.0, 30.0), 'saturation': (0.0, 2.0), 'lightness': (-30.0, 30.0)}
 HSL_NEUTRAL_CHROMA = (2.0, 12.0)  # C*ab ramp: no edit below the first value, full edit above the second
-CHAIN_MODEL = ("Operations apply in listed order to display-referred BT.709 R'G'B' in [0,1]; exposure and "
-               "white_balance use BT.1886 gamma 2.4 linear light; curves map code values with monotone cubic "
-               "(PCHIP) interpolation, master before per-channel; hsl weights hexcone-hue bands with cos^2 "
-               "cross-fades that sum to 1, ramps the edit in by CIELAB chroma, then rotates h_ab, scales C*ab "
-               "and shifts L*; every operation clamps to [0,1]; strength blends input and chain output in code values.")
+CHAIN_MODEL = ("Operations apply in listed order to display-referred R'G'B' code values; exposure and "
+               "white_balance multiply in the declared display transfer's linear light and keep values above 1; "
+               "highlight_rolloff maps everything above its knee smoothly so the headroom white reaches 1; cdl "
+               "follows ASC CDL v1.2 with clamping; curves map code values with monotone cubic (PCHIP) interpolation, "
+               "master before per-channel; hsl weights hexcone-hue bands with cos^2 cross-fades that sum to 1, "
+               "ramps the edit in by CIELAB chroma, then rotates h_ab, scales C*ab and shifts L*; curves, hsl and "
+               "lut read their input clipped to [0,1]; strength blends input and chain output in code values and "
+               "the result is clamped to [0,1].")
 
 
 def _triple(value, name, low, high):
@@ -80,13 +86,14 @@ def normalize(grade):
     require(grade['schema'] == SCHEMA, 'COLOR_GRADE_SCHEMA_UNSUPPORTED')
     require(isinstance(grade['id'], str) and grade['id'].strip() and len(grade['id']) <= 120
             and '"' not in grade['id'] and '\n' not in grade['id'], 'COLOR_GRADE_ID_INVALID')
-    require(grade['interpretation'] == INTERPRETATION, 'COLOR_GRADE_INTERPRETATION_UNSUPPORTED')
+    require(grade['interpretation'] in INTERPRETATIONS, 'COLOR_GRADE_INTERPRETATION_UNSUPPORTED')
     require(isinstance(grade['ops'], list) and 1 <= len(grade['ops']) <= MAX_OPS, 'COLOR_GRADE_OPS_INVALID')
     strength = number(grade.get('strength', 1), 'strength')
     require(0 <= strength <= 1, 'COLOR_GRADE_STRENGTH_OUT_OF_RANGE')
     ops, luts = [], {}
     for index, op in enumerate(grade['ops']):
-        require(isinstance(op, dict) and op.get('type') in ('exposure', 'white_balance', 'cdl', 'lut', 'curves', 'hsl'),
+        require(isinstance(op, dict) and op.get('type') in ('exposure', 'white_balance', 'cdl', 'lut', 'curves', 'hsl',
+                                                            'highlight_rolloff'),
                 'COLOR_GRADE_OP_UNSUPPORTED: %d' % index)
         kind = op['type']
         if kind == 'exposure':
@@ -114,6 +121,13 @@ def normalize(grade):
         elif kind == 'hsl':
             exact_keys(op, ['type', 'bands'], ['type', 'bands'])
             ops.append({'type': kind, 'bands': _hsl_bands(op['bands'])})
+        elif kind == 'highlight_rolloff':
+            exact_keys(op, ['type', 'knee', 'headroom_stops', 'mode'], ['type', 'knee', 'headroom_stops', 'mode'])
+            knee, headroom = number(op['knee'], 'knee'), number(op['headroom_stops'], 'headroom_stops')
+            require(0.5 <= knee <= 0.95, 'COLOR_GRADE_VALUE_OUT_OF_RANGE: knee')
+            require(0.05 <= headroom <= 4, 'COLOR_GRADE_VALUE_OUT_OF_RANGE: headroom_stops')
+            require(op['mode'] in ROLLOFF_MODES, 'COLOR_GRADE_ROLLOFF_MODE_UNSUPPORTED')
+            ops.append({'type': kind, 'knee': knee, 'headroom_stops': headroom, 'mode': op['mode']})
         else:
             exact_keys(op, ['type', 'source', 'interpolation', 'mix'], ['type', 'source', 'interpolation'])
             require(op['interpolation'] in ('tetrahedral', 'trilinear'), 'LUT_INTERPOLATION_UNSUPPORTED')
@@ -125,7 +139,7 @@ def normalize(grade):
             luts[index] = table_from_rows(rows, info['size'])
             ops.append({'type': kind, 'source': {'path': artifact['path'], 'sha256': artifact['sha256']},
                         'size': info['size'], 'interpolation': op['interpolation'], 'mix': mix})
-    return {'schema': SCHEMA, 'id': grade['id'], 'interpretation': INTERPRETATION,
+    return {'schema': SCHEMA, 'id': grade['id'], 'interpretation': grade['interpretation'],
             'ops': ops, 'strength': strength}, luts
 
 
@@ -164,12 +178,13 @@ def hsl_weights(hue):
     return weights
 
 
-def _apply_hsl(op, x):
+def _apply_hsl(op, x, transfer):
     from color_numerics import numpy, lab_from_rgb01, rgb01_from_lab, hexcone_hue
     np = numpy()
     adjust = np.array([[op['bands'].get(name, {}).get(key, default) for key, default in
                         (('hue', 0.0), ('saturation', 1.0), ('lightness', 0.0))] for name, _ in HSL_BANDS])
-    lab, _ = lab_from_rgb01(x)
+    x = np.clip(x, 0.0, 1.0)
+    lab, _ = lab_from_rgb01(x, transfer)
     chroma = np.hypot(lab[:, 1], lab[:, 2])
     low, high = HSL_NEUTRAL_CHROMA
     ramp = np.clip((chroma - low) / (high - low), 0.0, 1.0)
@@ -179,21 +194,53 @@ def _apply_hsl(op, x):
     chroma = chroma * (1 + ramp * (per_pixel[:, 1] - 1))
     lightness = np.clip(lab[:, 0] + ramp * per_pixel[:, 2], 0.0, 100.0)
     edited = np.stack([lightness, chroma * np.cos(hue), chroma * np.sin(hue)], axis=1)
-    return np.clip(rgb01_from_lab(edited), 0.0, 1.0)
+    return np.clip(rgb01_from_lab(edited, transfer), 0.0, 1.0)
+
+
+def rolloff_white(op, transfer):
+    """Code value whose linear light is 2^headroom_stops; it maps to display white."""
+    from color_numerics import inverse_eotf
+    return float(inverse_eotf(2.0 ** op['headroom_stops'], transfer))
+
+
+def shoulder(values, knee, white):
+    """Identity below knee; 1 - (1 - t)^m above it, C1 at knee (slope 1) and at white (slope 0)."""
+    from color_numerics import numpy
+    np = numpy()
+    m = (white - knee) / (1.0 - knee)  # > 1 because white > 1 > knee
+    t = np.clip((values - knee) / (white - knee), 0.0, 1.0)
+    return np.where(values <= knee, values, knee + (1.0 - knee) * (1.0 - (1.0 - t) ** m))
+
+
+def _apply_rolloff(op, x, transfer):
+    from color_numerics import numpy
+    np = numpy()
+    x = np.maximum(x, 0.0)
+    knee, white = op['knee'], rolloff_white(op, transfer)
+    if op['mode'] == 'per-channel':
+        return shoulder(x, knee, white)
+    peak = x.max(axis=1, keepdims=True)  # max-rgb: one scale per pixel keeps channel ratios (hue, saturation)
+    scale = np.where(peak > knee, shoulder(peak, knee, white) / np.where(peak > 0, peak, 1.0), 1.0)
+    return x * scale
+
+
+def _gains(op):
+    return ([2.0 ** op['stops']] * 3 if op['type'] == 'exposure' else
+            _luminance_gains(op['gains']) if op['preserve_luminance'] else op['gains'])
 
 
 def evaluate(spec, luts, rgb):
     """Analytic chain on (N,3) code values; the reference the LUT is checked against."""
-    from color_numerics import numpy, DISPLAY_GAMMA, LUMA_709, interpolate
+    from color_numerics import numpy, LUMA_709, interpolate, eotf, inverse_eotf
     np = numpy()
+    transfer = INTERPRETATIONS[spec['interpretation']]
     x = np.clip(np.asarray(rgb, dtype=float), 0.0, 1.0)
     out = x
     for index, op in enumerate(spec['ops']):
         if op['type'] in ('exposure', 'white_balance'):
-            gains = ([2.0 ** op['stops']] * 3 if op['type'] == 'exposure' else
-                     _luminance_gains(op['gains']) if op['preserve_luminance'] else op['gains'])
-            linear = np.clip(out ** DISPLAY_GAMMA * np.array(gains), 0.0, 1.0)
-            out = linear ** (1.0 / DISPLAY_GAMMA)
+            out = inverse_eotf(eotf(out, transfer) * np.array(_gains(op)), transfer)  # may exceed 1
+        elif op['type'] == 'highlight_rolloff':
+            out = _apply_rolloff(op, out, transfer)
         elif op['type'] == 'cdl':
             sop = np.clip(out * np.array(op['slope']) + np.array(op['offset']), 0.0, 1.0) ** np.array(op['power'])
             luma = (sop @ np.array(LUMA_709))[:, None]
@@ -201,8 +248,9 @@ def evaluate(spec, luts, rgb):
         elif op['type'] == 'curves':
             out = _apply_curves(op, out)
         elif op['type'] == 'hsl':
-            out = _apply_hsl(op, out)
+            out = _apply_hsl(op, out, transfer)
         else:
+            out = np.clip(out, 0.0, 1.0)
             mapped = interpolate(luts[index], out, op['interpolation'])
             out = np.clip(out + op['mix'] * (mapped - out), 0.0, 1.0)
     return np.clip(x + spec['strength'] * (out - x), 0.0, 1.0)
@@ -215,7 +263,8 @@ def _accuracy(spec, luts, table):
     points = (n * np.array(ACCURACY_STEPS)) % 1.0
     analytic = evaluate(spec, luts, points)
     sampled = interpolate(table, points, 'tetrahedral')
-    delta = ciede2000(lab_from_rgb01(analytic)[0], lab_from_rgb01(sampled)[0])
+    transfer = INTERPRETATIONS[spec['interpretation']]
+    delta = ciede2000(lab_from_rgb01(analytic, transfer)[0], lab_from_rgb01(sampled, transfer)[0])
     return {'method': 'CIEDE2000 between the analytic chain and numpy tetrahedral sampling of the compiled cube',
             'points': int(len(points)), 'point_set': 'additive-recurrence sequence, off the LUT grid',
             'delta_e2000': {'median': round(float(np.median(delta)), 4), 'p95': round(float(np.percentile(delta, 95)), 4),
@@ -258,37 +307,43 @@ def clf_text(spec, luts, table):
     """Parametric ProcessList when exactly representable, else the compiled cube baked as LUT3D."""
     from color_numerics import DISPLAY_GAMMA
     pad = '  '
+    if INTERPRETATIONS[spec['interpretation']] == 'srgb':  # CLF monCurve with gamma 2.4, offset 0.055 is IEC 61966-2-1
+        curve = ('monCurveFwd', 'monCurveRev', f'exponent="2.4" offset="0.055"')
+        described = "display-referred sRGB-transfer R'G'B' code values (BT.709/sRGB primaries)"
+    else:
+        curve = ('basicFwd', 'basicRev', f'exponent="{DISPLAY_GAMMA}"')
+        described = "display-referred BT.1886 gamma 2.4 R'G'B' code values (BT.709 primaries)"
+    clamp = (f'{pad}<Range inBitDepth="32f" outBitDepth="32f" style="Clamp">\n'
+             f'{pad}  <minInValue>0</minInValue>\n{pad}  <maxInValue>1</maxInValue>\n'
+             f'{pad}  <minOutValue>0</minOutValue>\n{pad}  <maxOutValue>1</maxOutValue>\n{pad}</Range>\n')
     parametric = spec['strength'] == 1 and all(op['type'] in ('exposure', 'white_balance', 'cdl')
                                                or (op['type'] == 'lut' and op['mix'] == 1) for op in spec['ops'])
     nodes = []
     if parametric:
         for index, op in enumerate(spec['ops']):
             if op['type'] in ('exposure', 'white_balance'):
-                gains = ([2.0 ** op['stops']] * 3 if op['type'] == 'exposure' else
-                         _luminance_gains(op['gains']) if op['preserve_luminance'] else op['gains'])
+                gains = _gains(op)
                 matrix = [gains[0], 0, 0, 0, gains[1], 0, 0, 0, gains[2]]
                 nodes.append(
-                    f'{pad}<Exponent inBitDepth="32f" outBitDepth="32f" style="basicFwd">\n'
-                    f'{pad}  <ExponentParams exponent="{DISPLAY_GAMMA}"/>\n{pad}</Exponent>\n'
+                    f'{pad}<Exponent inBitDepth="32f" outBitDepth="32f" style="{curve[0]}">\n'
+                    f'{pad}  <ExponentParams {curve[2]}/>\n{pad}</Exponent>\n'
                     f'{pad}<Matrix inBitDepth="32f" outBitDepth="32f">\n{pad}  <Array dim="3 3">{_fmt(matrix)}</Array>\n{pad}</Matrix>\n'
-                    f'{pad}<Range inBitDepth="32f" outBitDepth="32f" style="Clamp">\n'
-                    f'{pad}  <minInValue>0</minInValue>\n{pad}  <maxInValue>1</maxInValue>\n'
-                    f'{pad}  <minOutValue>0</minOutValue>\n{pad}  <maxOutValue>1</maxOutValue>\n{pad}</Range>\n'
-                    f'{pad}<Exponent inBitDepth="32f" outBitDepth="32f" style="basicRev">\n'
-                    f'{pad}  <ExponentParams exponent="{DISPLAY_GAMMA}"/>\n{pad}</Exponent>\n')
+                    f'{pad}<Exponent inBitDepth="32f" outBitDepth="32f" style="{curve[1]}">\n'
+                    f'{pad}  <ExponentParams {curve[2]}/>\n{pad}</Exponent>\n')
             elif op['type'] == 'cdl':
                 nodes.append(f'{pad}<ASC_CDL inBitDepth="32f" outBitDepth="32f" style="Fwd">\n'
                              + _cdl_nodes(op, 4) + f'{pad}</ASC_CDL>\n')
             else:
-                nodes.append(_clf_lut3d(luts[index], op['interpolation'], pad))
+                nodes.append(clamp + _clf_lut3d(luts[index], op['interpolation'], pad))
+        nodes.append(clamp)  # the chain output is clamped to [0,1]
     else:
         nodes.append(_clf_lut3d(table, 'tetrahedral', pad))
     mode = 'parametric' if parametric else 'baked-compiled-cube'
     text = ('<?xml version="1.0" encoding="UTF-8"?>\n'
             f'<ProcessList compCLFversion="3" id="{escape(spec["id"], {chr(34): "&quot;"})}">\n'
             f'{pad}<Description>reel-scribe color-grade/1 ({mode})</Description>\n'
-            f"{pad}<InputDescriptor>display-referred BT.709 R'G'B' code values in [0,1]</InputDescriptor>\n"
-            f"{pad}<OutputDescriptor>display-referred BT.709 R'G'B' code values in [0,1]</OutputDescriptor>\n"
+            f"{pad}<InputDescriptor>{described} in [0,1]</InputDescriptor>\n"
+            f"{pad}<OutputDescriptor>{described} in [0,1]</OutputDescriptor>\n"
             + ''.join(nodes) + '</ProcessList>\n')
     return text, mode
 
@@ -331,8 +386,10 @@ def compile_grade(request, directory, tools):
               'chain_model': CHAIN_MODEL, 'files': files, 'accuracy': _accuracy(spec, luts, table),
               'compiled_is_identity': identity_check, 'applied_to_media': False, 'look_selection': 'NOT_PROVIDED',
               'effect_review': 'NOT_RUN',
-              'limits': ['Grades are defined on display-referred BT.709 SDR code values only; no HDR/log/wide gamut.',
-                         'Clamping after each operation discards out-of-range values; it is not a soft roll-off.',
+              'limits': ['Grades are defined on display-referred SDR code values with BT.709/sRGB primaries under the '
+                         'declared transfer only; no HDR/log/wide gamut. Apply the cube only to sources of that transfer.',
+                         'Values above 1 that reach cdl, curves, hsl, lut or the chain output are clipped; only '
+                         'highlight_rolloff compresses them, and it also lowers in-range values above its knee.',
                          'hsl bands are hexcone hue regions, not skin, sky or object detection; edits that leave '
                          'the BT.709 gamut are clipped per channel, which can shift hue near the gamut boundary; near a '
                          'clipped channel the gamma-2.4 toe is steep, so use lut_size 65 and read the accuracy report.',

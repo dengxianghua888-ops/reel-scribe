@@ -451,7 +451,7 @@
       "id": "color-grade-compile",
       "layer": "atomic",
       "entry": "atomic/color-grade-compile/SKILL.md",
-      "description": "把明确的曝光、白平衡增益、ASC CDL、外部LUT与强度编译为3D cube并按可表示性导出.cc和CLF，报告编译误差；不选风格、不测量或修改媒体。",
+      "description": "把明确的曝光、白平衡增益、高光柔和滚降、ASC CDL、曲线、HSL、外部LUT与强度按BT.709或sRGB显示解释编译为3D cube，并按可表示性导出.cc和CLF，报告编译误差；不选风格、不测量或修改媒体。",
       "status": "local-synthetic-tested"
     },
     {
@@ -465,7 +465,7 @@
       "id": "color-profile-scan",
       "layer": "atomic",
       "entry": "atomic/color-profile-scan/SKILL.md",
-      "description": "按明确区间与显式采样测量已声明BT.709 SDR视频的影调、剪切、CIELAB、色度、色相分布、调色板与样本漂移；只返回数值，不评价好看、不识别肤色、不推荐风格。",
+      "description": "按明确区间与显式采样测量已声明BT.709或sRGB SDR视频的影调、剪切、CIELAB、色度、色相分布、调色板与样本漂移；只返回数值，不评价好看、不识别肤色、不推荐风格。",
       "status": "local-synthetic-tested"
     },
     {
@@ -491,6 +491,13 @@
         "work-render",
         "media-qc"
       ]
+    },
+    {
+      "id": "still-color-normalize",
+      "layer": "atomic",
+      "entry": "atomic/still-color-normalize/SKILL.md",
+      "description": "把带内嵌ICC配置文件（如Adobe RGB、sRGB）或按调用者声明为sRGB的PNG/JPEG/WebP静图用LittleCMS显式转换为无配置文件的sRGB PNG，可按要求应用EXIF方向；不调色、不增强、不猜测未标记图片。",
+      "status": "local-synthetic-tested"
     },
     {
       "id": "still-image-render",

@@ -1,8 +1,10 @@
 """Shared, explicit color arithmetic: display model, CIELAB, CIEDE2000, LUTs.
 
-Working space for grading and measurement is display-referred BT.709 R'G'B'
-code values normalized to [0, 1]. Linear light uses the BT.1886 EOTF with
-gamma 2.4 (Lw=1, Lb=0); this is a declared assumption, not a measured display.
+Working space for grading and measurement is display-referred R'G'B' code
+values normalized to [0, 1] with BT.709/sRGB primaries. Linear light uses the
+declared display transfer: 'bt1886' (BT.1886 gamma 2.4, Lw=1, Lb=0) or 'srgb'
+(the IEC 61966-2-1 piecewise curve). Either is a declared assumption, not a
+measured display. Values above 1 extend each curve's power segment.
 """
 import math
 
@@ -12,6 +14,7 @@ RGB_TO_XYZ = ((0.4123908, 0.3575843, 0.1804808),
               (0.2126390, 0.7151687, 0.0721923),
               (0.0193308, 0.1191948, 0.9505322))
 LUMA_709 = (0.2126, 0.7152, 0.0722)
+TRANSFERS = ('bt1886', 'srgb')
 MAX_CUBE_BYTES = 16 * 1024 * 1024
 
 
@@ -24,10 +27,32 @@ def numpy():
     return np
 
 
-def lab_from_rgb01(rgb):
-    """(N,3) display-referred BT.709 R'G'B' in [0,1] -> (CIELAB (N,3), linear RGB (N,3))."""
+def eotf(code, transfer='bt1886'):
+    """Display code value -> linear light; negative input is treated as 0."""
     np = numpy()
-    linear = np.clip(rgb, 0.0, 1.0) ** DISPLAY_GAMMA
+    code = np.maximum(np.asarray(code, dtype=float), 0.0)
+    if transfer == 'bt1886':
+        return code ** DISPLAY_GAMMA
+    if transfer == 'srgb':
+        return np.where(code <= 0.04045, code / 12.92, ((code + 0.055) / 1.055) ** 2.4)
+    raise ValueError('COLOR_TRANSFER_UNSUPPORTED: %s' % transfer)
+
+
+def inverse_eotf(linear, transfer='bt1886'):
+    """Linear light -> display code value; negative input is treated as 0."""
+    np = numpy()
+    linear = np.maximum(np.asarray(linear, dtype=float), 0.0)
+    if transfer == 'bt1886':
+        return linear ** (1.0 / DISPLAY_GAMMA)
+    if transfer == 'srgb':
+        return np.where(linear <= 0.0031308, linear * 12.92, 1.055 * linear ** (1.0 / 2.4) - 0.055)
+    raise ValueError('COLOR_TRANSFER_UNSUPPORTED: %s' % transfer)
+
+
+def lab_from_rgb01(rgb, transfer='bt1886'):
+    """(N,3) display-referred R'G'B' in [0,1] -> (CIELAB (N,3), linear RGB (N,3))."""
+    np = numpy()
+    linear = eotf(np.clip(rgb, 0.0, 1.0), transfer)
     matrix = np.array(RGB_TO_XYZ)
     t = (linear @ matrix.T) / matrix.sum(axis=1)
     delta = 6.0 / 29.0
@@ -36,7 +61,7 @@ def lab_from_rgb01(rgb):
     return lab, linear
 
 
-def rgb01_from_lab(lab):
+def rgb01_from_lab(lab, transfer='bt1886'):
     """Inverse of lab_from_rgb01; linear values outside [0,1] are clipped (simple gamut clip)."""
     np = numpy()
     lab = np.atleast_2d(lab).astype(float)
@@ -46,7 +71,7 @@ def rgb01_from_lab(lab):
     t = np.where(f > delta, f ** 3, 3 * delta ** 2 * (f - 4.0 / 29.0))
     matrix = np.array(RGB_TO_XYZ)
     linear = (t * matrix.sum(axis=1)) @ np.linalg.inv(matrix).T
-    return np.clip(linear, 0.0, 1.0) ** (1.0 / DISPLAY_GAMMA)
+    return inverse_eotf(np.clip(linear, 0.0, 1.0), transfer)
 
 
 def pchip_slopes(x, y):

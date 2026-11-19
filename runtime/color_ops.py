@@ -5,6 +5,8 @@ import json,math
 # Source pixel format -> (bit depth, RGB working format for lut3d, output pixel format).
 PIXEL_FORMATS={**{f:(8,'gbrp','yuv420p') for f in ['yuv420p','yuv422p','yuv444p','yuvj420p','yuvj422p','yuvj444p']},
                **{f:(10,'gbrp10le','yuv420p10le') for f in ['yuv420p10le','yuv422p10le','yuv444p10le']}}
+# Declared SDR space -> transfer tag the source must carry and the output keeps; LUTs act on code values.
+SPACE_TRANSFER={'bt709-sdr':'bt709','srgb-sdr':'iec61966-2-1'}
 
 def validate_cube(path):
     from editing_runtime import require
@@ -46,7 +48,7 @@ def apply_lut(request,directory,tools):
         from editing_runtime import number
         strength=number(strength,'strength',0);require(0<strength<=1,'LUT_STRENGTH_OUT_OF_RANGE')
     color=request['input_color'];exact_keys(color,['space','range','basis'],['space','range','basis'])
-    require(color['space']=='bt709-sdr','COLOR_SPACE_UNSUPPORTED')
+    require(color['space'] in SPACE_TRANSFER,'COLOR_SPACE_UNSUPPORTED');trc=SPACE_TRANSFER[color['space']]
     require(color['range'] in ['limited','full'],'COLOR_RANGE_REQUIRED')
     require(color['basis'] in ['verified-metadata','caller-declared'],'COLOR_BASIS_REQUIRED')
     interpolation=request['interpolation'];require(interpolation in ['trilinear','tetrahedral'],'LUT_INTERPOLATION_UNSUPPORTED')
@@ -56,7 +58,7 @@ def apply_lut(request,directory,tools):
     require(video['width']%2==0 and video['height']%2==0,'EVEN_DIMENSION_REQUIRED')
     rotations=[video.get('tags',{}).get('rotate',0)]+[s.get('rotation',0) for s in video.get('side_data_list',[])]
     require(all(float(x)%360==0 for x in rotations),'ROTATED_COLOR_SOURCE_UNSUPPORTED')
-    expected={'color_space':'bt709','color_transfer':'bt709','color_primaries':'bt709','color_range':'tv' if color['range']=='limited' else 'pc'}
+    expected={'color_space':'bt709','color_transfer':trc,'color_primaries':'bt709','color_range':'tv' if color['range']=='limited' else 'pc'}
     unknown={'unknown','unspecified',None}
     for key,value in expected.items():
         observed=video.get(key)
@@ -75,10 +77,10 @@ def apply_lut(request,directory,tools):
         identity=identity_table(cube['size']);table=table_from_rows(lut_rows,cube['size'])
         (directory/'selected.cube').write_text(cube_text(identity+strength*(table-identity),'derived strength %.6f'%strength),encoding='utf-8')
     rng='tv' if color['range']=='limited' else 'pc'
-    filters=f'scale=in_color_matrix=bt709:in_range={rng}:out_range=pc,format={working},lut3d=file=selected.cube:interp={interpolation},scale=out_color_matrix=bt709:in_range=pc:out_range=tv,format={out_fmt}'
+    filters=f'scale=in_color_matrix=bt709:in_range={rng}:out_range=pc,format={working},lut3d=file=selected.cube:interp={interpolation},scale=out_color_matrix=bt709:in_range=pc:out_range=tv,format={out_fmt},setparams=colorspace=bt709:color_primaries=bt709:color_trc={trc}:range=tv'
     output=directory/'graded.mp4'
     tools.ff(['-i',asset['path'],'-vf',filters,'-map','0:v:0','-map','0:a?','-r',str(fps),'-fps_mode','cfr',
-              '-c:v','libx264','-crf','18','-preset','medium','-c:a','copy','-colorspace','bt709','-color_trc','bt709','-color_primaries','bt709','-color_range','tv','-movflags','+faststart','graded.mp4'],cwd=directory)
+              '-c:v','libx264','-crf','18','-preset','medium','-c:a','copy','-colorspace','bt709','-color_trc',trc,'-color_primaries','bt709','-color_range','tv','-movflags','+faststart','graded.mp4'],cwd=directory)
     after=tools.probe(output);av=next(s for s in after['streams'] if s['codec_type']=='video');out_times=frame_clock(output,tools)
     require(len(out_times)==len(times) and all(abs(a-b)<=.00001 for a,b in zip(times,out_times)),'COLOR_FRAME_CLOCK_CHANGED')
     require(av['width']==video['width'] and av['height']==video['height'],'COLOR_GEOMETRY_CHANGED')
@@ -106,7 +108,7 @@ def apply_lut(request,directory,tools):
             'bit_depth':{'source':bits,'lut_working_format':working,'output':bits,'basis':'source pixel format; no 8-bit intermediate for 10-bit sources'},'frames':len(times),'fps':str(fps),'video_duration':float(Fraction(len(times),1)/fps),
             'time_mapping':'output frame i is source frame i; no trim, reordering or speed change','output_color':{'requested':requested_output,'observed':observed_output,'unobserved_fields':[k for k,v in observed_output.items() if v in unknown]},
             'audio':'all source audio streams copied when present; coded payload hash and format checked; listening not performed','audio_checks':audio_checks,
-            'source_interpretation':'declared bt709 SDR YUV range to nonlinear RGB LUT to limited-range bt709; no HDR/log normalization',
+            'source_interpretation':f'declared {color["space"]} YUV range to nonlinear RGB code values, LUT, limited-range BT.709-matrix YUV tagged {trc}; the LUT is applied to code values and must have been built for this transfer; no HDR/log normalization',
             'effect_review':'NOT_RUN','limits':['LUT order and creative suitability are caller decisions','unknown source color metadata may be caller-declared but is not verified','no automatic matching, white balance, skin protection or clipping repair','lossy H264 re-encode, not pixel-lossless']}
     if strength is not None:
         result['strength']={'value':strength,'derivation':'identity + strength * (lut - identity) on the source cube grid, rounded to 6 decimals',

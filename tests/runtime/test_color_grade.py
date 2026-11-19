@@ -27,8 +27,8 @@ def ref(path):
     return {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
 
 
-def grade(ops, strength=None, gid='fixture'):
-    value = {'schema': 'color-grade/1', 'id': gid, 'interpretation': 'bt709-sdr-display', 'ops': ops}
+def grade(ops, strength=None, gid='fixture', interpretation='bt709-sdr-display'):
+    value = {'schema': 'color-grade/1', 'id': gid, 'interpretation': interpretation, 'ops': ops}
     if strength is not None:
         value['strength'] = strength
     return value
@@ -81,7 +81,30 @@ def test_cube_text_round_trips_through_the_shared_parser_in_red_fastest_order():
 
 # --- grade arithmetic --------------------------------------------------------
 
-def reference_chain(rgb, ops, strength=1.0):
+def _to_linear(c, transfer):
+    c = max(c, 0.0)
+    if transfer == 'bt1886':
+        return c ** 2.4
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4  # IEC 61966-2-1
+
+
+def _to_code(v, transfer):
+    v = max(v, 0.0)
+    if transfer == 'bt1886':
+        return v ** (1 / 2.4)
+    return 12.92 * v if v <= 0.0031308 else 1.055 * v ** (1 / 2.4) - 0.055
+
+
+def _shoulder(v, knee, white):
+    if v <= knee:
+        return v
+    if v >= white:
+        return 1.0
+    m = (white - knee) / (1 - knee)
+    return knee + (1 - knee) * (1 - (1 - (v - knee) / (white - knee)) ** m)
+
+
+def reference_chain(rgb, ops, strength=1.0, transfer='bt1886'):
     """Independent per-pixel implementation of the documented chain."""
     x = [min(max(c, 0.0), 1.0) for c in rgb]
     out = list(x)
@@ -91,12 +114,23 @@ def reference_chain(rgb, ops, strength=1.0):
             if op['type'] == 'white_balance' and op['preserve_luminance']:
                 scale = 0.2126 * gains[0] + 0.7152 * gains[1] + 0.0722 * gains[2]
                 gains = [g / scale for g in gains]
-            out = [min(max(c ** 2.4 * g, 0.0), 1.0) ** (1 / 2.4) for c, g in zip(out, gains)]
+            out = [_to_code(_to_linear(c, transfer) * g, transfer) for c, g in zip(out, gains)]  # no clamp at 1
+        elif op['type'] == 'highlight_rolloff':
+            white = _to_code(2 ** op['headroom_stops'], transfer)
+            if op['mode'] == 'per-channel':
+                out = [_shoulder(c, op['knee'], white) for c in out]
+            else:
+                peak = max(out)
+                scale = _shoulder(peak, op['knee'], white) / peak if peak > op['knee'] else 1.0
+                out = [c * scale for c in out]
         elif op['type'] == 'cdl':
             sop = [min(max(c * s + o, 0.0), 1.0) ** p for c, s, o, p in zip(out, op['slope'], op['offset'], op['power'])]
             luma = 0.2126 * sop[0] + 0.7152 * sop[1] + 0.0722 * sop[2]
             out = [min(max(luma + op['saturation'] * (c - luma), 0.0), 1.0) for c in sop]
-    return [a + strength * (b - a) for a, b in zip(x, out)]
+    return [min(max(a + strength * (b - a), 0.0), 1.0) for a, b in zip(x, out)]
+
+
+ROLLOFF = {'type': 'highlight_rolloff', 'knee': 0.8, 'headroom_stops': 1.0, 'mode': 'max-rgb'}
 
 
 @pytest.mark.parametrize('ops,strength', [
@@ -106,13 +140,41 @@ def reference_chain(rgb, ops, strength=1.0):
     ([{'type': 'white_balance', 'gains': [1.2, 1.0, 0.8], 'preserve_luminance': False}], 1.0),
     ([CDL], 1.0),
     ([{'type': 'exposure', 'stops': 0.5}, CDL], 0.4),
+    ([{'type': 'exposure', 'stops': 2}, {**CDL, 'slope': [0.4, 0.45, 0.5]}], 1.0),  # values above 1 reach the CDL
+    ([{'type': 'exposure', 'stops': 1}, ROLLOFF], 1.0),
+    ([{'type': 'exposure', 'stops': 0.7}, {**ROLLOFF, 'mode': 'per-channel', 'knee': 0.6, 'headroom_stops': 3}], 0.7),
 ])
-def test_compiled_chain_matches_independent_reference(tmp_path, ops, strength):
-    spec, luts = cg.normalize(grade(ops, strength))
+@pytest.mark.parametrize('interpretation,transfer', [('bt709-sdr-display', 'bt1886'), ('srgb-sdr-display', 'srgb')])
+def test_compiled_chain_matches_independent_reference(tmp_path, ops, strength, interpretation, transfer):
+    spec, luts = cg.normalize(grade(ops, strength, interpretation=interpretation))
     points = np.random.default_rng(11).random((300, 3))
     got = cg.evaluate(spec, luts, points)
-    expected = np.array([reference_chain(p, ops, strength) for p in points])
+    expected = np.array([reference_chain(p, ops, strength, transfer) for p in points])
     assert np.allclose(got, expected, atol=1e-12)
+
+
+def test_highlight_rolloff_keeps_detail_that_exposure_alone_clips():
+    clip_only = cg.normalize(grade([{'type': 'exposure', 'stops': 1}]))
+    rolled = cg.normalize(grade([{'type': 'exposure', 'stops': 1}, ROLLOFF]))
+    bright = np.linspace(0.75, 1.0, 26)[:, None].repeat(3, axis=1)
+    hard = cg.evaluate(*clip_only, bright)[:, 0]
+    soft = cg.evaluate(*rolled, bright)[:, 0]
+    assert (hard == 1.0).sum() > 15  # most of this ramp clips without the shoulder
+    assert (np.diff(soft) > 0).all() and soft.max() <= 1.0  # strictly increasing: tonal separation kept
+    mid = np.array([[0.3, 0.3, 0.3]])  # below the knee after +1 stop: untouched
+    assert np.allclose(cg.evaluate(*rolled, mid), cg.evaluate(*clip_only, mid))
+    color = [0.9, 0.6, 0.3]  # max-rgb keeps the channel ratios it receives, so hue and saturation hold
+    before = np.array([_to_code(_to_linear(c, 'bt1886') * 2, 'bt1886') for c in color])  # +1 stop, unclamped
+    out = cg.evaluate(*rolled, np.array([color]))[0]
+    assert before.max() > 1.0 and out.max() < 1.0
+    assert np.allclose(out / out.max(), before / before.max(), atol=1e-12)
+    knee, white = 0.8, cg.rolloff_white(ROLLOFF, 'bt1886')
+    assert white == pytest.approx(2 ** (1 / 2.4))
+    assert cg.shoulder(np.array([white]), knee, white)[0] == pytest.approx(1.0)
+    eps = 1e-6  # C1 at the knee: slope 1 on both sides
+    left = (cg.shoulder(np.array([knee]), knee, white) - cg.shoulder(np.array([knee - eps]), knee, white)) / eps
+    right = (cg.shoulder(np.array([knee + eps]), knee, white) - cg.shoulder(np.array([knee]), knee, white)) / eps
+    assert left[0] == pytest.approx(1.0, abs=1e-4) and right[0] == pytest.approx(1.0, abs=1e-4)
 
 
 def test_white_balance_with_luminance_preservation_keeps_gray_luminance():
@@ -176,6 +238,10 @@ def test_embedded_lut_uses_verified_bytes_and_mix(tmp_path, monkeypatch):
     ([{'type': 'hsl', 'bands': {'green': {}}}], None, 'COLOR_GRADE_HSL_BAND_EMPTY: green'),
     ([{'type': 'hsl', 'bands': {'blue': {'hue': 45}}}], None, 'COLOR_GRADE_VALUE_OUT_OF_RANGE: blue.hue'),
     ([{'type': 'hsl', 'bands': {'orange': {'saturation': 2.5}}}], None, 'COLOR_GRADE_VALUE_OUT_OF_RANGE: orange.saturation'),
+    ([{**ROLLOFF, 'knee': 0.4}], None, 'COLOR_GRADE_VALUE_OUT_OF_RANGE: knee'),
+    ([{**ROLLOFF, 'headroom_stops': 0}], None, 'COLOR_GRADE_VALUE_OUT_OF_RANGE: headroom_stops'),
+    ([{**ROLLOFF, 'mode': 'luminance'}], None, 'COLOR_GRADE_ROLLOFF_MODE_UNSUPPORTED'),
+    ([{'type': 'highlight_rolloff', 'knee': 0.8, 'headroom_stops': 1}], None, 'MISSING_FIELDS'),
     ([{'type': 'exposure', 'stops': 1, 'extra': 1}], None, 'UNKNOWN_FIELDS'),
     ([{'type': 'exposure', 'stops': 1}], 1.5, 'COLOR_GRADE_STRENGTH_OUT_OF_RANGE'),
     ([], None, 'COLOR_GRADE_OPS_INVALID'),
@@ -316,6 +382,14 @@ def test_exports_evaluate_identically_in_opencolorio(tmp_path):
     spec, luts = cg.normalize(grade([CDL]))
     analytic = cg.evaluate(spec, luts, points)
     assert np.abs(_ocio_apply(cdl['result']['files']['cc']['path'], points, 'CDL_ASC') - analytic).max() < 1e-4
+    srgb_chain = grade([{'type': 'exposure', 'stops': 0.7},
+                        {'type': 'white_balance', 'gains': [1.05, 1.0, 0.93], 'preserve_luminance': False}, CDL],
+                       interpretation='srgb-sdr-display')
+    srgb = compile_run(tmp_path, srgb_chain, exports=['cube', 'clf'], name='srgb')
+    assert srgb['result']['files']['clf']['mode'] == 'parametric'
+    assert 'monCurveFwd' in Path(srgb['result']['files']['clf']['path']).read_text(encoding='utf-8')
+    spec, luts = cg.normalize(srgb_chain)
+    assert np.abs(_ocio_apply(srgb['result']['files']['clf']['path'], points) - cg.evaluate(spec, luts, points)).max() < 1e-4
     baked = compile_run(tmp_path, grade([CDL], strength=0.6), exports=['cube', 'clf'], name='baked')
     assert baked['result']['files']['clf']['mode'] == 'baked-compiled-cube'
     via_clf = _ocio_apply(baked['result']['files']['clf']['path'], points)
@@ -415,3 +489,30 @@ def test_ten_bit_source_keeps_ten_bit_precision_through_the_lut(tmp_path):
     inside = (columns > 120) & (columns < 880)
     assert inside.sum() > 60
     assert np.abs(np.diff(columns[inside])).max() < 22
+
+
+@needs_media
+def test_srgb_tagged_media_runs_end_to_end_under_the_srgb_interpretation(tmp_path):
+    png = cm.image(tmp_path / 'gray.png', [((100, 100, 100), 1)])
+    video = cm.encode_sdr(png, tmp_path / 'srgb.mp4', seconds=1, transfer='iec61966-2-1')
+    srgb_color = {'space': 'srgb-sdr', 'range': 'limited', 'basis': 'verified-metadata'}
+    compiled = compile_run(tmp_path, grade([{'type': 'exposure', 'stops': 1}], interpretation='srgb-sdr-display'),
+                           size=65, name='compile')
+    refused = lut_apply(tmp_path, video, compiled['result']['files']['cube']['path'], 'as-bt709')
+    assert refused['status'] == 'FAILED' and 'COLOR_METADATA_CONFLICT: color_transfer' in refused['error']
+    applied = lut_apply(tmp_path, video, compiled['result']['files']['cube']['path'], 'apply', input_color=srgb_color)
+    assert applied['status'] == 'SUCCEEDED', applied.get('error')
+    assert applied['result']['output_color']['observed']['color_transfer'] == 'iec61966-2-1'
+    request = {'operation': 'color-profile-scan', 'source': ref(applied['result']['video']['path']), 'start': 0, 'end': 1,
+               'samples': {'mode': 'times', 'times': [0.5]}, 'analysis_size': [48, 32], 'input_color': srgb_color,
+               'palette_colors': 1, 'max_samples': 1}
+    receipt = rt.run(request, tmp_path / 'measure', rt.Tools())
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    assert 'sRGB piecewise EOTF' in receipt['result']['interpretation']
+    stats = receipt['result']['aggregate']
+    expected_code = _to_code(_to_linear(100 / 255, 'srgb') * 2, 'srgb')
+    expected_lab = cn.lab_from_rgb01(np.array([[expected_code] * 3]), 'srgb')[0][0]
+    measured = np.array([stats['lab_mean'][k] for k in 'Lab'])
+    assert float(cn.ciede2000(measured, expected_lab)[0]) < 1.5
+    bt1886_lab = cn.lab_from_rgb01(np.array([[expected_code] * 3]), 'bt1886')[0][0]
+    assert abs(measured[0] - expected_lab[0]) < abs(measured[0] - bt1886_lab[0])  # measured under sRGB, not gamma 2.4

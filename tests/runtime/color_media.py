@@ -67,15 +67,19 @@ def chart(path, columns=6, patch=16):
     return Path(path)
 
 
-def encode_sdr(png, out, *, seconds=1, fps=25, pix_fmt='yuv444p', full_range=False, tags=True):
-    """Near-lossless BT.709 encode of an exact RGB still (qp 0, 4:4:4 by default)."""
+def encode_sdr(png, out, *, seconds=1, fps=25, pix_fmt='yuv444p', full_range=False, tags=True, transfer='bt709'):
+    """Near-lossless BT.709-matrix encode of an exact RGB still (qp 0, 4:4:4 by default).
+
+    transfer only changes the tag ('bt709' or 'iec61966-2-1'); code values pass through unchanged.
+    """
     rng = 'pc' if full_range else 'tv'
-    tagging = (frame_tags(colorspace='bt709', color_primaries='bt709', color_trc='bt709', color_range=rng)
+    tagging = (frame_tags(colorspace='bt709', color_primaries='bt709', color_trc=transfer, color_range=rng)
                if tags else UNTAGGED)
     _run(['-loop', '1', '-framerate', fps, '-t', seconds, '-i', png,
           '-vf', f'scale=out_color_matrix=bt709:out_range={rng},format={pix_fmt},{tagging}',
           '-c:v', 'libx264', '-qp', '0', '-preset', 'ultrafast',
-          *(SDR_TAGS + ['-color_range', rng] if tags else []), out])
+          *(['-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', transfer, '-color_range', rng]
+            if tags else []), out])
     return Path(out)
 
 

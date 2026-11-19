@@ -28,7 +28,10 @@
   - `color-grade-compile` 新增曲线（PCHIP，总曲线先于通道）和 HSL 八色相带（在 CIELAB 中调整，带低色度保护）；含这两种操作时 CLF 导出烘焙 LUT3D。
   - `color-lut-apply` 支持 10 位源，全程 10 位处理和输出；结果新增 `bit_depth`，`video` 新增 `pix_fmt`。
   - `still-image-render` 的色彩标签同时写在帧上，不再只依赖输出端选项。
-  - 新增色彩层真实素材操作记录（docs/color-real-run-20261119.md）。
+  - 新增色彩层真实素材操作记录（docs/color-real-run-20261119.md），含两轮真实照片操作。
+  - 色彩原子接受 sRGB：`color-profile-scan`/`color-lut-apply` 新增 `space: srgb-sdr`，`color-grade-compile` 新增 `interpretation: srgb-sdr-display`，sRGB 的 CLF 用 `monCurve` 精确表示。
+  - 新原子 `still-color-normalize`：按内嵌 ICC 用 LittleCMS 把静图转换为无配置文件的 sRGB PNG，可选应用 EXIF 方向；未标记图片只按调用者声明处理。
+  - `color-grade-compile` 新增 `highlight_rolloff`（max-rgb / per-channel）。链模型调整为曝光与白平衡不在 1 处裁切，CDL、曲线、HSL、LUT 读入时各自钳位，整链输出末端钳位。由于该原子尚未发布，这次调整没有兼容影响。
   - 色彩测试素材改用 `setparams` 在帧上写色彩标签；CI 上的 FFmpeg 没有写入输出端 `-color_trc`/`-color_primaries` 设置的标签，导致测试失败。
 - 兼容性说明：
   - `chat_json` 请求改用 `:schema-json` 意图键，已有工作区重算模型阶段时不会重放旧结果，需要重新 `--allow-remote`；旧键下 UNKNOWN 的发送在核对前会阻止替代请求。
