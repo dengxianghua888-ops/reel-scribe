@@ -84,8 +84,9 @@ def normalize(grade):
     from editing_runtime import exact_keys, require, number
     exact_keys(grade, ['schema', 'id', 'interpretation', 'ops', 'strength'], ['schema', 'id', 'interpretation', 'ops'])
     require(grade['schema'] == SCHEMA, 'COLOR_GRADE_SCHEMA_UNSUPPORTED')
+    # '#' starts a comment in .cube files, so a title containing it could not be read back by color-lut-apply.
     require(isinstance(grade['id'], str) and grade['id'].strip() and len(grade['id']) <= 120
-            and '"' not in grade['id'] and '\n' not in grade['id'], 'COLOR_GRADE_ID_INVALID')
+            and not set(grade['id']) & {'"', '\n', '\r', '#'}, 'COLOR_GRADE_ID_INVALID')
     require(grade['interpretation'] in INTERPRETATIONS, 'COLOR_GRADE_INTERPRETATION_UNSUPPORTED')
     require(isinstance(grade['ops'], list) and 1 <= len(grade['ops']) <= MAX_OPS, 'COLOR_GRADE_OPS_INVALID')
     strength = number(grade.get('strength', 1), 'strength')

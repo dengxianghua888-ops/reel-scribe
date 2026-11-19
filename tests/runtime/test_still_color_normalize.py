@@ -216,6 +216,42 @@ def test_exif_orientation_is_applied_only_on_request(tmp_path):
     assert out[10, 30, 0] > 180 and out[10, 30, 1] < 80  # marker now in the displayed top-right corner
 
 
+def _png16(path, width=8, height=2):
+    """A real 16-bit RGB PNG (Pillow would decode it as an 8-bit RGB image)."""
+    import zlib
+    rows = b''.join(b'\0' + b''.join(struct.pack('>HHH', 65535 * x // (width - 1), 1234, 40000) for x in range(width))
+                    for _ in range(height))
+
+    def chunk(kind, data):
+        return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+    Path(path).write_bytes(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 16, 2, 0, 0, 0))
+                           + chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b''))
+
+
+def test_sixteen_bit_png_is_refused_not_truncated(tmp_path):
+    path = tmp_path / 'deep.png'
+    _png16(path)
+    assert Image.open(path).mode == 'RGB'  # the decoded mode alone would hide the 16-bit encoding
+    receipt = normalize(tmp_path, path, untagged='assume-srgb')
+    assert receipt['status'] == 'FAILED' and 'STILL_NORMALIZE_BIT_DEPTH_UNSUPPORTED: 16-bit PNG' in receipt['error']
+    assert not (tmp_path / 'run' / 'normalized.png').exists()
+
+
+@pytest.mark.parametrize('mode,key,pixel', [('RGB', (255, 0, 255), (40, 90, 140)), ('L', 7, 120)])
+def test_png_color_key_transparency_becomes_alpha(tmp_path, mode, key, pixel):
+    img = Image.new(mode, (4, 2), pixel)
+    img.putpixel((0, 0), key)
+    path = tmp_path / f'key-{mode}.png'
+    img.save(path, transparency=key)
+    receipt = normalize(tmp_path, path, mode, untagged='assume-srgb')
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    out = np.asarray(Image.open(receipt['result']['output']['path']))
+    assert receipt['result']['output']['mode'] == 'RGBA' and receipt['result']['alpha'] == 'copied unchanged'
+    assert out[0, 0, 3] == 0 and (out[..., 3].reshape(-1)[1:] == 255).all()
+    expected = pixel if mode == 'RGB' else (pixel,) * 3
+    assert tuple(out[1, 1, :3]) == expected
+
+
 def test_alpha_is_copied_unchanged(tmp_path):
     codes = chart_codes()[:30]
     rgba = np.concatenate([codes, np.arange(0, 240, 8, dtype=np.uint8)[:len(codes), None]], axis=1)

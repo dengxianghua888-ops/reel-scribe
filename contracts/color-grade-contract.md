@@ -28,7 +28,7 @@
 
 | 字段 | 约束 |
 |---|---|
-| `grade.id` | 1–120 字符，不含引号或换行；写入 cube 标题和交换文件 ID |
+| `grade.id` | 1–120 字符，不含引号、换行或 `#`（`#` 在 .cube 中开始注释，套用时无法读回）；写入 cube 标题和交换文件 ID |
 | `grade.interpretation` | `bt709-sdr-display`（BT.1886 γ2.4）或 `srgb-sdr-display`（IEC 61966-2-1）；决定线性光与 CIELAB 的换算，cube 只应套用到同一传递函数的素材 |
 | `grade.ops` | 1–16 个，按列出顺序执行 |
 | `exposure.stops` | -4 到 4；线性光乘 2^stops |

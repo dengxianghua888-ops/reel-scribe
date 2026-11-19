@@ -11,7 +11,7 @@ description: 把带内嵌ICC配置文件（如Adobe RGB、sRGB）或按调用者
 
 | 字段 | 约束 |
 |---|---|
-| `source` | `{path, sha256}`；单帧 PNG、JPEG 或 WebP，模式为 RGB、RGBA、P、L、LA 或 CMYK，最多 1 亿像素。16 位与浮点图拒绝 |
+| `source` | `{path, sha256}`；单帧 PNG、JPEG 或 WebP，模式为 RGB、RGBA、P、L、LA 或 CMYK，最多 1 亿像素。16 位与浮点图拒绝；PNG 按 IHDR 中编码的位深判断，因为 Pillow 会把 16 位 RGB PNG 解码成 8 位模式 |
 | `target` | 只接受 `srgb` |
 | `rendering_intent` | `relative-colorimetric` 或 `perceptual` |
 | `black_point_compensation` | 布尔值 |
@@ -27,7 +27,7 @@ description: 把带内嵌ICC配置文件（如Adobe RGB、sRGB）或按调用者
    - 其余情况由 `untagged` 决定：`reject` 报 `STILL_NORMALIZE_UNTAGGED_REJECTED`；`assume-srgb` 原样复制码值，回执标为 `caller-declared-srgb`，表示这是调用者的声明，不是验证结果。
 
 **输出**：
-- `normalized.png`：RGB，或保留原 alpha 的 RGBA。不含 ICC 和 EXIF。
+- `normalized.png`：RGB，或保留原 alpha 的 RGBA。PNG 的 tRNS 色键透明（RGB/灰度/调色板）先转换为真实 alpha 再保留，确保 still-image-render 按背景色合成。输出不含 ICC 和 EXIF。
 - `still-color-normalize.json`：记录以下内容：
   - 源格式、模式与尺寸；
   - ICC 描述、色彩空间、设备类别、版本和哈希；

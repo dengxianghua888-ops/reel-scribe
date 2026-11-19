@@ -245,11 +245,20 @@ def test_embedded_lut_uses_verified_bytes_and_mix(tmp_path, monkeypatch):
     ([{'type': 'exposure', 'stops': 1, 'extra': 1}], None, 'UNKNOWN_FIELDS'),
     ([{'type': 'exposure', 'stops': 1}], 1.5, 'COLOR_GRADE_STRENGTH_OUT_OF_RANGE'),
     ([], None, 'COLOR_GRADE_OPS_INVALID'),
+    ([{'type': 'exposure', 'stops': 1}], None, 'COLOR_GRADE_ID_INVALID'),  # id 'look#1' below
 ])
 def test_grade_validation(tmp_path, ops, strength, error):
-    receipt = compile_run(tmp_path, grade(ops, strength))
+    gid = 'look#1' if error == 'COLOR_GRADE_ID_INVALID' else 'fixture'
+    receipt = compile_run(tmp_path, grade(ops, strength, gid=gid))
     assert receipt['status'] == 'FAILED' and error in receipt['error']
     assert not (tmp_path / 'run' / 'grade.cube').exists()
+
+
+def test_cube_titles_round_trip_through_the_parser_used_by_lut_apply():
+    with pytest.raises(ContractError, match='LUT_TITLE_INVALID'):
+        cn.cube_text(cn.identity_table(2), 'look#1')  # '#' starts a comment when the cube is read back
+    info, rows = cn.parse_cube_text(cn.cube_text(cn.identity_table(2), 'warm look v2 (s=0.6)'))
+    assert info['size'] == 2 and len(rows) == 8
 
 
 def test_cdl_export_only_when_exactly_representable(tmp_path):

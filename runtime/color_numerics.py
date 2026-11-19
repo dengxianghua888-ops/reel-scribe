@@ -210,7 +210,7 @@ def cube_text(table, title):
     size = table.shape[0]
     require(table.shape == (size, size, size, 3) and 2 <= size <= 65, 'LUT_SIZE_UNSUPPORTED')
     require(bool(np.isfinite(table).all()), 'LUT_VALUE_NONFINITE')
-    require('"' not in title and '\n' not in title, 'LUT_TITLE_INVALID')
+    require(not set(title) & {'"', '\n', '\r', '#'}, 'LUT_TITLE_INVALID')  # '#' would start a comment on read
     values = np.clip(table, 0.0, 1.0).transpose(2, 1, 0, 3).reshape(-1, 3)
     lines = [f'TITLE "{title}"', f'LUT_3D_SIZE {size}', 'DOMAIN_MIN 0.0 0.0 0.0', 'DOMAIN_MAX 1.0 1.0 1.0']
     lines += ['%.6f %.6f %.6f' % tuple(row) for row in values]

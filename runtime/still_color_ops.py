@@ -43,6 +43,9 @@ def normalize_still(request, directory, tools):
         payload = stream.read(MAX_STILL_BYTES + 1)
     require(len(payload) <= MAX_STILL_BYTES, 'STILL_FILE_TOO_LARGE')
     require(hashlib.sha256(payload).hexdigest() == asset['sha256'], 'SOURCE_HASH_MISMATCH: ' + asset['path'])
+    if payload[:8] == b'\x89PNG\r\n\x1a\n' and payload[12:16] == b'IHDR':
+        # Pillow decodes 16-bit RGB(A) PNGs as 8-bit modes, so the encoded depth is read from IHDR.
+        require(payload[24] <= 8, 'STILL_NORMALIZE_BIT_DEPTH_UNSUPPORTED: %d-bit PNG' % payload[24])
     with Image.open(io.BytesIO(payload)) as opened:
         require(opened.format in ['PNG', 'JPEG', 'WEBP'], 'STILL_FORMAT_UNSUPPORTED')
         require(getattr(opened, 'n_frames', 1) == 1, 'ANIMATED_IMAGE_UNSUPPORTED')
@@ -61,6 +64,8 @@ def normalize_still(request, directory, tools):
             image = opened.copy()
     if image.mode == 'P':
         image = image.convert('RGBA' if 'transparency' in image.info else 'RGB')
+    elif image.mode in ('RGB', 'L') and 'transparency' in image.info:  # PNG tRNS color key -> real alpha
+        image = image.convert({'RGB': 'RGBA', 'L': 'LA'}[image.mode])
     alpha = image.getchannel('A') if image.mode in ('RGBA', 'LA') else None
     base = image.convert({'RGBA': 'RGB', 'LA': 'L'}.get(image.mode, image.mode))
     intent = request['rendering_intent']
