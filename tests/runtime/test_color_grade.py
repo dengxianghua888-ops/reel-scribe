@@ -571,6 +571,20 @@ def test_layer_strength_is_applied_once_in_the_readback_prediction(tmp_path):
     assert abs(measured.mean() - (48 + 0.5 * (255 - 2 * 48))) < 3, measured
 
 
+def test_layer_readback_predicts_with_the_requested_interpolation(tmp_path):
+    png = cm.image(tmp_path / 'mid.png', [((128, 128, 128), 1)])
+    video = cm.encode_sdr(png, tmp_path / 'mid.mp4', seconds=1)
+    corner = np.zeros((2, 2, 2, 3))
+    corner[1, 1, 1] = 1.0  # non-affine: mid-gray is ~0.125 trilinear but ~0.5 tetrahedral
+    cube = tmp_path / 'corner.cube'
+    cube.write_text(cn.cube_text(corner, 'corner'), encoding='utf-8')
+    receipt = lut_apply(tmp_path, video, None, 'trilinear', interpolation='trilinear',
+                        layers=[{'lut': ref(cube), 'ranges': [[0, 25]]}])
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    measured = _rgb_at(receipt['result']['video']['path'], [12])[0]
+    assert measured.mean() < 64, measured  # trilinear, not the tetrahedral ~128
+
+
 def test_readback_grades_unaveraged_pixels_of_wide_fine_detail(tmp_path):
     from PIL import Image
     stripes = np.zeros((64, 512, 3), dtype=np.uint8)

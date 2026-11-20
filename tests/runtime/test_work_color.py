@@ -436,3 +436,43 @@ def test_cue_recipe_carries_grades_unchanged_and_color_recipe_carries_cues(work)
     with pytest.raises(rt.ContractError, match='CUE_RECIPE_UNSELECTED_OVERRIDE_CHANGED'):
         cue_compile(work, candidate, {'caption_overrides': {'cue': {'font_size': 30}}, 'color_grade': {'look': look}},
                     ['color-grade'], scope(grade_ids=['look'], style_keys=['*']), 'grade-changes-cue')
+
+
+def test_color_recipe_carrying_cues_must_keep_the_whole_bound_cue_mapping(work):
+    look = {'targets': '*', **UP}
+    doc = captioned(work, with_color(work['doc'], grades={'look': look}))
+    doc['captions']['other'] = {'clip_id': 'b', 'start': 0, 'end': 0.5, 'text': 'other'}
+    overrides = {'cue': {'font_size': 28}, 'other': {'color_rgb': 'FF0000'}}
+    for cid, value in overrides.items():
+        doc['captions'][cid]['style_override'] = dict(value)
+    prior = recipe(work, 1, 'prior')
+    doc['style_bindings'] = {'*': {**copy.deepcopy(prior['style']), 'parameters': {
+        'recipe_id': 'look', 'recipe_version': 'prior', 'recipe_sha256': 'a' * 64,
+        'presentation': {'caption_overrides': copy.deepcopy(overrides), 'color_grade': {'look': look}},
+        'layout_constraints': {'fixture': 'declared'}}}}
+    changed = {**look, 'ops': [{'type': 'exposure', 'stops': -1}]}
+    grade_scope = scope(grade_ids=['look'], style_keys=['*'])
+    with pytest.raises(rt.ContractError, match='CUE_RECIPE_BINDING_PARAMETERS_DROPPED'):
+        cue_compile(work, doc, {'caption_overrides': {'cue': {'font_size': 28}}, 'color_grade': {'look': changed}},
+                    ['color-grade'], grade_scope, 'drops-a-cue')
+    with pytest.raises(rt.ContractError, match='CUE_RECIPE_CONSTRAINTS_MUST_PERSIST'):
+        cue_compile(work, doc, {'caption_overrides': copy.deepcopy(overrides), 'color_grade': {'look': changed}},
+                    ['color-grade'], grade_scope, 'drops-constraints')
+
+
+def test_new_recipe_grades_get_a_deterministic_order(work):
+    import style_recipe_ops
+    doc = inputs_only(work)
+    orders = []
+    for names in (['z-dark', 'a-bright'], ['a-bright', 'z-dark']):
+        value = recipe(work, 1, 'two')
+        value['parameters']['color_grade'] = {name: {'targets': '*', 'interpretation': 'bt709-sdr-display', 'lut_size': 33,
+                                                     'ops': [{'type': 'exposure', 'stops': 4 if name == 'a-bright' else -4}]}
+                                              for name in names}
+        folder = work['root'] / f'order-{names[0]}'
+        folder.mkdir()
+        style_recipe_ops.execute({'operation': 'style-recipe-compile', 'base_version': '0' * 64, 'document': doc,
+            'expected_document_sha256': rt.fingerprint(doc), 'recipe': value, 'expected_recipe_sha256': rt.fingerprint(value),
+            'capabilities': ['color-grade'], 'scope': scope(grade_ids=names, style_keys=['*'])}, folder, work['tools'])
+        orders.append(json.loads((folder / 'candidate.json').read_text())['document']['color']['order'])
+    assert orders == [['a-bright', 'z-dark'], ['a-bright', 'z-dark']]

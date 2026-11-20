@@ -80,4 +80,4 @@
 
 局部撤销须显式 binding_resolution，派生新配方并保留其它映射和布局。原先缺省包络时恢复缺省并移除对应配方映射，不用 null 冒充无包络；若派生配方完全为空仍拒绝。后改非映射 gain/notes 保留；同字段冲突、源/锚点变化及 scope 不足拒绝。仅删除实际包络但保留原映射也拒绝，不留下失真风格声明。
 
-`parameters.color_grade` 为非空 `{调色层ID: {targets, interpretation, ops, strength?, lut_size}}`，能力 `color-grade`。字段与校验同[作品调色合同](work-color-contract.md)；作品必须已声明 `color.inputs`，配方不能声明或改写素材的色彩解释。新调色层追加到 `order` 末尾。范围需列出 `grade_ids` 与 `style_keys:["*"]`。逐条字幕模式只能原样携带调色层；调色配方可以原样携带已绑定的逐条字幕覆盖。编译结果仍是 `style_effect: NOT_VERIFIED`：映射不证明调色符合风格卡的意图。
+`parameters.color_grade` 为非空 `{调色层ID: {targets, interpretation, ops, strength?, lut_size}}`，能力 `color-grade`。字段与校验同[作品调色合同](work-color-contract.md)；作品必须已声明 `color.inputs`，配方不能声明或改写素材的色彩解释。新调色层按 ID 排序后追加到 `order` 末尾（配方摘要不含键顺序）。范围需列出 `grade_ids` 与 `style_keys:["*"]`。逐条字幕模式只能原样携带调色层；调色配方可以原样携带已绑定的逐条字幕覆盖，但必须携带绑定中的全部覆盖及原排版约束。编译结果仍是 `style_effect: NOT_VERIFIED`：映射不证明调色符合风格卡的意图。

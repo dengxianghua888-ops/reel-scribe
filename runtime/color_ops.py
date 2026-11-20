@@ -55,7 +55,7 @@ def _rgb_frames(path,indices,width,height,rng,tools):
     return [raw[k*size:(k+1)*size] for k in range(len(indices))]
 
 
-def _readback(source_path,output_path,layers,frames,video,color,tools):
+def _readback(source_path,output_path,layers,frames,video,color,method,tools):
     """Compare decoded output frames with the numpy prediction of the active layers on the source frame."""
     from editing_runtime import require
     from color_numerics import numpy,interpolate,lab_from_rgb01,ciede2000
@@ -87,13 +87,13 @@ def _readback(source_path,output_path,layers,frames,video,color,tools):
         predicted=x
         active=[li for li,layer in enumerate(layers) if any(a<=f<b for a,b in layer['ranges'])]
         for li in active:  # the stored table already includes the layer strength
-            predicted=np.clip(interpolate(layers[li]['table'],predicted,'tetrahedral'),0,1)
+            predicted=np.clip(interpolate(layers[li]['table'],predicted,method),0,1)
         de=ciede2000(lab_from_rgb01(predicted,transfer)[0],lab_from_rgb01(y,transfer)[0])
         median=float(np.median(de))
         rows.append({'frame':f,'active_layers':active,'delta_e2000_median':round(median,3),
                      'delta_e2000_p95':round(float(np.percentile(de,95)),3)})
         require(median<=READBACK_MAX_MEDIAN_DE2000,'COLOR_LAYER_READBACK_MISMATCH: frame %d'%f)
-    return {'method':'point-sampled decoded output pixels vs numpy tetrahedral prediction of the active layers on the same source pixels',
+    return {'method':'point-sampled decoded output pixels vs numpy %s prediction of the active layers on the same source pixels'%method,
             'analysis_size':[width,height],'max_median_delta_e2000':READBACK_MAX_MEDIAN_DE2000,'frames':rows,
             'coverage':'middle frame of each range (capped at %d) plus one frame outside every range'%MAX_READBACK_FRAMES}
 
@@ -215,7 +215,7 @@ def apply_lut(request,directory,tools):
         audio_checks.append({'index':i,'coded_sha256':before_hash,'format_preserved':True})
     # Requested output tags and actual ffprobe observations are different evidence.
     # Missing transfer/primaries fields stay unknown, even after explicitly setting tags.
-    readback=_readback(asset['path'],output,layers,len(times),video,color,tools) if layered else None
+    readback=_readback(asset['path'],output,layers,len(times),video,color,request['interpolation'],tools) if layered else None
     result={'schema':'color-lut-apply/1','source':asset,'input_color':color,'interpolation':interpolation,
             **({'lut':lut,'cube':cube} if not layered else {}),
             'video':{'path':str(output),'sha256':sha256(output),'pix_fmt':out_fmt},

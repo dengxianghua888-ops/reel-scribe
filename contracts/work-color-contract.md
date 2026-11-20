@@ -32,7 +32,7 @@ color: {
 `work-render` 的步骤为：时间线 → **调色** → 混音 → 叠层 → 字幕 → QC。
 - 字幕和叠层在调色之后合成，因此不会被调色。
 - 每个调色层先用 `color-grade-compile` 编译成 cube，然后由一次 `color-lut-apply`（`layers` 模式）按各层目标片段的输出帧区间依次套用。层与层之间保持 32 位浮点 RGB，区间外的帧只重编码。
-- `color-lut-apply` 在每个区间的中间帧，以及一帧不在任何区间内的帧上读回解码结果。读回按固定分析尺寸逐点取样、不做平均，与 numpy 对同一批源像素的预测比较（ΔE2000 中位数不超过 3，否则失败）。
+- `color-lut-apply` 在每个区间的中间帧，以及一帧不在任何区间内的帧上读回解码结果。读回按固定分析尺寸逐点取样、不做平均，用请求的插值方式对同一批源像素做 numpy 预测并比较（ΔE2000 中位数不超过 3，否则失败）。
 - 回执记录每层的片段、帧区间和编译后的 cube 哈希。
 - 时间线本身不受调色影响。目前 A/B 预览的每个变体仍各自渲染时间线，还没有复用。
 
@@ -70,10 +70,10 @@ color: {
 
 `style-recipe-compile` 新增参数组 `parameters.color_grade: {grade_id: {targets, interpretation, ops, strength?, lut_size}}`，能力名 `color-grade`：
 
-- 只写入 `color.grades` 中列出的调色层，新层追加到 `order` 末尾，已有层保持原位置。
+- 只写入 `color.grades` 中列出的调色层，已有层保持原位置。新层按调色层 ID 排序后追加到 `order` 末尾：配方摘要不含 JSON 对象的键顺序，按字典顺序追加会让同一份配方产生不同的叠加顺序。需要别的顺序时，编译后再用 `timeline-revise` 调整 `order`。
 - 作品必须已有 `color` 段（`EXISTING_COLOR_INPUTS_REQUIRED`）。素材的色彩解释是关于素材的事实，不属于风格选择，配方不能声明或改写 `inputs`。
 - 范围仍需显式授权：调色层列入 `grade_ids`，绑定需要 `style_keys: ["*"]`。
-- 逐条字幕（cue）模式下，配方可以原样携带已有调色层，但任何改动都以 `CUE_RECIPE_GLOBAL_CHANGE_FORBIDDEN` 拒绝；反过来，调色配方可以原样携带已绑定的逐条字幕覆盖，改动则以 `CUE_RECIPE_UNSELECTED_OVERRIDE_CHANGED` 拒绝。
+- 逐条字幕（cue）模式下，配方可以原样携带已有调色层，但任何改动都以 `CUE_RECIPE_GLOBAL_CHANGE_FORBIDDEN` 拒绝；反过来，调色配方可以原样携带已绑定的逐条字幕覆盖，但必须完整携带：与绑定中的覆盖集合不同报 `CUE_RECIPE_BINDING_PARAMETERS_DROPPED`，排版约束不一致报 `CUE_RECIPE_CONSTRAINTS_MUST_PERSIST`，改动值报 `CUE_RECIPE_UNSELECTED_OVERRIDE_CHANGED`。
 - `style-recipe-preview` 直接复用这一参数组：2–4 个调色变体各自编译为候选，经批量渲染生成预览，作品头不变。这就是调色 A/B 预览，代码不评判哪个更好。
 
 绑定了配方的作品做调色局部撤销，仍需显式的 `binding_resolution`。规则同[作品合同](work-contract.md)：当前作品中所有已映射的调色层必须与原配方一致，否则以 `UNDO_BINDING_ALREADY_DIVERGED` 拒绝；所选字段必须已在配方中映射；派生配方只改所选字段及显式给出的新 ID/版本。
