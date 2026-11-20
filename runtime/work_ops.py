@@ -109,12 +109,13 @@ def revision_diff(base,candidate,scope,tools):
     from editing_runtime import exact_keys,require,fingerprint
     fields=['clip_ids','source_ids','caption_ids','audio_ids','style_keys','note_keys','output_fields','caption_style',
             'freeze_positions','freeze_duration']
-    exact_keys(scope,fields+['visual_ids','evidence_mapping','grade_ids','color_inputs'],fields)
+    exact_keys(scope,fields+['visual_ids','evidence_mapping','grade_ids','color_inputs','color_checks'],fields)
     scope={**scope,'visual_ids':scope.get('visual_ids',[]),'evidence_mapping':scope.get('evidence_mapping',False),
-           'grade_ids':scope.get('grade_ids',[]),'color_inputs':scope.get('color_inputs',False)}
-    fields=fields+['visual_ids','evidence_mapping','grade_ids','color_inputs']
+           'grade_ids':scope.get('grade_ids',[]),'color_inputs':scope.get('color_inputs',False),
+           'color_checks':scope.get('color_checks',False)}
+    fields=fields+['visual_ids','evidence_mapping','grade_ids','color_inputs','color_checks']
     for k in fields:
-        if k in ['caption_style','freeze_duration','evidence_mapping','color_inputs']:
+        if k in ['caption_style','freeze_duration','evidence_mapping','color_inputs','color_checks']:
             require(type(scope[k]) is bool,'BOOLEAN_SCOPE_REQUIRED: '+k)
         else:
             require(isinstance(scope[k],list) and all(isinstance(x,str) for x in scope[k]) and len(set(scope[k]))==len(scope[k]),'ID_SCOPE_REQUIRED: '+k)
@@ -564,7 +565,7 @@ def _render_document_bound(document,directory,tools,*,work_version,audio_backend
                                'sha256':sha256(directory/'timeline/receipt.json'),
                                'execution':'REUSED_VERIFIED_NOT_EXECUTED'})
     current=directory/'timeline/preview.mp4'
-    graded=[]
+    graded=[];color_check=None
     if 'color' in doc:
         # Grade picture only: after the timeline, before audio mix, visual layers and captions.
         from work_color import validate as validate_color
@@ -587,9 +588,19 @@ def _render_document_bound(document,directory,tools,*,work_version,audio_backend
             invoke({'operation':'color-lut-apply','source':{'path':str(current),'sha256':sha256(current)},
                     'input_color':{'space':space,'range':'limited','basis':'caller-declared'},
                     'interpolation':'tetrahedral','layers':layers},'color')
+            reference=directory/'timeline/preview.mp4'
             current=directory/'color/graded.mp4'
             for row in graded:
                 row['pipeline_transfer_tag']=tag or 'unknown'
+            # Gate before mixing and overlays: compare the same frames before and after grading.
+            from work_color import check_request
+            invoke(check_request(doc,norm,{'path':str(reference),'sha256':sha256(reference)},
+                                 {'path':str(current),'sha256':sha256(current)},space),'color-check')
+            report=json.loads((directory/'color-check/color-consistency.json').read_text(encoding='utf-8'))
+            require(report['gate']!='FAILED','WORK_COLOR_CHECK_FAILED: '+'; '.join(report['failures']))
+            color_check={'gate':report['gate'],'failures':report['failures'],'flags':report['flags'],
+                         'report':{'path':str(directory/'color-check/color-consistency.json'),
+                                   'sha256':sha256(directory/'color-check/color-consistency.json')}}
     if tracks:
         invoke({'operation':'audio-mix','source':{'path':str(current),'sha256':sha256(current)},'base_gain_db':0,'tracks':tracks},'audio')
         current=directory/'audio/mixed.mp4'
@@ -616,6 +627,7 @@ def _render_document_bound(document,directory,tools,*,work_version,audio_backend
             'child_receipts':child_receipts,
             **({'timeline_reuse':shared[0]} if shared is not None else {}),
             **({'color_grades':graded,'color_order':'after timeline, before audio mix, visual layers and captions'} if graded else {}),
+            **({'color_check':color_check} if color_check is not None else {}),
             'layer_counts':{'audio_tracks':len(tracks),'visual_layers':len(visual),'captions':len(cues),'color_grades':len(graded)}}
 
 
@@ -666,6 +678,7 @@ def work_render(request,directory,tools):
             'style_application':'explicit document operations only; bindings are not automatic effects',
             'content_review':'NOT_RUN','listening_review':'NOT_RUN','native_editor_acceptance':'NOT_RUN'}
     if 'timeline_reuse' in rendered:result['timeline_reuse']=rendered['timeline_reuse']
+    if 'color_check' in rendered:result['color_check']=rendered['color_check']
     if preview:
         result.update(preview_status='CANDIDATE_PREVIEW_NOT_COMMITTED',
                       preview_candidate=candidate_ref,

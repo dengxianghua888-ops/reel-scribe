@@ -13,7 +13,7 @@ description: 渲染本地作品库的指定版本，将已明确的片段、锚�
 
 render-binding.json 绑定作品 ID、版本、文档哈希和视频哈希；rendered-document.json 保存被消费状态，output-captions.json 保存实际字幕映射。style_bindings 仅记录已采用卡与参数，实际效果必须写入剪辑/音轨/字幕等字段，不能靠换 style_id 就声称已换风格。
 
-当前支持一条拼接主画面、片段增益、作品调色段（时间线之后按片段帧区间分层套用，见[作品调色合同](../../contracts/work-color-contract.md)）、已有音频、显式静态矩形视频叠层和字幕烧录；调色在叠层与字幕之前，叠层在字幕之前渲染，映射写入output-visual-layers.json。见[叠层合同](../../contracts/visual-layer-contract.md)。不支持NLE特效、跟踪或动态风格执行。输出技术通过仍为 DEGRADED，复杂层需完成内容、画面和听检。
+当前支持一条拼接主画面、片段增益、作品调色段（时间线之后按片段帧区间分层套用，随后用 color-consistency-check 比较调色前后的画面，声明的保护项或上限被破坏时中止，见[作品调色合同](../../contracts/work-color-contract.md)）、已有音频、显式静态矩形视频叠层和字幕烧录；调色在叠层与字幕之前，叠层在字幕之前渲染，映射写入output-visual-layers.json。见[叠层合同](../../contracts/visual-layer-contract.md)。不支持NLE特效、跟踪或动态风格执行。输出技术通过仍为 DEGRADED，复杂层需完成内容、画面和听检。
 
 ## 不提交的完整候选预览
 

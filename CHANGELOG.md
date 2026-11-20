@@ -33,6 +33,7 @@
   - 色彩层 C2a：WorkDocument 新增可选 `color` 段（`work-color/1`：输入解释、调色层、目标片段、顺序），修订范围新增 `grade_ids`、`color_inputs`，调色层覆盖的源内容变化须复核；`work-render` 在时间线之后、混音/叠层/字幕之前按片段帧区间调色；`color-lut-apply` 新增 `layers` 模式（多层 LUT 按帧区间叠加、32 位浮点、逐区间读回）。
   - 色彩层 C2b：`prepare-local-undo` 支持单独撤销某个调色层的一个字段；`style-recipe-compile` 新增 `color_grade` 参数组（能力 `color-grade`），`style-recipe-preview` 因此可做调色 A/B 预览；`revision-impact-inspect` 新增 `color-grade` 阶段，调色变化只要求重做调色和渲染。
   - C2a 评审修复：分层套用的读回预测不再重复叠加层强度（原先按 s² 预测，正确输出会被判失败）；读回改为逐点取样，不再先平均再套 LUT；调色层覆盖内容按片段 ID 比较，互换片段顺序不再误报需要复核；读回按请求的插值方式预测（原先固定用四面体）。
+  - 色彩层 C2c：新原子 `color-consistency-check` 比较同一时间线调色前后的画面，按调用者声明的保护项（色相范围可限定区域，或纯区域）和上限（闪烁、剪切、漂移、有限范围外亮度）形成门禁；作品 `color` 段新增 `protections`、`limits` 与范围键 `color_checks`，`work-render` 在调色之后运行检查，`FAILED` 时中止。
   - 修复逐条字幕配方会顺带改写调色层：cue 模式下配方里的调色层必须与作品一致，否则 `CUE_RECIPE_GLOBAL_CHANGE_FORBIDDEN`。调色配方携带已绑定的逐条字幕覆盖时必须完整携带并保留排版约束；配方一次新增多个调色层时按 ID 顺序追加。
   - 修复 `visual-layer-render` 彩色叠层偏色：不透明度改为直接缩放 alpha，叠层全程保持 BT.709 YUVA，不再经过矩阵不一致的 RGB 往返。
   - 新原子 `still-color-normalize`：按内嵌 ICC 用 LittleCMS 把静图转换为无配置文件的 sRGB PNG，可选应用 EXIF 方向；未标记图片只按调用者声明处理。

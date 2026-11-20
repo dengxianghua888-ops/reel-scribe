@@ -448,6 +448,13 @@
       ]
     },
     {
+      "id": "color-consistency-check",
+      "layer": "atomic",
+      "entry": "atomic/color-consistency-check/SKILL.md",
+      "description": "比较同一时间线调色前后的视频：按调用者声明的色相范围或区域测量保护项的CIEDE2000偏差，并报告逐段闪烁、剪切、合法范围与相邻段漂移，只在声明了阈值或保护项时形成门禁；不评价好看、不识别肤色或人脸、不把颜色推向目标。",
+      "status": "local-synthetic-tested"
+    },
+    {
       "id": "color-grade-compile",
       "layer": "atomic",
       "entry": "atomic/color-grade-compile/SKILL.md",

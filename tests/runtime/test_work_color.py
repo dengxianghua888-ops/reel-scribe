@@ -476,3 +476,70 @@ def test_new_recipe_grades_get_a_deterministic_order(work):
             'capabilities': ['color-grade'], 'scope': scope(grade_ids=names, style_keys=['*'])}, folder, work['tools'])
         orders.append(json.loads((folder / 'candidate.json').read_text())['document']['color']['order'])
     assert orders == [['a-bright', 'z-dark'], ['a-bright', 'z-dark']]
+
+
+# C2c: protections and limits gate the render after the color step.
+BOX_B = {'kind': 'region', 'targets': ['b'], 'box': [0.1, 0.1, 0.9, 0.9], 'max_median_delta_e2000': 2.0, 'action': 'fail'}
+
+
+def render_store(work, doc, name):
+    store, state = init_store(work, doc, name)
+    receipt = rt.run({'operation': 'work-render', 'store': str(store), 'expected_version': state['version']},
+                     work['root'] / f'render-{name}', work['tools'])
+    return receipt
+
+
+def test_render_gate_keeps_unchanged_protections_and_blocks_violated_ones(work):
+    kept = with_color(work['doc'])
+    kept['color']['protections'] = {'a-box': {**BOX_B, 'targets': ['a']}}  # clip a is not graded
+    receipt = render_store(work, kept, 'kept')
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    check = receipt['result']['color_check']
+    assert check['gate'] == 'PASSED' and check['failures'] == []
+    children = [c['operation'] for c in receipt['result']['source_consumption']['child_receipts']]
+    assert children.index('color-lut-apply') < children.index('color-consistency-check') < children.index('media-qc')
+    report = json.loads(Path(check['report']['path']).read_text())
+    assert [s['id'] for s in report['segments']] == ['a', 'b'] and report['protections']['a-box']['status'] == 'KEPT'
+    violated = with_color(work['doc'])
+    violated['color']['protections'] = {'b-box': BOX_B}  # clip b gets +1 stop
+    receipt = render_store(work, violated, 'violated')
+    assert receipt['status'] == 'FAILED' and 'WORK_COLOR_CHECK_FAILED: protection b-box violated' in receipt['error']
+    flagged = copy.deepcopy(violated)
+    flagged['color']['protections']['b-box']['action'] = 'flag'
+    flagged['color']['limits'] = {'max_clip_increase': 0.5}
+    receipt = render_store(work, flagged, 'flagged')
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    assert receipt['result']['color_check']['gate'] == 'FLAGGED'
+    assert receipt['result']['color_check']['flags'] == ['protection b-box violated']
+
+
+@pytest.mark.parametrize('change,error', [
+    (lambda c: c.update(protections={'p': {**BOX_B, 'targets': ['missing']}}), 'WORK_COLOR_TARGET_MISSING'),
+    (lambda c: c.update(protections={'p': {**BOX_B, 'targets': '*'}}, inputs={}, grades={}, order=[]),
+     'WORK_COLOR_INPUT_DECLARATION_REQUIRED'),
+    (lambda c: c.update(protections={'p': {k: v for k, v in BOX_B.items() if k != 'targets'}}),
+     'WORK_COLOR_PROTECTION_TARGETS_REQUIRED'),
+    (lambda c: c.update(protections={'p': {**BOX_B, 'kind': 'skin'}}), 'COLOR_CHECK_PROTECTION_KIND_UNSUPPORTED'),
+    (lambda c: c.update(protections={'p': {**BOX_B, 'box': [0.5, 0, 0.4, 1]}}), 'COLOR_CHECK_REGION_BOX_INVALID'),
+    (lambda c: c.update(limits={'max_banding': 1}), 'max_banding'),
+])
+def test_protection_and_limit_validation(work, change, error):
+    doc = with_color(work['doc'])
+    change(doc['color'])
+    with pytest.raises(rt.ContractError, match=error):
+        work_ops.validate_document(doc, work['tools'])
+
+
+def test_changing_checks_needs_its_own_scope_and_only_reruns_color_and_render(work):
+    import revision_impact
+    base = with_color(work['doc'])
+    assert diff(work, work['doc'], base, scope(grade_ids=['up'], color_inputs=True))['color_checks_changed'] is False
+    protected = copy.deepcopy(base)
+    protected['color']['protections'] = {'b-box': BOX_B}
+    with pytest.raises(rt.ContractError, match='OUTSIDE_SCOPE: color.protections or color.limits'):
+        diff(work, base, protected, scope(grade_ids=['up']))
+    authorized = scope(color_checks=True)
+    assert diff(work, base, protected, authorized)['color_checks_changed'] is True
+    report = revision_impact.analyze(base, protected, authorized, work['tools'], expected_base_sha256=rt.fingerprint(base),
+                                     expected_candidate_sha256=rt.fingerprint(protected))
+    assert report['classification'] == ['color-checks'] and report['required_stages'] == ['color-grade', 'render']

@@ -1239,6 +1239,9 @@ def execute(request, directory, tools):
     if op == 'still-color-normalize':
         from still_color_ops import normalize_still
         return normalize_still(request, directory, tools)
+    if op == 'color-consistency-check':
+        from color_check_ops import check
+        return check(request, directory, tools)
     if op == 'color-lut-apply':
         from color_ops import apply_lut
         return apply_lut(request,directory,tools)

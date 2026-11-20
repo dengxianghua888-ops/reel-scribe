@@ -68,6 +68,7 @@ ATOMIC_REQUIREMENTS = {
     'color-grade-compile': ('numpy',),
     'still-image-render': ('ffmpeg', 'ffprobe', 'Pillow'),
     'still-color-normalize': ('Pillow', 'numpy'),
+    'color-consistency-check': ('ffmpeg', 'ffprobe', 'numpy'),
     'localization-plan-compile': ('ffprobe',),
     'work-variant-create': ('sqlite', 'ffprobe', 'fcntl'),
     'work-batch-render': ('sqlite', 'fcntl'),

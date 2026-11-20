@@ -3,7 +3,9 @@
 Grades are explicit parameters; this module chooses no look and judges nothing.
 Rendering compiles each grade with color-grade-compile and applies all of them
 after the timeline (before audio mix, visual layers and captions) with
-color-lut-apply layers, so captions and overlays are never graded.
+color-lut-apply layers, so captions and overlays are never graded. Then
+color-consistency-check compares the timeline and the graded picture; optional
+caller-declared protections and limits turn that comparison into a gate.
 """
 from fractions import Fraction
 
@@ -11,6 +13,7 @@ SCHEMA = 'work-color/1'
 SPACES = ('bt709-sdr', 'srgb-sdr')
 SPACE_INTERPRETATION = {'bt709-sdr': 'bt709-sdr-display', 'srgb-sdr': 'srgb-sdr-display'}
 MAX_GRADES = 16
+MAX_CHECK_FRAMES = 512
 
 
 def lut_references(document):
@@ -79,7 +82,7 @@ def validate(doc, norm, tools):
     from editing_runtime import exact_keys, require
     from color_grade_ops import normalize, LUT_SIZES
     color = doc['color']
-    exact_keys(color, ['schema', 'inputs', 'grades', 'order'], ['schema', 'inputs', 'grades', 'order'])
+    exact_keys(color, ['schema', 'inputs', 'grades', 'order', 'protections', 'limits'], ['schema', 'inputs', 'grades', 'order'])
     require(color['schema'] == SCHEMA, 'WORK_COLOR_SCHEMA_UNSUPPORTED')
     require(isinstance(color['inputs'], dict) and isinstance(color['grades'], dict), 'WORK_COLOR_ID_MAP_REQUIRED')
     require(len(color['grades']) <= MAX_GRADES, 'WORK_COLOR_TOO_MANY_GRADES')
@@ -113,7 +116,56 @@ def validate(doc, norm, tools):
                     'WORK_COLOR_INTERPRETATION_MISMATCH: grade %s, clip %s' % (gid, cid))
         planned.append({'id': gid, 'spec': spec, 'lut_size': grade['lut_size'], 'clip_ids': ids,
                         'ranges': frame_ranges(norm, set(ids))})
+    _checks(color, norm)
     return planned
+
+
+def _checks(color, norm):
+    """Validate optional protections and limits; return (protections keyed to clip IDs, limits)."""
+    from editing_runtime import exact_keys, require
+    from color_check_ops import _protections, _limits
+    clips = {c['id']: c for c in norm['clips']}
+    value = color.get('protections', {})
+    require(isinstance(value, dict), 'WORK_COLOR_PROTECTIONS_INVALID')
+    shaped = {}
+    for pid, spec in value.items():
+        require(isinstance(spec, dict) and 'targets' in spec, 'WORK_COLOR_PROTECTION_TARGETS_REQUIRED: ' + str(pid))
+        exact_keys(spec, ['kind', 'targets', 'hue_degrees', 'min_chroma', 'box', 'max_median_delta_e2000', 'action'])
+        targets = spec['targets']
+        require(targets == '*' or (isinstance(targets, list) and targets and len(set(targets)) == len(targets)
+                                   and all(isinstance(t, str) for t in targets)), 'WORK_COLOR_TARGETS_INVALID: ' + pid)
+        require(targets == '*' or all(t in clips for t in targets), 'WORK_COLOR_TARGET_MISSING: ' + pid)
+        ids = [c['id'] for c in norm['clips']] if targets == '*' else list(targets)
+        for cid in ids:
+            sid = clips[cid]['source_id']
+            require(sid in color['inputs'], 'WORK_COLOR_INPUT_DECLARATION_REQUIRED: %s (clip %s)' % (sid, cid))
+        shaped[pid] = {**{k: v for k, v in spec.items() if k != 'targets'}, 'segments': ids}
+    protections = _protections(shaped, set(clips))
+    limits = _limits(color['limits']) if 'limits' in color else {}
+    return protections, limits
+
+
+def check_request(doc, norm, reference, candidate, space):
+    """color-consistency-check request for the graded picture: one segment per clip with a declared input."""
+    from editing_runtime import require
+    color = doc['color']
+    protections, limits = _checks(color, norm)
+    segments = []
+    for c in norm['clips']:
+        declared = color['inputs'].get(c['source_id'])
+        if declared is not None:
+            (a, b), = frame_ranges(norm, {c['id']})
+            segments.append({'id': c['id'], 'start_frame': a, 'end_frame': b, 'space': declared['space']})
+    require(segments and len(segments) * 2 <= MAX_CHECK_FRAMES, 'WORK_COLOR_CHECK_SEGMENTS_UNSUPPORTED: %d clips' % len(segments))
+    samples = max(1, min(3, MAX_CHECK_FRAMES // (2 * len(segments))))
+    request = {'operation': 'color-consistency-check', 'reference': reference, 'candidate': candidate,
+               'input_color': {'space': space, 'range': 'limited', 'basis': 'caller-declared'},
+               'segments': segments, 'samples_per_segment': samples}
+    if protections:
+        request['protections'] = protections
+    if limits:
+        request['limits'] = limits
+    return request
 
 
 def revision_changes(base, candidate, scope, old_norm, new_norm):
@@ -137,6 +189,9 @@ def revision_changes(base, candidate, scope, old_norm, new_norm):
                       coverage(old_norm, set(target_clips(old_grades[g], old_norm))) !=
                       coverage(new_norm, set(target_clips(new_grades[g], new_norm))))
     require(set(affected) <= set(scope['grade_ids']), 'COLOR_REVIEW_SCOPE_REQUIRED')
-    return {'color_grades': changed, 'color_inputs_changed': inputs_changed, 'color_order_changed': bool(reordered) or
+    checks = [{k: (c or {}).get(k) for k in ('protections', 'limits')} for c in (old, new)]
+    checks_changed = checks[0] != checks[1]
+    require(not checks_changed or scope['color_checks'], 'OUTSIDE_SCOPE: color.protections or color.limits')
+    return {'color_checks_changed': checks_changed, 'color_grades': changed, 'color_inputs_changed': inputs_changed, 'color_order_changed': bool(reordered) or
             ([g for g in old_order if g in new_order] != [g for g in new_order if g in old_order]),
             'color_revalidation_declared': affected}
