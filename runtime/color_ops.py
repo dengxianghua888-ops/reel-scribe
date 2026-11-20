@@ -7,6 +7,93 @@ PIXEL_FORMATS={**{f:(8,'gbrp','yuv420p') for f in ['yuv420p','yuv422p','yuv444p'
                **{f:(10,'gbrp10le','yuv420p10le') for f in ['yuv420p10le','yuv422p10le','yuv444p10le']}}
 # Declared SDR space -> transfer tag the source must carry and the output keeps; LUTs act on code values.
 SPACE_TRANSFER={'bt709-sdr':'bt709','srgb-sdr':'iec61966-2-1'}
+SPACE_EOTF={'bt709-sdr':'bt1886','srgb-sdr':'srgb'}
+MAX_LAYERS=32
+MAX_RANGES_PER_LAYER=512
+MAX_READBACK_FRAMES=96
+READBACK_WIDTH=256
+READBACK_MAX_MEDIAN_DE2000=3.0
+
+
+def _layers(value,frames):
+    """Validate ordered LUT layers; each applies to explicit [start, end) output frame ranges."""
+    from editing_runtime import exact_keys,require,number
+    require(isinstance(value,list) and 1<=len(value)<=MAX_LAYERS,'COLOR_LAYERS_INVALID')
+    layers=[]
+    for index,layer in enumerate(value):
+        exact_keys(layer,['lut','ranges','strength'],['lut','ranges'])
+        ranges=layer['ranges']
+        require(isinstance(ranges,list) and 1<=len(ranges)<=MAX_RANGES_PER_LAYER,'COLOR_LAYER_RANGES_INVALID: %d'%index)
+        previous=0
+        for item in ranges:
+            require(isinstance(item,list) and len(item)==2 and all(type(x) is int for x in item),'COLOR_LAYER_RANGE_INVALID: %d'%index)
+            a,b=item
+            require(previous<=a<b<=frames,'COLOR_LAYER_RANGE_OUTSIDE_OR_UNSORTED: %d'%index)
+            previous=b
+        strength=layer.get('strength')
+        if strength is not None:
+            strength=number(strength,'strength',0);require(0<strength<=1,'LUT_STRENGTH_OUT_OF_RANGE')
+        lut,cube,rows,payload=verified_cube(layer['lut'])
+        layers.append({'lut':lut,'cube':cube,'rows':rows,'payload':payload,'ranges':[list(r) for r in ranges],'strength':strength})
+    return layers
+
+
+def _rgb_frames(path,indices,width,height,rng,tools):
+    """Decode exact frame numbers to full-range rgb24 at a fixed analysis size."""
+    import subprocess
+    from editing_runtime import require
+    picks='+'.join('eq(n,%d)'%i for i in indices)  # single quotes protect the commas
+    vf=(f"select='{picks}',scale={width}:{height}:flags=area:in_color_matrix=bt709:in_range={rng}:out_range=pc,format=rgb24")
+    raw=subprocess.run([tools.binary('ffmpeg'),'-v','error','-i',str(path),'-vf',vf,'-fps_mode','passthrough',
+                        '-f','rawvideo','-pix_fmt','rgb24','-'],capture_output=True,check=True,timeout=600).stdout
+    size=width*height*3
+    require(len(raw)==size*len(indices),'COLOR_READBACK_DECODE_INCOMPLETE')
+    return [raw[k*size:(k+1)*size] for k in range(len(indices))]
+
+
+def _readback(source_path,output_path,layers,frames,video,color,tools):
+    """Compare decoded output frames with the numpy prediction of the active layers on the source frame."""
+    from editing_runtime import require
+    from color_numerics import numpy,interpolate,lab_from_rgb01,ciede2000
+    np=numpy()
+    picks=[(a+b-1)//2 for layer in layers for a,b in layer['ranges']]
+    gap,cursor=None,0  # first frame outside every range, if any
+    for a,b in sorted((a,b) for layer in layers for a,b in layer['ranges']):
+        if a>cursor:
+            gap=cursor;break
+        cursor=max(cursor,b)
+    if gap is None and cursor<frames:
+        gap=cursor
+    gaps=[gap] if gap is not None else []
+    wanted=sorted(set(picks))
+    if len(wanted)>MAX_READBACK_FRAMES-len(gaps):
+        step=len(wanted)/(MAX_READBACK_FRAMES-len(gaps))
+        wanted=sorted({wanted[int(k*step)] for k in range(MAX_READBACK_FRAMES-len(gaps))}|{wanted[0],wanted[-1]})
+    indices=sorted(set(wanted)|set(gaps))
+    width=READBACK_WIDTH if video['width']>=READBACK_WIDTH else video['width']
+    height=max(2,round(width*video['height']/video['width']/2)*2)
+    rng='tv' if color['range']=='limited' else 'pc'
+    before=_rgb_frames(source_path,indices,width,height,rng,tools)
+    after=_rgb_frames(output_path,indices,width,height,'tv',tools)
+    transfer=SPACE_EOTF[color['space']]
+    rows=[]
+    for f,src,out in zip(indices,before,after):
+        x=np.frombuffer(src,dtype=np.uint8).reshape(-1,3)/255.0
+        y=np.frombuffer(out,dtype=np.uint8).reshape(-1,3)/255.0
+        predicted=x
+        active=[li for li,layer in enumerate(layers) if any(a<=f<b for a,b in layer['ranges'])]
+        for li in active:
+            mapped=interpolate(layers[li]['table'],predicted,'tetrahedral')
+            s=layers[li]['strength'] if layers[li]['strength'] is not None else 1.0
+            predicted=np.clip(predicted+s*(mapped-predicted),0,1)
+        de=ciede2000(lab_from_rgb01(predicted,transfer)[0],lab_from_rgb01(y,transfer)[0])
+        median=float(np.median(de))
+        rows.append({'frame':f,'active_layers':active,'delta_e2000_median':round(median,3),
+                     'delta_e2000_p95':round(float(np.percentile(de,95)),3)})
+        require(median<=READBACK_MAX_MEDIAN_DE2000,'COLOR_LAYER_READBACK_MISMATCH: frame %d'%f)
+    return {'method':'decoded output frame vs numpy tetrahedral prediction of the active layers on the decoded source frame',
+            'analysis_size':[width,height],'max_median_delta_e2000':READBACK_MAX_MEDIAN_DE2000,'frames':rows,
+            'coverage':'middle frame of each range (capped at %d) plus one frame outside every range'%MAX_READBACK_FRAMES}
 
 def validate_cube(path):
     from editing_runtime import require
@@ -39,10 +126,14 @@ def frame_clock(path,tools):
 
 def apply_lut(request,directory,tools):
     from editing_runtime import exact_keys,source,require,write_json,sha256,exec_tool,frame_rate
-    keys=['operation','source','lut','input_color','interpolation']
-    exact_keys(request,keys+['strength'],keys);asset=source(request['source'])
+    keys=['operation','source','input_color','interpolation']
+    exact_keys(request,keys+['lut','strength','layers'],keys);asset=source(request['source'])
+    layered='layers' in request
+    require(layered!=('lut' in request),'COLOR_LUT_OR_LAYERS_REQUIRED')
+    require(not (layered and 'strength' in request),'COLOR_LAYER_STRENGTH_BELONGS_TO_LAYER')
     # Parse and apply the same verified bytes; strength derives a new cube on the same grid.
-    lut,cube,lut_rows,lut_payload=verified_cube(request['lut'])
+    if not layered:
+        lut,cube,lut_rows,lut_payload=verified_cube(request['lut'])
     strength=request.get('strength')
     if strength is not None:
         from editing_runtime import number
@@ -55,6 +146,7 @@ def apply_lut(request,directory,tools):
     media=tools.probe(asset['path'])
     video=next((s for s in media['streams'] if s['codec_type']=='video'),None);require(video is not None,'VIDEO_STREAM_REQUIRED')
     require(video.get('pix_fmt') in PIXEL_FORMATS,'COLOR_PIXEL_FORMAT_UNSUPPORTED');bits,working,out_fmt=PIXEL_FORMATS[video['pix_fmt']]
+    if layered:working='gbrpf32le'  # stacked layers stay in float between LUTs
     require(video['width']%2==0 and video['height']%2==0,'EVEN_DIMENSION_REQUIRED')
     rotations=[video.get('tags',{}).get('rotate',0)]+[s.get('rotation',0) for s in video.get('side_data_list',[])]
     require(all(float(x)%360==0 for x in rotations),'ROTATED_COLOR_SOURCE_UNSUPPORTED')
@@ -69,15 +161,33 @@ def apply_lut(request,directory,tools):
     require(frame_rate(video.get('r_frame_rate'))==fps,'COLOR_CFR_REQUIRED')
     times=frame_clock(asset['path'],tools)
     require(all(abs(t-float(Fraction(i,1)/fps))<=.00001 for i,t in enumerate(times)),'COLOR_ZERO_ORIGIN_CFR_REQUIRED')
-    # Local fixed name prevents LUT paths from being interpreted as filter code.
-    if strength is None:
-        (directory/'selected.cube').write_bytes(lut_payload)
-    else:
+    # Local fixed names prevent LUT paths from being interpreted as filter code.
+    if layered:
         from color_numerics import cube_text, identity_table, table_from_rows
-        identity=identity_table(cube['size']);table=table_from_rows(lut_rows,cube['size'])
-        (directory/'selected.cube').write_text(cube_text(identity+strength*(table-identity),'derived strength %.6f'%strength),encoding='utf-8')
+        layers=_layers(request['layers'],len(times));stages=[]
+        for index,layer in enumerate(layers):
+            name='layer-%02d.cube'%index
+            table=table_from_rows(layer['rows'],layer['cube']['size'])
+            if layer['strength'] is None:
+                (directory/name).write_bytes(layer['payload'])
+            else:
+                identity=identity_table(layer['cube']['size'])
+                table=identity+layer['strength']*(table-identity)
+                (directory/name).write_text(cube_text(table,'derived strength %.6f'%layer['strength']),encoding='utf-8')
+            layer['table']=table;layer['file']=name
+            enable='+'.join('between(n,%d,%d)'%(a,b-1) for a,b in layer['ranges'])
+            stages.append(f"lut3d=file={name}:interp={interpolation}:enable='{enable}'")
+        lut_stage=','.join(stages)
+    else:
+        if strength is None:
+            (directory/'selected.cube').write_bytes(lut_payload)
+        else:
+            from color_numerics import cube_text, identity_table, table_from_rows
+            identity=identity_table(cube['size']);table=table_from_rows(lut_rows,cube['size'])
+            (directory/'selected.cube').write_text(cube_text(identity+strength*(table-identity),'derived strength %.6f'%strength),encoding='utf-8')
+        lut_stage=f'lut3d=file=selected.cube:interp={interpolation}'
     rng='tv' if color['range']=='limited' else 'pc'
-    filters=f'scale=in_color_matrix=bt709:in_range={rng}:out_range=pc,format={working},lut3d=file=selected.cube:interp={interpolation},scale=out_color_matrix=bt709:in_range=pc:out_range=tv,format={out_fmt},setparams=colorspace=bt709:color_primaries=bt709:color_trc={trc}:range=tv'
+    filters=f'scale=in_color_matrix=bt709:in_range={rng}:out_range=pc,format={working},{lut_stage},scale=out_color_matrix=bt709:in_range=pc:out_range=tv,format={out_fmt},setparams=colorspace=bt709:color_primaries=bt709:color_trc={trc}:range=tv'
     output=directory/'graded.mp4'
     tools.ff(['-i',asset['path'],'-vf',filters,'-map','0:v:0','-map','0:a?','-r',str(fps),'-fps_mode','cfr',
               '-c:v','libx264','-crf','18','-preset','medium','-c:a','copy','-colorspace','bt709','-color_trc',trc,'-color_primaries','bt709','-color_range','tv','-movflags','+faststart','graded.mp4'],cwd=directory)
@@ -103,13 +213,24 @@ def apply_lut(request,directory,tools):
         audio_checks.append({'index':i,'coded_sha256':before_hash,'format_preserved':True})
     # Requested output tags and actual ffprobe observations are different evidence.
     # Missing transfer/primaries fields stay unknown, even after explicitly setting tags.
-    result={'schema':'color-lut-apply/1','source':asset,'lut':lut,'cube':cube,'input_color':color,'interpolation':interpolation,
+    readback=_readback(asset['path'],output,layers,len(times),video,color,tools) if layered else None
+    result={'schema':'color-lut-apply/1','source':asset,'input_color':color,'interpolation':interpolation,
+            **({'lut':lut,'cube':cube} if not layered else {}),
             'video':{'path':str(output),'sha256':sha256(output),'pix_fmt':out_fmt},
             'bit_depth':{'source':bits,'lut_working_format':working,'output':bits,'basis':'source pixel format; no 8-bit intermediate for 10-bit sources'},'frames':len(times),'fps':str(fps),'video_duration':float(Fraction(len(times),1)/fps),
             'time_mapping':'output frame i is source frame i; no trim, reordering or speed change','output_color':{'requested':requested_output,'observed':observed_output,'unobserved_fields':[k for k,v in observed_output.items() if v in unknown]},
             'audio':'all source audio streams copied when present; coded payload hash and format checked; listening not performed','audio_checks':audio_checks,
             'source_interpretation':f'declared {color["space"]} YUV range to nonlinear RGB code values, LUT, limited-range BT.709-matrix YUV tagged {trc}; the LUT is applied to code values and must have been built for this transfer; no HDR/log normalization',
             'effect_review':'NOT_RUN','limits':['LUT order and creative suitability are caller decisions','unknown source color metadata may be caller-declared but is not verified','no automatic matching, white balance, skin protection or clipping repair','lossy H264 re-encode, not pixel-lossless']}
+    if layered:
+        result['bit_depth']['lut_working_format']=working
+        result['bit_depth']['basis']='source pixel format; layers are applied in 32-bit float RGB'
+        result['layers']=[{'index':i,'lut':l['lut'],'cube':l['cube'],'strength':l['strength'],'ranges':l['ranges'],
+                           'frames':sum(b-a for a,b in l['ranges']),
+                           'applied_cube':{'path':str(directory/l['file']),'sha256':sha256(directory/l['file'])}}
+                          for i,l in enumerate(layers)]
+        result['layer_order']='layers apply in listed order; frames outside every range keep source values (re-encoded)'
+        result['readback']=readback
     if strength is not None:
         result['strength']={'value':strength,'derivation':'identity + strength * (lut - identity) on the source cube grid, rounded to 6 decimals',
                             'applied_cube':{'path':str(directory/'selected.cube'),'sha256':sha256(directory/'selected.cube')}}
