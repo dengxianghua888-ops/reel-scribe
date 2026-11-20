@@ -3,6 +3,9 @@ import copy
 import hashlib
 
 
+GRADE_FIELDS = ('ops', 'strength', 'targets', 'interpretation', 'lut_size')
+
+
 def inherited_value(document, cid, key):
     if key=="line_breaks":
         return {"text_sha256":hashlib.sha256(document["captions"][cid]["text"].encode("utf-8")).hexdigest(),"offsets":[]}
@@ -68,6 +71,11 @@ def prepare(db, current, request, tools, *, directory=None):
             require(isinstance(selection['id'], str) and selection['id'] and selection['field'] in ('gain_db','envelope'),
                     'UNDO_FIELD_UNSUPPORTED')
             path = ('audio_tracks', selection['id'], selection['field'])
+        elif kind == 'color_grade':
+            exact_keys(selection, ['kind', 'id', 'field'], ['kind', 'id', 'field'])
+            require(isinstance(selection['id'], str) and selection['id'] and selection['field'] in GRADE_FIELDS,
+                    'UNDO_FIELD_UNSUPPORTED')
+            path = ('color', 'grades', selection['id'], selection['field'])
         else:
             require(False, 'UNDO_FIELD_UNSUPPORTED')
         require(path not in seen, 'UNDO_FIELD_DUPLICATE')
@@ -78,7 +86,8 @@ def prepare(db, current, request, tools, *, directory=None):
             for part in path[:-1]:
                 require(isinstance(value, dict) and part in value, 'UNDO_FIELD_MISSING')
                 value = value[part]
-            require(isinstance(value, dict) and (path[-1] in value or path[-1]=='envelope'), 'UNDO_FIELD_MISSING')
+            optional = path[-1] == 'envelope' or (kind == 'color_grade' and path[-1] == 'strength')
+            require(isinstance(value, dict) and (path[-1] in value or optional), 'UNDO_FIELD_MISSING')
             containers.append(value)
         if kind == 'audio_track':
             identities = []
@@ -156,8 +165,14 @@ def resolve_binding(current, candidate, records, resolution, tools, directory):
         expected['parameters']['layout_constraints'] = copy.deepcopy(recipe['layout_constraints'])
     require(fingerprint(current['style_bindings']) == fingerprint({'*': expected}), 'UNDO_BINDING_RECIPE_MISMATCH')
     parameters = recipe['parameters']
-    exact_keys(parameters, ['caption_style', 'audio_gain_db', 'caption_overrides', 'audio_envelope'])
+    exact_keys(parameters, ['caption_style', 'audio_gain_db', 'caption_overrides', 'audio_envelope', 'color_grade'])
     require(bool(parameters), 'UNDO_RECIPE_PARAMETERS_REQUIRED')
+    if 'color_grade' in parameters:
+        values = parameters['color_grade']
+        grades = current.get('color', {}).get('grades', {}) if isinstance(current.get('color'), dict) else {}
+        require(isinstance(values, dict) and bool(values), 'UNDO_RECIPE_PARAMETERS_REQUIRED')
+        require(all(gid in grades and fingerprint(grades[gid]) == fingerprint(grade) for gid, grade in values.items()),
+                'UNDO_BINDING_ALREADY_DIVERGED')
     if 'caption_style' in parameters:
         values = parameters['caption_style']
         exact_keys(values, ['font_size', 'margin_v', 'color_rgb'])
@@ -203,6 +218,15 @@ def resolve_binding(current, candidate, records, resolution, tools, directory):
             if not record['presence']['before']:derived['parameters']['audio_envelope'].pop(key)
             else:derived['parameters']['audio_envelope'][key]=copy.deepcopy(record['before'])
             if not derived['parameters']['audio_envelope']:derived['parameters'].pop('audio_envelope')
+            continue
+        if selection['kind'] == 'color_grade':
+            gid, key = selection['id'], selection['field']
+            require(gid in parameters.get('color_grade', {}), 'UNDO_SELECTED_FIELD_NOT_RECIPE_MAPPED')
+            values = derived['parameters']['color_grade'][gid]
+            if record['presence']['before']:
+                values[key] = copy.deepcopy(record['before'])
+            else:
+                values.pop(key)
             continue
         group = 'caption_style' if selection['kind'] == 'caption_style' else 'audio_gain_db'
         key = selection['field'] if group == 'caption_style' else selection['id']

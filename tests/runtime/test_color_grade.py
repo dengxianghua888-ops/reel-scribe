@@ -560,6 +560,31 @@ def test_layers_apply_in_order_to_exact_frame_ranges(tmp_path):
         assert abs(rgb.mean() - value) < 3, (frame, rgb, value)
 
 
+def test_layer_strength_is_applied_once_in_the_readback_prediction(tmp_path):
+    png = cm.image(tmp_path / 'dark.png', [((48, 48, 48), 1)])
+    video = cm.encode_sdr(png, tmp_path / 'dark.mp4', seconds=1)
+    invert = tmp_path / 'invert.cube'
+    invert.write_text(cn.cube_text(1.0 - cn.identity_table(33), 'invert'), encoding='utf-8')
+    receipt = lut_apply(tmp_path, video, None, 'half', layers=[{'lut': ref(invert), 'ranges': [[0, 25]], 'strength': 0.5}])
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    measured = _rgb_at(receipt['result']['video']['path'], [12])[0]
+    assert abs(measured.mean() - (48 + 0.5 * (255 - 2 * 48))) < 3, measured
+
+
+def test_readback_grades_unaveraged_pixels_of_wide_fine_detail(tmp_path):
+    from PIL import Image
+    stripes = np.zeros((64, 512, 3), dtype=np.uint8)
+    stripes[:, 1::2] = 235  # one-pixel columns; area-averaging before the LUT would predict a brightened mid-gray
+    png = tmp_path / 'stripes.png'
+    Image.fromarray(stripes).save(png)
+    video = cm.encode_sdr(png, tmp_path / 'stripes.mp4', seconds=1)
+    up = tmp_path / 'up.cube'
+    up.write_text(cn.cube_text(np.clip(cn.identity_table(33) ** 2.4 * 4, 0, 1) ** (1 / 2.4), 'up2'), encoding='utf-8')
+    receipt = lut_apply(tmp_path, video, None, 'stripes', layers=[{'lut': ref(up), 'ranges': [[0, 25]]}])
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    assert receipt['result']['readback']['analysis_size'][0] == 256
+
+
 @pytest.mark.parametrize('change,error', [
     (lambda r: r.update(lut=r['layers'][0]['lut']), 'COLOR_LUT_OR_LAYERS_REQUIRED'),
     (lambda r: r.update(strength=0.5), 'COLOR_LAYER_STRENGTH_BELONGS_TO_LAYER'),

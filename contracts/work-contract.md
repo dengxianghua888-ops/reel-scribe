@@ -219,6 +219,19 @@ derived recipe; if this would leave no recipe parameters at all,
 the Work binding. Existing explicit derived identity, scope, layout revalidation,
 CAS and no-auto-commit rules continue to apply.
 
+#### Local color grade undo
+
+`prepare-local-undo.fields` also accepts
+`{kind:color_grade, id:<existing grade ID>, field:ops|strength|targets|interpretation|lut_size}`.
+The grade must exist before, after and currently; this never restores a deleted
+grade or changes `color.order`. `strength` is optional, so restoring its absence
+removes it; the other fields must be present in all three documents.
+`scope.grade_ids` must list the grade. Compatible explicit bound-recipe resolution
+also accepts the `color_grade` parameter map: every mapped grade must still equal
+the current Work grade (`UNDO_BINDING_ALREADY_DIVERGED` otherwise), and the derived
+recipe changes only the selected grade field. Details are in the
+[Work color contract](work-color-contract.md).
+
 ## Explicit independent-track sample envelope
 
 An independent audio track may declare optional `envelope` with exactly

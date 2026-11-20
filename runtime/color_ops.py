@@ -39,11 +39,15 @@ def _layers(value,frames):
 
 
 def _rgb_frames(path,indices,width,height,rng,tools):
-    """Decode exact frame numbers to full-range rgb24 at a fixed analysis size."""
+    """Decode exact frame numbers to full-range rgb24, point-sampled at a fixed analysis size.
+
+    Point sampling (no averaging) keeps each analysis pixel a real source pixel, so a
+    nonlinear LUT can be predicted per pixel; averaging first does not commute with it.
+    """
     import subprocess
     from editing_runtime import require
     picks='+'.join('eq(n,%d)'%i for i in indices)  # single quotes protect the commas
-    vf=(f"select='{picks}',scale={width}:{height}:flags=area:in_color_matrix=bt709:in_range={rng}:out_range=pc,format=rgb24")
+    vf=(f"select='{picks}',scale={width}:{height}:flags=neighbor:in_color_matrix=bt709:in_range={rng}:out_range=pc,format=rgb24")
     raw=subprocess.run([tools.binary('ffmpeg'),'-v','error','-i',str(path),'-vf',vf,'-fps_mode','passthrough',
                         '-f','rawvideo','-pix_fmt','rgb24','-'],capture_output=True,check=True,timeout=600).stdout
     size=width*height*3
@@ -82,16 +86,14 @@ def _readback(source_path,output_path,layers,frames,video,color,tools):
         y=np.frombuffer(out,dtype=np.uint8).reshape(-1,3)/255.0
         predicted=x
         active=[li for li,layer in enumerate(layers) if any(a<=f<b for a,b in layer['ranges'])]
-        for li in active:
-            mapped=interpolate(layers[li]['table'],predicted,'tetrahedral')
-            s=layers[li]['strength'] if layers[li]['strength'] is not None else 1.0
-            predicted=np.clip(predicted+s*(mapped-predicted),0,1)
+        for li in active:  # the stored table already includes the layer strength
+            predicted=np.clip(interpolate(layers[li]['table'],predicted,'tetrahedral'),0,1)
         de=ciede2000(lab_from_rgb01(predicted,transfer)[0],lab_from_rgb01(y,transfer)[0])
         median=float(np.median(de))
         rows.append({'frame':f,'active_layers':active,'delta_e2000_median':round(median,3),
                      'delta_e2000_p95':round(float(np.percentile(de,95)),3)})
         require(median<=READBACK_MAX_MEDIAN_DE2000,'COLOR_LAYER_READBACK_MISMATCH: frame %d'%f)
-    return {'method':'decoded output frame vs numpy tetrahedral prediction of the active layers on the decoded source frame',
+    return {'method':'point-sampled decoded output pixels vs numpy tetrahedral prediction of the active layers on the same source pixels',
             'analysis_size':[width,height],'max_median_delta_e2000':READBACK_MAX_MEDIAN_DE2000,'frames':rows,
             'coverage':'middle frame of each range (capped at %d) plus one frame outside every range'%MAX_READBACK_FRAMES}
 

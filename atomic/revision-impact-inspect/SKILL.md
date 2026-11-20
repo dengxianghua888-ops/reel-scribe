@@ -8,3 +8,5 @@ description: 只读比较受范围约束的作品候选，列出阶段输入变�
 按[能力交接合同](../../contracts/capability-handoff.md)核对工具，再按[请求合同](../../contracts/revision-impact-contract.md)提供当前作品、版本和显式范围。
 
 本地实现仅处理调用者已确定的参数，不推断自然语言意图、不写入作品库、不调用外部服务。候选需经现有 Work 预览与版本冲突校验后才能采纳；真实内容与效果验收另行记录。
+
+作品调色段的变化只要求重做调色与渲染阶段，见[作品调色合同](../../contracts/work-color-contract.md)。

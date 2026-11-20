@@ -64,10 +64,14 @@ def target_clips(grade, norm):
 
 
 def coverage(norm, clip_ids):
-    """Source content a grade covers; a change means the graded picture is new material."""
-    return [(c['source_id'], norm['sources'][c['source_id']]['sha256'], round(c['start'], 8),
-             round(c['effective_source_end'], 8), str(Fraction(c['speed'])))
-            for c in norm['clips'] if c['id'] in clip_ids]
+    """Source content a grade covers, keyed by clip; a change means the graded picture is new material.
+
+    Keyed by clip ID, not timeline order: moving covered clips is not new material,
+    while adding, removing or changing a covered clip is.
+    """
+    return {c['id']: (c['source_id'], norm['sources'][c['source_id']]['sha256'], round(c['start'], 8),
+                      round(c['effective_source_end'], 8), str(Fraction(c['speed'])))
+            for c in norm['clips'] if c['id'] in clip_ids}
 
 
 def validate(doc, norm, tools):

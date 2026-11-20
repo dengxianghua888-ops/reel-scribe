@@ -31,6 +31,9 @@
   - 新增色彩层真实素材操作记录（docs/color-real-run-20261119.md），含两轮真实照片操作。
   - 色彩原子接受 sRGB：`color-profile-scan`/`color-lut-apply` 新增 `space: srgb-sdr`，`color-grade-compile` 新增 `interpretation: srgb-sdr-display`，sRGB 的 CLF 用 `monCurve` 精确表示。
   - 色彩层 C2a：WorkDocument 新增可选 `color` 段（`work-color/1`：输入解释、调色层、目标片段、顺序），修订范围新增 `grade_ids`、`color_inputs`，调色层覆盖的源内容变化须复核；`work-render` 在时间线之后、混音/叠层/字幕之前按片段帧区间调色；`color-lut-apply` 新增 `layers` 模式（多层 LUT 按帧区间叠加、32 位浮点、逐区间读回）。
+  - 色彩层 C2b：`prepare-local-undo` 支持单独撤销某个调色层的一个字段；`style-recipe-compile` 新增 `color_grade` 参数组（能力 `color-grade`），`style-recipe-preview` 因此可做调色 A/B 预览；`revision-impact-inspect` 新增 `color-grade` 阶段，调色变化只要求重做调色和渲染。
+  - C2a 评审修复：分层套用的读回预测不再重复叠加层强度（原先按 s² 预测，正确输出会被判失败）；读回改为逐点取样，不再先平均再套 LUT；调色层覆盖内容按片段 ID 比较，互换片段顺序不再误报需要复核。
+  - 修复逐条字幕配方会顺带改写调色层：cue 模式下配方里的调色层必须与作品一致，否则 `CUE_RECIPE_GLOBAL_CHANGE_FORBIDDEN`。
   - 修复 `visual-layer-render` 彩色叠层偏色：不透明度改为直接缩放 alpha，叠层全程保持 BT.709 YUVA，不再经过矩阵不一致的 RGB 往返。
   - 新原子 `still-color-normalize`：按内嵌 ICC 用 LittleCMS 把静图转换为无配置文件的 sRGB PNG，可选应用 EXIF 方向；未标记图片只按调用者声明处理。
   - `color-grade-compile` 新增 `highlight_rolloff`（max-rgb / per-channel）。链模型调整为曝光与白平衡不在 1 处裁切，CDL、曲线、HSL、LUT 读入时各自钳位，整链输出末端钳位。由于该原子尚未发布，这次调整没有兼容影响。
@@ -39,6 +42,8 @@
   - `chat_json` 请求改用 `:schema-json` 意图键，已有工作区重算模型阶段时不会重放旧结果，需要重新 `--allow-remote`；旧键下 UNKNOWN 的发送在核对前会阻止替代请求。
   - 已启用但不存在的故事上下文文件现在直接报错。
   - MCP 对未知协议版本回退到最新支持的 `2025-06-18`。
+  - `revision-impact-inspect` 的阶段列表在 `timeline` 与 `caption-layout` 之间新增 `color-grade`，按位置读取阶段的调用方需要调整。
+  - `visual-layer-render` 彩色叠层的输出像素会改变（改为正确颜色）。
 
 ## v0.3.0-alpha.1 · 2026-09-28
 

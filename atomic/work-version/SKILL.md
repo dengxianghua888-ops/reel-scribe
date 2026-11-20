@@ -37,6 +37,6 @@ WORK_BUSY 表示其他写事务占用，先重读或核对句柄；WORK_VERSION_
 
 ## 保留后续手改的受限局部撤销
 
-`prepare-local-undo` 只准备标准候选，不提交。输入当前 `expected_version`、历史普通提交 `undo_sequence`、精确结构化 `fields` 和现有完整 `scope`。支持 `{kind:caption_style,field:font_size|margin_v|color_rgb}` 及 `{kind:audio_track,id:既存轨ID,field:gain_db}`。比较历史前值/后值/当前值：当前仍为后值才恢复前值，已为前值返回 NO_OP（无候选），第三值冲突拒绝。保留全部未选择的后续修改；历史缺字段、删轨或音轨源/窗口/锚点身份改变均拒绝。
+`prepare-local-undo` 只准备标准候选，不提交。输入当前 `expected_version`、历史普通提交 `undo_sequence`、精确结构化 `fields` 和现有完整 `scope`。支持 `{kind:caption_style,field:font_size|margin_v|color_rgb}` 及 `{kind:audio_track,id:既存轨ID,field:gain_db}`，以及调色层字段 `{kind:color_grade,id:既存调色层ID,field:ops|strength|targets|interpretation|lut_size}`（见[作品调色合同](../../contracts/work-color-contract.md)）。比较历史前值/后值/当前值：当前仍为后值才恢复前值，已为前值返回 NO_OP（无候选），第三值冲突拒绝。保留全部未选择的后续修改；历史缺字段、删轨或音轨源/窗口/锚点身份改变均拒绝。
 
 有现存样式绑定且需要变化时，默认拒绝。仅完整当前配方、唯一兼容全局绑定及显式 `binding_resolution` 可生成新派生配方，保留未选参数与原约束并复验布局；其它绑定仍须走明确配方/范围修订路径，不得清除绑定或约束绕过。不会静默改绑定、字体、源、时序或内容保护。检查候选后另行使用现有 commit，旧头仍拒绝。结果不代表渲染、听审或真人编辑器验收。

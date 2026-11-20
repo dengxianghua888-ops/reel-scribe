@@ -7,7 +7,7 @@
 - `operation`: `style-recipe-compile`
 - `document`、`expected_document_sha256`、`base_version`：当前 Work 文档及其绑定身份。
 - `recipe`、`expected_recipe_sha256`：下面的配方和完整配方 `fingerprint`。配方 ID 和 version 由作者声明，摘要绑定实际字段；修改任一字段须重新生成摘要。
-- `capabilities`：调用者明确声明的目标能力，允许 `caption-style`、`audio-track-gain`、`caption-cue-style`，不得重复。不是运行时探测或真实宿主能力证明。
+- `capabilities`：调用者明确声明的目标能力，允许 `caption-style`、`audio-track-gain`、`caption-cue-style`、`audio-track-envelope`、`color-grade`，不得重复。不是运行时探测或真实宿主能力证明。
 - `scope`：与 `timeline-revise` 完全相同的明确授权范围。全局默认字幕变化需要 `caption_style: true`，局部覆盖需对应 `caption_ids`（见下节）；每个修改音轨 ID 需在 `audio_ids`；全局风格绑定 `*` 需在 `style_keys`。不要为方便放开其他范围。
 
 配方结构：
@@ -79,3 +79,5 @@
 `parameters.audio_envelope` 为非空 `{已有音轨ID: envelope}`，能力 `audio-track-envelope`。包络沿用 Work 的48kHz样本级 `tri/qsin` 结构、端点对齐和持久保护拒绝；仅编译候选，不自动采用、不认证听感。已有绑定限定唯一可重建摘要并逐项符合当前值的 `*` 编译配方。必须保留旧参数与 layout_constraints，不支持未知、多重或失真绑定；未选映射不得改变。显式 cue 修改可原值携带包络但不得顺带改变。
 
 局部撤销须显式 binding_resolution，派生新配方并保留其它映射和布局。原先缺省包络时恢复缺省并移除对应配方映射，不用 null 冒充无包络；若派生配方完全为空仍拒绝。后改非映射 gain/notes 保留；同字段冲突、源/锚点变化及 scope 不足拒绝。仅删除实际包络但保留原映射也拒绝，不留下失真风格声明。
+
+`parameters.color_grade` 为非空 `{调色层ID: {targets, interpretation, ops, strength?, lut_size}}`，能力 `color-grade`。字段与校验同[作品调色合同](work-color-contract.md)；作品必须已声明 `color.inputs`，配方不能声明或改写素材的色彩解释。新调色层追加到 `order` 末尾。范围需列出 `grade_ids` 与 `style_keys:["*"]`。逐条字幕模式只能原样携带调色层；调色配方可以原样携带已绑定的逐条字幕覆盖。编译结果仍是 `style_effect: NOT_VERIFIED`：映射不证明调色符合风格卡的意图。

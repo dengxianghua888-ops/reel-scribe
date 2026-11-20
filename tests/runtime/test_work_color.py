@@ -121,6 +121,15 @@ def test_new_material_under_an_unchanged_grade_requires_its_review(work):
     assert diff(work, base, shifted, scope(clip_ids=['a']))['color_revalidation_declared'] == []
 
 
+def test_reordering_differently_trimmed_covered_clips_needs_no_color_review(work):
+    base = with_color(work['doc'], grades={'all': {**UP, 'targets': '*'}})
+    base['plan']['clips'][1].update(start=0.2, end=1)  # a and b now cover different source frames
+    swapped = copy.deepcopy(base)
+    swapped['plan']['clips'].reverse()
+    result = diff(work, base, swapped, scope(clip_ids=['a', 'b']))
+    assert result['color_revalidation_declared'] == [] and result['color_grades'] == []
+
+
 def test_reordering_grades_is_a_scoped_change(work):
     grades = {'up': {**UP, 'targets': ['b']}, 'warm': {**UP, 'targets': ['a', 'b'],
               'ops': [{'type': 'white_balance', 'gains': [1.1, 1, 0.9], 'preserve_luminance': True}]}}
@@ -220,3 +229,210 @@ def test_srgb_tagged_timeline_keeps_its_transfer_through_the_color_step(work):
     linear = ((100 / 255 + 0.055) / 1.055) ** 2.4 * 2  # sRGB EOTF, +1 stop, back through the sRGB OETF
     up = (1.055 * min(linear, 1) ** (1 / 2.4) - 0.055) * 255
     assert abs(_frame_rgb(video, 12).mean() - 100) < 3 and abs(_frame_rgb(video, 37).mean() - up) < 3
+
+
+# --- C2b: local undo, recipe color_grade group, revision impact, A/B preview -------------
+
+def init_store(work, doc, name):
+    folder = work['root'] / f'{name}-init'
+    folder.mkdir()
+    store = work['root'] / f'{name}.sqlite'
+    state = work_ops.work_version({'operation': 'work-version', 'action': 'init', 'store': str(store), 'work_id': name,
+                                   'document': doc, 'author': 'agent', 'message': 'fixture'}, folder, work['tools'])
+    return store, state
+
+
+def head(store):
+    with work_ops.connect(str(store)) as db:
+        return work_ops.load(db)
+
+
+def commit_candidate(work, store, candidate_path, label):
+    folder = work['root'] / f'commit-{label}'
+    folder.mkdir()
+    return work_ops.work_version({'operation': 'work-version', 'action': 'commit', 'store': str(store),
+                                  'expected_version': head(store)['version'], 'candidate': ref(candidate_path),
+                                  'message': label, 'author': 'human'}, folder, work['tools'])
+
+
+def commit(work, store, change, authorized, label):
+    current = head(store)
+    candidate = copy.deepcopy(current['document'])
+    change(candidate)
+    folder = work['root'] / f'revise-{label}'
+    folder.mkdir()
+    work_ops.timeline_revise({'operation': 'timeline-revise', 'base_version': current['version'],
+                              'document': current['document'], 'expected_document_sha256': current['document_sha256'],
+                              'candidate': candidate, 'scope': authorized}, folder, work['tools'])
+    return commit_candidate(work, store, folder / 'candidate.json', label)
+
+
+def prepare_undo(work, store, sequence, fields, authorized, label, **extra):
+    folder = work['root'] / f'undo-{label}'
+    folder.mkdir()
+    request = {'operation': 'work-version', 'action': 'prepare-local-undo', 'store': str(store),
+               'expected_version': head(store)['version'], 'undo_sequence': sequence, 'fields': fields,
+               'scope': authorized, **extra}
+    return work_ops.work_version(request, folder, work['tools']), folder
+
+
+def test_local_undo_restores_one_grade_field_and_keeps_later_edits(work):
+    store, _ = init_store(work, with_color(work['doc']), 'undo')
+    grade_scope = scope(grade_ids=['up'])
+    commit(work, store, lambda d: d['color']['grades']['up']['ops'][0].update(stops=0.5), grade_scope, 'soften')  # seq 2
+    commit(work, store, lambda d: d['color']['grades']['up'].update(targets=['a', 'b']), grade_scope, 'widen')  # seq 3
+    report, folder = prepare_undo(work, store, 2, [{'kind': 'color_grade', 'id': 'up', 'field': 'ops'}], grade_scope, 'ops')
+    assert report['status'] == 'CANDIDATE_PREPARED' and report['fields'][0]['status'] == 'RESTORE_BEFORE'
+    restored = json.loads((folder / 'candidate.json').read_text())['document']['color']['grades']['up']
+    assert restored['ops'] == [{'type': 'exposure', 'stops': 1}] and restored['targets'] == ['a', 'b']
+    with pytest.raises(rt.ContractError, match='OUTSIDE_SCOPE: color.grades'):
+        prepare_undo(work, store, 2, [{'kind': 'color_grade', 'id': 'up', 'field': 'ops'}], scope(), 'unscoped')
+    commit(work, store, lambda d: d['color']['grades']['up']['ops'][0].update(stops=-1), grade_scope, 'darken')  # seq 4
+    with pytest.raises(rt.ContractError, match='UNDO_FIELD_CONFLICT'):
+        prepare_undo(work, store, 2, [{'kind': 'color_grade', 'id': 'up', 'field': 'ops'}], grade_scope, 'conflict')
+    commit(work, store, lambda d: d['color']['grades']['up'].update(strength=0.5), grade_scope, 'blend')  # seq 5
+    report, folder = prepare_undo(work, store, 5, [{'kind': 'color_grade', 'id': 'up', 'field': 'strength'}],
+                                  grade_scope, 'strength')
+    assert report['fields'][0]['presence'] == {'before': False, 'after': True, 'current': True}
+    assert 'strength' not in json.loads((folder / 'candidate.json').read_text())['document']['color']['grades']['up']
+    with pytest.raises(rt.ContractError, match='UNDO_FIELD_UNSUPPORTED'):
+        prepare_undo(work, store, 5, [{'kind': 'color_grade', 'id': 'up', 'field': 'schema'}], grade_scope, 'bad')
+
+
+def test_local_undo_of_targets_is_still_validated_against_the_current_clips(work):
+    store, _ = init_store(work, with_color(work['doc'], grades={'up': {**UP, 'targets': ['a']}}), 'targets')
+    commit(work, store, lambda d: d['color']['grades']['up'].update(targets=['b']), scope(grade_ids=['up']), 'retarget')  # seq 2
+    commit(work, store, lambda d: d['plan'].update(clips=d['plan']['clips'][1:]), scope(clip_ids=['a']), 'drop-a')  # seq 3
+    with pytest.raises(rt.ContractError, match='WORK_COLOR_TARGET_MISSING'):
+        prepare_undo(work, store, 2, [{'kind': 'color_grade', 'id': 'up', 'field': 'targets'}], scope(grade_ids=['up']), 'stale')
+
+
+def recipe(work, stops, version):
+    card = work['root'] / 'look-card.md'
+    if not card.exists():
+        card.write_text('fixture style card: explicit exposure only', encoding='utf-8')
+    return {'schema': 'style-recipe/1', 'id': 'look', 'version': version,
+            'style': {'family': 'fixture', 'style_id': 'look', 'version': '1', 'card': ref(card)},
+            'parameters': {'color_grade': {'look': {'targets': '*', 'interpretation': 'bt709-sdr-display',
+                                                    'ops': [{'type': 'exposure', 'stops': stops}], 'lut_size': 33}}}}
+
+
+def compile_recipe(work, store, value, capabilities, label):
+    import style_recipe_ops
+    current = head(store)
+    folder = work['root'] / f'recipe-{label}'
+    folder.mkdir()
+    result = style_recipe_ops.execute({'operation': 'style-recipe-compile', 'base_version': current['version'],
+        'document': current['document'], 'expected_document_sha256': current['document_sha256'], 'recipe': value,
+        'expected_recipe_sha256': rt.fingerprint(value), 'capabilities': capabilities,
+        'scope': scope(grade_ids=['look'], style_keys=['*'])}, folder, work['tools'])
+    return result, folder
+
+
+def inputs_only(work):
+    doc = with_color(work['doc'], grades={}, order=[])
+    assert doc['color']['grades'] == {} and doc['color']['order'] == []
+    return doc
+
+
+def test_recipe_color_group_binding_undo_and_revision_impact(work):
+    import revision_impact
+    import style_recipe_ops
+    store, _ = init_store(work, inputs_only(work), 'recipe')
+    with pytest.raises(rt.ContractError, match='RECIPE_CAPABILITY_UNAVAILABLE'):
+        compile_recipe(work, store, recipe(work, 1, 'v1'), [], 'no-capability')
+    no_color = work['doc']
+    with pytest.raises(rt.ContractError, match='EXISTING_COLOR_INPUTS_REQUIRED'):
+        style_recipe_ops.execute({'operation': 'style-recipe-compile', 'base_version': '0' * 64, 'document': no_color,
+            'expected_document_sha256': rt.fingerprint(no_color), 'recipe': recipe(work, 1, 'v1'),
+            'expected_recipe_sha256': rt.fingerprint(recipe(work, 1, 'v1')), 'capabilities': ['color-grade'],
+            'scope': scope(grade_ids=['look'], style_keys=['*'])}, work['root'], work['tools'])
+    v1, v2 = recipe(work, 1, 'v1'), recipe(work, -1, 'v2')
+    result, folder = compile_recipe(work, store, v1, ['color-grade'], 'v1')
+    assert result['required_capabilities'] == ['color-grade']
+    commit_candidate(work, store, folder / 'candidate.json', 'apply-v1')  # seq 2
+    before = head(store)['document']
+    _, folder = compile_recipe(work, store, v2, ['color-grade'], 'v2')
+    after = json.loads((folder / 'candidate.json').read_text())['document']
+    report = revision_impact.analyze(before, after, scope(grade_ids=['look'], style_keys=['*']), work['tools'],
+                                     expected_base_sha256=rt.fingerprint(before),
+                                     expected_candidate_sha256=rt.fingerprint(after))
+    assert report['required_stages'] == ['color-grade', 'render']
+    assert report['classification'] == ['color-grade-or-order', 'style-metadata']
+    commit_candidate(work, store, folder / 'candidate.json', 'apply-v2')  # seq 3
+    fields = [{'kind': 'color_grade', 'id': 'look', 'field': 'ops'}]
+    undo_scope = scope(grade_ids=['look'], style_keys=['*'])
+    with pytest.raises(rt.ContractError, match='UNDO_STYLE_BINDING_REQUIRES_EXPLICIT_RESOLUTION'):
+        prepare_undo(work, store, 3, fields, undo_scope, 'unresolved')
+    resolution = {'recipe': v2, 'expected_recipe_sha256': rt.fingerprint(v2), 'derived_recipe_id': 'look',
+                  'derived_recipe_version': 'v2-undo-ops'}
+    report, folder = prepare_undo(work, store, 3, fields, undo_scope, 'resolved', binding_resolution=resolution)
+    document = json.loads((folder / 'candidate.json').read_text())['document']
+    assert document['color']['grades']['look']['ops'] == [{'type': 'exposure', 'stops': 1}]
+    presentation = document['style_bindings']['*']['parameters']
+    assert presentation['recipe_version'] == 'v2-undo-ops'
+    assert presentation['presentation']['color_grade']['look']['ops'] == [{'type': 'exposure', 'stops': 1}]
+    assert report['binding_resolution']['policy'] == 'EXPLICIT_DERIVED_RECIPE'
+
+
+def test_ab_preview_renders_color_variants_without_committing(work):
+    import style_preview_ops
+    store, state = init_store(work, inputs_only(work), 'preview')
+    variants = []
+    for name, stops in (('brighter', 1), ('darker', -1)):
+        value = recipe(work, stops, name)
+        variants.append({'id': name, 'recipe': value, 'expected_recipe_sha256': rt.fingerprint(value),
+                         'capabilities': ['color-grade'], 'scope': scope(grade_ids=['look'], style_keys=['*'])})
+    folder = work['root'] / 'ab'
+    folder.mkdir()
+    result = style_preview_ops.execute({'operation': 'style-recipe-preview', 'store': str(store),
+                                        'expected_version': state['version'], 'variants': variants}, folder, work['tools'])
+    videos = {row['id']: row['video']['path'] for row in result['variants']}
+    gray = 100 / 255
+    expected = {'brighter': min(gray ** 2.4 * 2, 1) ** (1 / 2.4) * 255, 'darker': (gray ** 2.4 / 2) ** (1 / 2.4) * 255}
+    for name, value in expected.items():
+        assert abs(_frame_rgb(videos[name], 37).mean() - value) < 3, name
+    assert head(store)['version'] == state['version']
+
+
+def captioned(work, doc):
+    font = work['root'] / 'font.bin'
+    font.write_bytes(b'fixture font identity; no glyph render performed')
+    doc = copy.deepcopy(doc)
+    doc['caption_style'] = {'font': ref(font), 'font_family': 'fixture', 'font_size': 20, 'margin_v': 2, 'color_rgb': 'FFFFFF'}
+    doc['captions'] = {'cue': {'clip_id': 'a', 'start': 0, 'end': 0.5, 'text': 'cue'}}
+    return doc
+
+
+def cue_compile(work, doc, parameters, capabilities, authorized, label):
+    import style_recipe_ops
+    value = recipe(work, 1, label)
+    value['parameters'] = parameters
+    folder = work['root'] / f'cue-{label}'
+    folder.mkdir()
+    result = style_recipe_ops.execute({'operation': 'style-recipe-compile', 'base_version': '0' * 64, 'document': doc,
+        'expected_document_sha256': rt.fingerprint(doc), 'recipe': value, 'expected_recipe_sha256': rt.fingerprint(value),
+        'capabilities': capabilities, 'scope': authorized}, folder, work['tools'])
+    return result, json.loads((folder / 'candidate.json').read_text())['document']
+
+
+def test_cue_recipe_carries_grades_unchanged_and_color_recipe_carries_cues(work):
+    look = {'targets': '*', **UP}
+    doc = captioned(work, with_color(work['doc'], grades={'look': look}))
+    cue_scope = scope(caption_ids=['cue'], grade_ids=['look'], style_keys=['*'])
+    changed = {**look, 'ops': [{'type': 'exposure', 'stops': -1}]}
+    # A cue-only edit must not change a grade, even with grade scope and no color capability.
+    with pytest.raises(rt.ContractError, match='CUE_RECIPE_GLOBAL_CHANGE_FORBIDDEN'):
+        cue_compile(work, doc, {'caption_overrides': {'cue': {'font_size': 28}}, 'color_grade': {'look': changed}},
+                    ['caption-cue-style'], cue_scope, 'cue-changes-grade')
+    result, candidate = cue_compile(work, doc, {'caption_overrides': {'cue': {'font_size': 28}}, 'color_grade': {'look': look}},
+                                    ['caption-cue-style'], scope(caption_ids=['cue'], style_keys=['*']), 'cue-carries-grade')
+    assert result['required_capabilities'] == ['caption-cue-style']
+    assert candidate['color'] == doc['color'] and candidate['captions']['cue']['style_override'] == {'font_size': 28}
+    # A later color recipe may carry the bound cue mapping unchanged, without caption scope.
+    _, candidate = cue_compile(work, candidate, {'caption_overrides': {'cue': {'font_size': 28}}, 'color_grade': {'look': changed}},
+                               ['color-grade'], scope(grade_ids=['look'], style_keys=['*']), 'grade-carries-cue')
+    assert candidate['color']['grades']['look'] == changed and candidate['captions']['cue']['style_override'] == {'font_size': 28}
+    with pytest.raises(rt.ContractError, match='CUE_RECIPE_UNSELECTED_OVERRIDE_CHANGED'):
+        cue_compile(work, candidate, {'caption_overrides': {'cue': {'font_size': 30}}, 'color_grade': {'look': look}},
+                    ['color-grade'], scope(grade_ids=['look'], style_keys=['*']), 'grade-changes-cue')
