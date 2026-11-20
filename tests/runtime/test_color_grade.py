@@ -412,9 +412,9 @@ needs_media = pytest.mark.skipif(not cm.available(), reason='FFmpeg/ffprobe requ
 
 
 def lut_apply(tmp_path, video, cube, name, **extra):
-    request = {'operation': 'color-lut-apply', 'source': ref(video), 'lut': ref(cube),
+    request = {'operation': 'color-lut-apply', 'source': ref(video),
                'input_color': {'space': 'bt709-sdr', 'range': 'limited', 'basis': 'verified-metadata'},
-               'interpolation': 'tetrahedral', **extra}
+               'interpolation': 'tetrahedral', **({'lut': ref(cube)} if cube is not None else {}), **extra}
     return rt.run(request, tmp_path / name, rt.Tools())
 
 
@@ -525,3 +525,98 @@ def test_srgb_tagged_media_runs_end_to_end_under_the_srgb_interpretation(tmp_pat
     assert float(cn.ciede2000(measured, expected_lab)[0]) < 1.5
     bt1886_lab = cn.lab_from_rgb01(np.array([[expected_code] * 3]), 'bt1886')[0][0]
     assert abs(measured[0] - expected_lab[0]) < abs(measured[0] - bt1886_lab[0])  # measured under sRGB, not gamma 2.4
+
+
+def _rgb_at(video, frames):
+    import subprocess
+    picks = '+'.join('eq(n,%d)' % f for f in frames)
+    raw = subprocess.run(['ffmpeg', '-v', 'error', '-i', str(video), '-vf',
+                          f"select='{picks}',scale=in_color_matrix=bt709:in_range=tv:out_range=pc,format=rgb24",
+                          '-fps_mode', 'passthrough', '-f', 'rawvideo', '-'], check=True, capture_output=True).stdout
+    size = len(raw) // len(frames)
+    return [np.frombuffer(raw[k * size:(k + 1) * size], dtype=np.uint8).reshape(-1, 3).mean(axis=0) for k in range(len(frames))]
+
+
+@needs_media
+def test_layers_apply_in_order_to_exact_frame_ranges(tmp_path):
+    png = cm.image(tmp_path / 'dark.png', [((48, 48, 48), 1)])
+    video = cm.encode_sdr(png, tmp_path / 'dark.mp4', seconds=3)  # 75 frames
+    brighten, invert = tmp_path / 'up.cube', tmp_path / 'invert.cube'
+    identity = cn.identity_table(33)
+    brighten.write_text(cn.cube_text(np.clip(identity ** 2.4 * 2, 0, 1) ** (1 / 2.4), 'up'), encoding='utf-8')
+    invert.write_text(cn.cube_text(1.0 - identity, 'invert'), encoding='utf-8')
+    layers = [{'lut': ref(brighten), 'ranges': [[0, 25]]}, {'lut': ref(invert), 'ranges': [[20, 50]], 'strength': 1}]
+    receipt = lut_apply(tmp_path, video, None, 'layers', layers=layers)
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    result = receipt['result']
+    assert [l['frames'] for l in result['layers']] == [25, 30]
+    readback = {row['frame']: row for row in result['readback']['frames']}
+    assert 50 in readback and readback[50]['active_layers'] == []  # one frame outside every range
+    assert all(row['delta_e2000_median'] <= 3.0 for row in readback.values())
+    up = float(np.clip((48 / 255) ** 2.4 * 2, 0, 1) ** (1 / 2.4) * 255)
+    expected = {0: up, 19: up, 20: 255 - up, 24: 255 - up, 25: 255 - 48, 49: 255 - 48, 50: 48, 74: 48}
+    measured = _rgb_at(result['video']['path'], list(expected))
+    for (frame, value), rgb in zip(expected.items(), measured):
+        assert abs(rgb.mean() - value) < 3, (frame, rgb, value)
+
+
+def test_layer_strength_is_applied_once_in_the_readback_prediction(tmp_path):
+    png = cm.image(tmp_path / 'dark.png', [((48, 48, 48), 1)])
+    video = cm.encode_sdr(png, tmp_path / 'dark.mp4', seconds=1)
+    invert = tmp_path / 'invert.cube'
+    invert.write_text(cn.cube_text(1.0 - cn.identity_table(33), 'invert'), encoding='utf-8')
+    receipt = lut_apply(tmp_path, video, None, 'half', layers=[{'lut': ref(invert), 'ranges': [[0, 25]], 'strength': 0.5}])
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    measured = _rgb_at(receipt['result']['video']['path'], [12])[0]
+    assert abs(measured.mean() - (48 + 0.5 * (255 - 2 * 48))) < 3, measured
+
+
+def test_layer_readback_predicts_with_the_requested_interpolation(tmp_path):
+    png = cm.image(tmp_path / 'mid.png', [((128, 128, 128), 1)])
+    video = cm.encode_sdr(png, tmp_path / 'mid.mp4', seconds=1)
+    corner = np.zeros((2, 2, 2, 3))
+    corner[1, 1, 1] = 1.0  # non-affine: mid-gray is ~0.125 trilinear but ~0.5 tetrahedral
+    cube = tmp_path / 'corner.cube'
+    cube.write_text(cn.cube_text(corner, 'corner'), encoding='utf-8')
+    receipt = lut_apply(tmp_path, video, None, 'trilinear', interpolation='trilinear',
+                        layers=[{'lut': ref(cube), 'ranges': [[0, 25]]}])
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    measured = _rgb_at(receipt['result']['video']['path'], [12])[0]
+    assert measured.mean() < 64, measured  # trilinear, not the tetrahedral ~128
+
+
+def test_readback_grades_unaveraged_pixels_of_wide_fine_detail(tmp_path):
+    from PIL import Image
+    stripes = np.zeros((64, 512, 3), dtype=np.uint8)
+    stripes[:, 1::2] = 235  # one-pixel columns; area-averaging before the LUT would predict a brightened mid-gray
+    png = tmp_path / 'stripes.png'
+    Image.fromarray(stripes).save(png)
+    video = cm.encode_sdr(png, tmp_path / 'stripes.mp4', seconds=1)
+    up = tmp_path / 'up.cube'
+    up.write_text(cn.cube_text(np.clip(cn.identity_table(33) ** 2.4 * 4, 0, 1) ** (1 / 2.4), 'up2'), encoding='utf-8')
+    receipt = lut_apply(tmp_path, video, None, 'stripes', layers=[{'lut': ref(up), 'ranges': [[0, 25]]}])
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    assert receipt['result']['readback']['analysis_size'][0] == 256
+
+
+@pytest.mark.parametrize('change,error', [
+    (lambda r: r.update(lut=r['layers'][0]['lut']), 'COLOR_LUT_OR_LAYERS_REQUIRED'),
+    (lambda r: r.update(strength=0.5), 'COLOR_LAYER_STRENGTH_BELONGS_TO_LAYER'),
+    (lambda r: r['layers'][0].update(ranges=[[10, 5]]), 'COLOR_LAYER_RANGE_OUTSIDE_OR_UNSORTED'),
+    (lambda r: r['layers'][0].update(ranges=[[0, 10], [5, 20]]), 'COLOR_LAYER_RANGE_OUTSIDE_OR_UNSORTED'),
+    (lambda r: r['layers'][0].update(ranges=[[0, 26]]), 'COLOR_LAYER_RANGE_OUTSIDE_OR_UNSORTED'),
+    (lambda r: r['layers'][0].update(ranges=[[0, 1.5]]), 'COLOR_LAYER_RANGE_INVALID'),
+    (lambda r: r.update(layers=[]), 'COLOR_LAYERS_INVALID'),
+])
+@needs_media
+def test_layer_validation(tmp_path, change, error):
+    png = cm.image(tmp_path / 'g.png', [((90, 90, 90), 1)])
+    video = cm.encode_sdr(png, tmp_path / 'g.mp4', seconds=1)  # 25 frames
+    cube = tmp_path / 'id.cube'
+    cube.write_text(cn.cube_text(cn.identity_table(5), 'id'), encoding='utf-8')
+    request = {'operation': 'color-lut-apply', 'source': ref(video),
+               'input_color': {'space': 'bt709-sdr', 'range': 'limited', 'basis': 'verified-metadata'},
+               'interpolation': 'tetrahedral', 'layers': [{'lut': ref(cube), 'ranges': [[0, 25]]}]}
+    change(request)
+    receipt = rt.run(request, tmp_path / 'run', rt.Tools())
+    assert receipt['status'] == 'FAILED' and error in receipt['error']

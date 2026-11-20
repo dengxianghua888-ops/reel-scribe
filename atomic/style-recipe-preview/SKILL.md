@@ -8,3 +8,5 @@ description: 对同一当前作品的两到四份显式包装配方生成隔离�
 按[能力交接](../../contracts/capability-handoff.md)及[预览合同](../../contracts/style-preview-contract.md)提供权威 Work 版本、明确配方、范围与渲染选项。全部候选使用同一基础作品，不自动重写内容。
 
 生成的比较视频与参数只证明受支持包装执行，不能替代完整看听、内容核对或真实风格效果评估。预览不授权采用，后续采纳须通过既有 Work 版本及范围校验。
+
+配方带 `color_grade` 参数组时即为调色 A/B 预览：各变体在同一时间线上调色、渲染，作品头不变，代码不判断哪个更好。见[作品调色合同](../../contracts/work-color-contract.md)。

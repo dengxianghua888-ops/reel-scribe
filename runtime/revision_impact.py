@@ -5,7 +5,7 @@ This is not a cache executor, a QA approval, or a replacement Work authority.
 from editing_runtime import exact_keys, fingerprint, require, write_json
 from work_ops import revision_diff
 
-STAGES = ('source-analysis', 'content-plan', 'timeline', 'caption-layout',
+STAGES = ('source-analysis', 'content-plan', 'timeline', 'color-grade', 'caption-layout',
           'audio-mix', 'visual-composition', 'render')
 
 
@@ -68,6 +68,10 @@ def analyze(base, candidate, scope, tools, *, expected_base_sha256,
         affect('audio-track-or-mapping', ('audio-mix', 'render'))
     if diff['visual_layers'] or diff['visual_mapping_changed']:
         affect('visual-layer-or-mapping', ('visual-composition', 'render'))
+    if diff['color_grades'] or diff['color_inputs_changed'] or diff['color_order_changed']:
+        affect('color-grade-or-order', ('color-grade', 'render'))
+    if diff['color_revalidation_declared']:
+        affect('color-coverage', ('color-grade', 'render'))
     if diff['evidence_mapping_changed']:
         affect('evidence-mapping', ('content-plan',))
     if diff['style_bindings']:

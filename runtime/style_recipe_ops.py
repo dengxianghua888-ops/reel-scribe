@@ -8,7 +8,20 @@ import re
 from editing_runtime import exact_keys, fingerprint, require, source, write_json
 from work_ops import timeline_revise
 
-CAPABILITIES = {'caption-style', 'audio-track-gain', 'caption-cue-style', 'audio-track-envelope'}
+CAPABILITIES = {'caption-style', 'audio-track-gain', 'caption-cue-style', 'audio-track-envelope', 'color-grade'}
+
+
+PRESENTATION_GROUPS = ['caption_style', 'audio_gain_db', 'caption_overrides', 'audio_envelope', 'color_grade']
+
+
+def mapped_actual(document,group,key):
+    """Current Work value that a recipe mapping declares, or None when absent."""
+    if group=='caption_style':return document['caption_style'].get(key)
+    if group=='caption_overrides':return document['captions'].get(key,{}).get('style_override',{})
+    if group=='color_grade':
+        color=document.get('color')
+        return color['grades'].get(key) if isinstance(color,dict) else None
+    return document['audio_tracks'].get(key,{}).get('envelope' if group=='audio_envelope' else 'gain_db')
 
 
 def mapped_equal(group,actual,declared):
@@ -34,7 +47,7 @@ def validate_envelope_binding(document):
                ['recipe_id','recipe_version','recipe_sha256','presentation'])
     require(all(isinstance(record[k],str) and record[k].strip() for k in ['recipe_id','recipe_version']),'RECIPE_ID_REQUIRED')
     params=record['presentation']
-    exact_keys(params,['caption_style','audio_gain_db','caption_overrides','audio_envelope'])
+    exact_keys(params,PRESENTATION_GROUPS)
     require(bool(params),'RECIPE_PARAMETERS_REQUIRED')
     recipe={'schema':'style-recipe/1','id':record['recipe_id'],'version':record['recipe_version'],
             'style':{k:v for k,v in binding.items() if k!='parameters'},'parameters':params}
@@ -61,10 +74,7 @@ def validate_envelope_binding(document):
                 validate_override(value,document['plan']['height'],document['captions'][key]['text'])
             if group=='audio_envelope':
                 require(isinstance(value,dict) and key in document['audio_tracks'],'AUDIO_ENVELOPE_MAP_REQUIRED')
-            actual=(document['caption_style'].get(key) if group=='caption_style' else
-                    document['captions'].get(key,{}).get('style_override',{}) if group=='caption_overrides' else
-                    document['audio_tracks'].get(key,{}).get('envelope' if group=='audio_envelope' else 'gain_db'))
-            require(mapped_equal(group,actual,value),'AUDIO_ENVELOPE_BINDING_DIVERGED')
+            require(mapped_equal(group,mapped_actual(document,group,key),value),'AUDIO_ENVELOPE_BINDING_DIVERGED')
     for aid,track in document['audio_tracks'].items():
         if 'envelope' in track:
             require(aid in params.get('audio_envelope',{}),'AUDIO_ENVELOPE_UNMAPPED')
@@ -84,6 +94,18 @@ def envelope_recipe_guard(document,recipe,scope):
                 require(fingerprint(recipe['parameters'][group][key])==fingerprint(value),'AUDIO_ENVELOPE_UNSELECTED_PARAMETER_CHANGED')
 
 
+def carried_cue_guard(document, recipe):
+    """A color recipe may carry the bound cue mapping only whole and with its constraints."""
+    bindings=document['style_bindings']
+    require(set(bindings)=={'*'},'CUE_RECIPE_BINDING_UNSUPPORTED')
+    record=bindings['*'].get('parameters',{})
+    prior=record.get('presentation',{}).get('caption_overrides')
+    carried=recipe['parameters']['caption_overrides']
+    require(isinstance(prior,dict) and set(prior)==set(carried),'CUE_RECIPE_BINDING_PARAMETERS_DROPPED')
+    require(fingerprint(prior)==fingerprint(carried),'CUE_RECIPE_BINDING_DIVERGED')
+    require(record.get('layout_constraints')==recipe.get('layout_constraints'),'CUE_RECIPE_CONSTRAINTS_MUST_PERSIST')
+
+
 def cue_recipe_guard(document, recipe, scope):
     """Local-only edit: preserve existing compiler declarations, never discard them."""
     params=recipe['parameters'];overrides=params['caption_overrides']
@@ -96,25 +118,22 @@ def cue_recipe_guard(document, recipe, scope):
         require(isinstance(cid,str) and cid in document['captions'],'CAPTION_TARGET_UNKNOWN')
         if cid not in targets:
             require(values==document['captions'][cid].get('style_override',{}),'CUE_RECIPE_UNSELECTED_OVERRIDE_CHANGED')
-    for group in ['caption_style','audio_gain_db','audio_envelope']:
+    for group in ['caption_style','audio_gain_db','audio_envelope','color_grade']:
         if group in params:
             values=params[group];require(isinstance(values,dict) and values,'RECIPE_PARAMETERS_REQUIRED')
             for key,value in values.items():
-                actual=document['caption_style'].get(key) if group=='caption_style' else document['audio_tracks'].get(key,{}).get('envelope' if group=='audio_envelope' else 'gain_db')
-                require(mapped_equal(group,actual,value),'CUE_RECIPE_GLOBAL_CHANGE_FORBIDDEN')
+                require(mapped_equal(group,mapped_actual(document,group,key),value),'CUE_RECIPE_GLOBAL_CHANGE_FORBIDDEN')
     bindings=document['style_bindings']
     if bindings:
         require(set(bindings)=={'*'},'CUE_RECIPE_BINDING_UNSUPPORTED')
         old=bindings['*'];record=old.get('parameters',{});prior=record.get('presentation')
-        require(isinstance(prior,dict) and prior and set(prior)<= {'caption_style','audio_gain_db','caption_overrides','audio_envelope'},'CUE_RECIPE_BINDING_UNSUPPORTED')
+        require(isinstance(prior,dict) and prior and set(prior)<=set(PRESENTATION_GROUPS),'CUE_RECIPE_BINDING_UNSUPPORTED')
         require({k:v for k,v in old.items() if k!='parameters'}==recipe['style'],'CUE_RECIPE_STYLE_IDENTITY_CONFLICT')
         require(record.get('layout_constraints')==recipe.get('layout_constraints'),'CUE_RECIPE_CONSTRAINTS_MUST_PERSIST')
         for group,values in prior.items():
             require(isinstance(values,dict) and group in params,'CUE_RECIPE_BINDING_PARAMETERS_DROPPED')
             for key,value in values.items():
-                actual=(document['captions'].get(key,{}).get('style_override',{}) if group=='caption_overrides' else
-                        document['caption_style'].get(key) if group=='caption_style' else document['audio_tracks'].get(key,{}).get('envelope' if group=='audio_envelope' else 'gain_db'))
-                require(mapped_equal(group,actual,value),'CUE_RECIPE_BINDING_DIVERGED')
+                require(mapped_equal(group,mapped_actual(document,group,key),value),'CUE_RECIPE_BINDING_DIVERGED')
                 require(key in params[group],'CUE_RECIPE_BINDING_PARAMETERS_DROPPED')
                 if group!='caption_overrides' or key not in targets:
                     require(params[group][key]==value,'CUE_RECIPE_BINDING_PARAMETERS_CHANGED')
@@ -141,7 +160,7 @@ def execute(request, directory, tools):
                 for k in ['family', 'style_id', 'version']), 'STYLE_ID_REQUIRED')
     source(style['card'])
     parameters = recipe['parameters']
-    exact_keys(parameters, ['caption_style', 'audio_gain_db', 'caption_overrides', 'audio_envelope'])
+    exact_keys(parameters, PRESENTATION_GROUPS)
     require(bool(parameters), 'RECIPE_PARAMETERS_REQUIRED')
     capabilities = request['capabilities']
     require(isinstance(capabilities, list) and all(isinstance(c, str) for c in capabilities)
@@ -160,13 +179,15 @@ def execute(request, directory, tools):
         if request['scope'].get('caption_ids'):
             cue_targets=cue_recipe_guard(document,recipe,request['scope'])
         else:
-            # An audio-only recipe may carry existing cue mappings unchanged.
-            require('audio_envelope' in parameters,'CAPTION_OVERRIDE_SCOPE_REQUIRED')
+            # An audio-envelope or color recipe may carry existing cue mappings unchanged.
+            require('audio_envelope' in parameters or 'color_grade' in parameters,'CAPTION_OVERRIDE_SCOPE_REQUIRED')
             overrides=parameters['caption_overrides']
             require(isinstance(overrides,dict) and bool(overrides),'CAPTION_OVERRIDE_MAP_REQUIRED')
             for cid,values in overrides.items():
                 require(cid in document['captions'] and fingerprint(values)==fingerprint(document['captions'][cid].get('style_override',{})),
                         'CUE_RECIPE_UNSELECTED_OVERRIDE_CHANGED')
+            if 'audio_envelope' not in parameters:
+                carried_cue_guard(document,recipe)  # the envelope path has its own binding guard
     if 'caption_style' in parameters:
 
         if cue_targets is None:required.append('caption-style')
@@ -202,6 +223,19 @@ def execute(request, directory, tools):
         for aid,value in values.items():
             require(isinstance(aid,str) and aid in candidate['audio_tracks'],'AUDIO_TARGET_UNKNOWN')
             candidate['audio_tracks'][aid]['envelope']=copy.deepcopy(value)
+    if 'color_grade' in parameters:
+        if cue_targets is None:required.append('color-grade')
+        values=parameters['color_grade']
+        require(isinstance(values,dict) and values,'COLOR_GRADE_MAP_REQUIRED')
+        # Source interpretation is a fact about the media, not a style choice: the Work declares it first.
+        require(isinstance(candidate.get('color'),dict),'EXISTING_COLOR_INPUTS_REQUIRED')
+        # JSON object order is not part of the recipe digest, so new grades append in ID order.
+        for gid,grade in sorted(values.items()):
+            require(isinstance(gid,str) and gid and isinstance(grade,dict),'COLOR_GRADE_MAP_REQUIRED')
+            exact_keys(grade,['targets','interpretation','ops','strength','lut_size'],['targets','interpretation','ops','lut_size'])
+            candidate['color']['grades'][gid]=copy.deepcopy(grade)
+            if gid not in candidate['color']['order']:
+                candidate['color']['order'].append(gid)
     if cue_targets is not None:
         from caption_style import validate_override
         required.append('caption-cue-style')

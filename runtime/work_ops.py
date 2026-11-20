@@ -18,7 +18,7 @@ def canonical(value):
 
 def validate_document(doc,tools):
     from editing_runtime import exact_keys,require,normalize_plan,number,source,span,audio_intersection,windowed_mix_clock
-    exact_keys(doc,['schema','plan','captions','caption_style','audio_tracks','style_bindings','notes','visual_layers','evidence_protection'],
+    exact_keys(doc,['schema','plan','captions','caption_style','audio_tracks','style_bindings','notes','visual_layers','evidence_protection','color'],
                ['schema','plan','captions','caption_style','audio_tracks','style_bindings','notes'])
     require(doc['schema']=='work-document/1','WORK_SCHEMA_UNSUPPORTED')
     norm=normalize_plan(doc['plan'],tools);clips={c['id']:c for c in norm['clips']}
@@ -87,6 +87,9 @@ def validate_document(doc,tools):
         require(isinstance(binding['parameters'],dict),'STYLE_PARAMETERS_REQUIRED');source(binding['card'])
     from overlay_ops import work_layers
     work_layers(doc,norm,tools)
+    if 'color' in doc:
+        from work_color import validate as validate_color
+        validate_color(doc,norm,tools)
     canonical(doc)  # Reject NaN and non-JSON state instead of silently coercing it.
     if 'evidence_protection' in doc:
         from editing_runtime import fingerprint
@@ -106,11 +109,12 @@ def revision_diff(base,candidate,scope,tools):
     from editing_runtime import exact_keys,require,fingerprint
     fields=['clip_ids','source_ids','caption_ids','audio_ids','style_keys','note_keys','output_fields','caption_style',
             'freeze_positions','freeze_duration']
-    exact_keys(scope,fields+['visual_ids','evidence_mapping'],fields)
-    scope={**scope,'visual_ids':scope.get('visual_ids',[]),'evidence_mapping':scope.get('evidence_mapping',False)}
-    fields=fields+['visual_ids','evidence_mapping']
+    exact_keys(scope,fields+['visual_ids','evidence_mapping','grade_ids','color_inputs'],fields)
+    scope={**scope,'visual_ids':scope.get('visual_ids',[]),'evidence_mapping':scope.get('evidence_mapping',False),
+           'grade_ids':scope.get('grade_ids',[]),'color_inputs':scope.get('color_inputs',False)}
+    fields=fields+['visual_ids','evidence_mapping','grade_ids','color_inputs']
     for k in fields:
-        if k in ['caption_style','freeze_duration','evidence_mapping']:
+        if k in ['caption_style','freeze_duration','evidence_mapping','color_inputs']:
             require(type(scope[k]) is bool,'BOOLEAN_SCOPE_REQUIRED: '+k)
         else:
             require(isinstance(scope[k],list) and all(isinstance(x,str) for x in scope[k]) and len(set(scope[k]))==len(scope[k]),'ID_SCOPE_REQUIRED: '+k)
@@ -199,8 +203,11 @@ def revision_diff(base,candidate,scope,tools):
     require(set(modified)<=allowed,'CLIP_OUTSIDE_SCOPE')
     # A target may move even when its source range and parameters are unchanged.
     shifted=[cid for cid in before if cid in after and (old_positions[cid]!=new_positions[cid] or old['fps']!=new['fps'])]
+    from work_color import revision_changes
+    result.update(revision_changes(base,candidate,scope,old,new))
     plan_changed=base['plan']!=candidate['plan']
-    media_changed=plan_changed or any(base[k]!=candidate[k] for k in ['captions','caption_style','audio_tracks']) or bool(result['visual_layers'])
+    media_changed=(plan_changed or any(base[k]!=candidate[k] for k in ['captions','caption_style','audio_tracks'])
+                   or bool(result['visual_layers']) or base.get('color')!=candidate.get('color'))
     result.update(changed_clip_ids=modified,shifted_clip_ids=shifted,output_fields=geometry,
         old_order=list(before),new_order=list(after),caption_style_changed=base['caption_style']!=candidate['caption_style'],
         old_frames=old['total_frames'],new_frames=new['total_frames'],
@@ -557,6 +564,32 @@ def _render_document_bound(document,directory,tools,*,work_version,audio_backend
                                'sha256':sha256(directory/'timeline/receipt.json'),
                                'execution':'REUSED_VERIFIED_NOT_EXECUTED'})
     current=directory/'timeline/preview.mp4'
+    graded=[]
+    if 'color' in doc:
+        # Grade picture only: after the timeline, before audio mix, visual layers and captions.
+        from work_color import validate as validate_color
+        layers=[]
+        for index,grade in enumerate(validate_color(doc,norm,tools)):
+            name='color-grade-%02d'%index
+            invoke({'operation':'color-grade-compile','grade':grade['spec'],'lut_size':grade['lut_size'],'exports':['cube']},name)
+            cube=directory/name/'grade.cube'
+            layers.append({'lut':{'path':str(cube),'sha256':sha256(cube)},'ranges':grade['ranges']})
+            graded.append({'id':grade['id'],'clip_ids':grade['clip_ids'],'ranges':grade['ranges'],
+                           'cube':{'path':str(cube),'sha256':sha256(cube)}})
+        if layers:
+            # LUTs act on code values; each grade's interpretation was checked per source above. The timeline
+            # inherits its first frames' transfer tag, so the color step keeps that tag instead of relabeling.
+            timeline_video=next(s for s in tools.probe(str(current))['streams'] if s.get('codec_type')=='video')
+            tag=timeline_video.get('color_transfer')
+            require(tag in (None,'unknown','unspecified','bt709','iec61966-2-1'),
+                    'WORK_COLOR_TIMELINE_TRANSFER_UNSUPPORTED: %s'%tag)
+            space='srgb-sdr' if tag=='iec61966-2-1' else 'bt709-sdr'
+            invoke({'operation':'color-lut-apply','source':{'path':str(current),'sha256':sha256(current)},
+                    'input_color':{'space':space,'range':'limited','basis':'caller-declared'},
+                    'interpolation':'tetrahedral','layers':layers},'color')
+            current=directory/'color/graded.mp4'
+            for row in graded:
+                row['pipeline_transfer_tag']=tag or 'unknown'
     if tracks:
         invoke({'operation':'audio-mix','source':{'path':str(current),'sha256':sha256(current)},'base_gain_db':0,'tracks':tracks},'audio')
         current=directory/'audio/mixed.mp4'
@@ -582,7 +615,8 @@ def _render_document_bound(document,directory,tools,*,work_version,audio_backend
     return {'video':{'path':str(current),'sha256':sha256(current)},'document_sha256':fingerprint(doc),
             'child_receipts':child_receipts,
             **({'timeline_reuse':shared[0]} if shared is not None else {}),
-            'layer_counts':{'audio_tracks':len(tracks),'visual_layers':len(visual),'captions':len(cues)}}
+            **({'color_grades':graded,'color_order':'after timeline, before audio mix, visual layers and captions'} if graded else {}),
+            'layer_counts':{'audio_tracks':len(tracks),'visual_layers':len(visual),'captions':len(cues),'color_grades':len(graded)}}
 
 
 def work_render(request,directory,tools):

@@ -83,8 +83,10 @@ def composite(q,directory,tools):
         args+=['-i',layer['source']['path']]
         x,y,w,h=layer['rect'];a=layer['start_frame'];b=layer['end_frame']
         filters.append(f'[{i}:v:0]trim=start_frame={layer["source_start_frame"]}:end_frame={layer["source_end_frame"]},'
-            f'setpts=PTS-STARTPTS+{a}/({fps}*TB),scale={w}:{h}:flags=lanczos,setsar=1,format=yuva420p,'
-            f'colorchannelmixer=aa={layer["opacity"]}[layer{i}]')
+            f'setpts=PTS-STARTPTS+{a}/({fps}*TB),scale={w}:{h}:flags=lanczos:in_color_matrix=bt709:in_range=tv:'
+            f'out_color_matrix=bt709:out_range=tv,setsar=1,format=yuva420p,'
+            # Opacity scales the alpha plane in place: an RGB colorchannelmixer round trip mixed BT.601/709 matrices.
+            f'lut=a=val*{layer["opacity"]}[layer{i}]')
         # Use timestamps only to synchronize secondary input. Main frame index sets exact half-open visibility.
         filters.append(f'[{last}][layer{i}]overlay=x={x}:y={y}:eof_action=pass:repeatlast=0:shortest=0:'
             f'enable=\'gte(n,{a})*lt(n,{b})\':format=yuv420[out{i}]')

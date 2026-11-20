@@ -44,6 +44,8 @@ def document_references(document):
     refs.extend(layer['source'] for layer in document.get('visual_layers', {}).values())
     if document.get('caption_style'):
         refs.append(document['caption_style']['font'])
+    from work_color import lut_references
+    refs.extend(lut_references(document))
     return refs
 
 

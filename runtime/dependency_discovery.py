@@ -136,12 +136,15 @@ def _selected_requirements(identifier, request):
             required.append('font')
     elif identifier == 'work-render':
         if request is None:
-            unknown.append('stored WorkDocument captions, overlays and audio tracks')
+            unknown.append('stored WorkDocument captions, overlays, audio tracks and color grades')
     elif identifier == 'speech-transcribe-local' and request is None:
         unknown.append('request model/environment lock identity')
     elif identifier == 'color-lut-apply':
         if request is None:
-            unknown.append('optional strength derives a blended cube with numpy')
+            unknown.append('optional strength or layers derive cubes and read back frames with numpy')
+        elif 'layers' in request:
+            required.append('numpy')
+            branch = 'layered-frame-ranges'
         elif 'strength' in request:
             required.append('numpy')
             branch = 'strength-derived-cube'
@@ -681,6 +684,8 @@ def inspect(root, *, ffmpeg=None, ffprobe=None, bindings=None, env=None, request
                 profile += ('font',)
             if not work_content_reason and selected_document.get('caption_style') is not None and 'font' not in profile:
                 profile += ('font',)
+            if not work_content_reason and isinstance(selected_document.get('color'), dict):
+                profile += ('numpy',)  # color-grade-compile and layered color-lut-apply
         if identifier in ('timeline-render', 'work-render') and selected is not None:
             if stretch.get('required'):
                 profile += ('audio-time-stretch',)
