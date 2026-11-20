@@ -109,6 +109,8 @@
 
 - 分析参考叙事/节奏/构图/声画/色彩/文字，提炼机制并用于目标素材：raven-reference-style。先识别analysis/plan/final/revision，保留当前题材规则与作品主风格。
 - 仅缩短/舒展走raven-pacing-restructure；用户明确要求按参考改变节奏时走参考适配并复用节奏约束。参数完整的LUT应用直接color-lut-apply，不自动挑风格。
+- 已有明确调色参数（曝光档、白平衡增益、高光滚降、CDL、曲线、HSL、外部LUT与强度）要编译成LUT或导出CDL/CLF：`color-grade-compile`，解释与素材传递函数一致（BT.709用bt709-sdr-display，sRGB照片素材用srgb-sdr-display）；参数来源由上层负责，编译成功不代表画面更好。实际套用仍用color-lut-apply（可带strength）。
+- 只测量参考或目标素材明确区间的色彩特征（影调分位数、剪切、CIELAB、色度、色相分布、调色板、样本漂移）：`color-profile-scan`。数值是证据，不是审美判断或风格推荐；HDR/Log/广色域素材被拒绝而不是硬算。
 - 未提供可查看参考时继续目标素材盘点，索取必要参考；截图只支持可见静态线索，不宣称听过音乐或看过完整节奏。
 - 多参考按维度分工；原话/事实/保护区间优先。不可用HDR/Log、复杂动效、跟踪、光流等分别标缺项，不把参考相似度当成成片质量。
 - 风格卡按任务按需加载，单次reference_profile不自动变为长期个人默认。
@@ -116,6 +118,7 @@
 ## 图文、脚本与生成补足
 
 - 图文/图片/脚本制作声画短片，或已有作品补生成画面：raven-script-generation。先判analysis/plan/asset/final/revision，脚本与分镜不自动提交模型任务。
+- 静图带ICC配置文件（尤其非sRGB，如Adobe RGB）、EXIF旋转，或要按sRGB进入色彩链：先`still-color-normalize`转换为无配置文件的sRGB PNG，再still-image-render（input_color=srgb）；未标记图片只有调用者明确声明时才按sRGB处理。
 - 明确图片、逐帧裁切矩形和时长可直接still-image-render；“做得有故事感”“镜头该怎么动”是复杂决策。静图运镜不冒充图生视频模型或主体动画。
 - 完整实拍剪辑按题材入口；图像只做封面而不做视频不属于本工作流。已有合格候选可评审剪辑；尚无候选而当前 Agent 有实际能力与授权时先生成候选再评审；能力不可用或生成后仍无合格候选时，仅生成阶段标 `capability-unavailable`，继续可完成的脚本、分镜和已有素材剪辑。
 - 局部生成修订保存原资产，检查整片副作用；与纯时间线剪切分开。需要数字人或口型分别检查当前 Agent 的执行能力；本库可选本地生成账本没有媒体 Provider 适配时不能代替真实服务，不因已有风格卡就承诺实现。

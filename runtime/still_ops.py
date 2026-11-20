@@ -50,10 +50,13 @@ def render_still(request,directory,tools):
         require(request['allow_upscale'] or (cw>=w and ch>=h),'STILL_UPSCALE_NOT_ALLOWED')
     require(keyframes[0]['frame']==0 and keyframes[-1]['frame']==n-1,'STILL_ENDPOINTS_REQUIRED')
     output=directory/'still-motion.mp4';log=directory/'encode.log'
+    transfer='iec61966-2-1' if request['input_color']=='srgb' else 'bt709'
+    # Tags go on the frames too: some FFmpeg builds drop -color_trc/-color_primaries for untagged rawvideo input.
+    tags=f'setparams=colorspace=bt709:color_primaries=bt709:color_trc={transfer}:range=tv'
     command=[tools.binary('ffmpeg'),'-nostdin','-v','error','-f','rawvideo','-pixel_format','rgb24','-video_size',f'{w}x{h}',
-        '-framerate',str(fps),'-i','pipe:0','-vf','scale=in_range=pc:out_range=tv:out_color_matrix=bt709,format=yuv420p',
+        '-framerate',str(fps),'-i','pipe:0','-vf','scale=in_range=pc:out_range=tv:out_color_matrix=bt709,format=yuv420p,'+tags,
         '-an','-frames:v',str(n),'-r',str(fps),'-fps_mode','cfr','-c:v','libx264','-crf','18','-preset','medium',
-        '-color_range','tv','-colorspace','bt709','-color_primaries','bt709','-color_trc','iec61966-2-1' if request['input_color']=='srgb' else 'bt709','-movflags','+faststart',str(output)]
+        '-color_range','tv','-colorspace','bt709','-color_primaries','bt709','-color_trc',transfer,'-movflags','+faststart',str(output)]
     paths=[];j=0
     with log.open('wb') as err:
         process=subprocess.Popen(command,stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=err,

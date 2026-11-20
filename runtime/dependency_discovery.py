@@ -64,7 +64,10 @@ ATOMIC_REQUIREMENTS = {
     'caption-coverage-check': ('ffprobe',),
     'cue-alignment-check': ('ffprobe',),
     'color-lut-apply': ('ffmpeg', 'ffprobe'),
+    'color-profile-scan': ('ffmpeg', 'ffprobe', 'numpy'),
+    'color-grade-compile': ('numpy',),
     'still-image-render': ('ffmpeg', 'ffprobe', 'Pillow'),
+    'still-color-normalize': ('Pillow', 'numpy'),
     'localization-plan-compile': ('ffprobe',),
     'work-variant-create': ('sqlite', 'ffprobe', 'fcntl'),
     'work-batch-render': ('sqlite', 'fcntl'),
@@ -136,6 +139,14 @@ def _selected_requirements(identifier, request):
             unknown.append('stored WorkDocument captions, overlays and audio tracks')
     elif identifier == 'speech-transcribe-local' and request is None:
         unknown.append('request model/environment lock identity')
+    elif identifier == 'color-lut-apply':
+        if request is None:
+            unknown.append('optional strength derives a blended cube with numpy')
+        elif 'strength' in request:
+            required.append('numpy')
+            branch = 'strength-derived-cube'
+        else:
+            branch = 'verified-cube-as-is'
     return tuple(dict.fromkeys(required)), unknown, branch
 
 
@@ -287,6 +298,36 @@ def _inspect_media_tool(name, cli_value, env, identity):
     return {'status': status, 'origin': origin, 'configured_path': path,
             'identity': observed, 'recovery': None if status == 'PRESENT_IDENTITY_OBSERVED'
             else f'Resolve the recorded {name} chain/error and rerun; do not accept a wrapper hash alone.'}
+
+
+# Informational only: presence of a filter name is not proof that a color
+# transform is correct, and no atomic status depends on this inventory yet.
+COLOR_FILTERS = ('lut1d', 'lut3d', 'haldclut', 'colorbalance', 'colortemperature', 'curves', 'eq',
+                 'huesaturation', 'selectivecolor', 'vibrance', 'exposure', 'colorchannelmixer',
+                 'colorlevels', 'colorspace', 'zscale', 'tonemap', 'libplacebo', 'signalstats',
+                 'histogram', 'vectorscope', 'waveform', 'deband', 'noise', 'vignette')
+
+
+def _color_filters_probe(ffmpeg_component):
+    if ffmpeg_component.get('status') != 'PRESENT_IDENTITY_OBSERVED':
+        return {'status': 'NEEDS_FFMPEG', 'recovery': 'Resolve ffmpeg identity first; filters are probed from that binary.'}
+    binary = ffmpeg_component['identity']['resolved_binary']['path']
+    try:
+        completed = subprocess.run([binary, '-hide_banner', '-filters'], capture_output=True, text=True,
+                                   encoding='utf-8', errors='replace', timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {'status': 'UNRESOLVED', 'reason': type(exc).__name__,
+                'recovery': 'Rerun the doctor; the ffmpeg filter listing did not complete.'}
+    if completed.returncode != 0:
+        return {'status': 'UNRESOLVED', 'reason': 'FILTER_LISTING_FAILED',
+                'recovery': 'Rerun the doctor; the ffmpeg filter listing exited with an error.'}
+    names = set(re.findall(r'^\s*[A-Z.|]{2,3}\s+(\S+)\s+\S+->\S+', completed.stdout, re.MULTILINE))
+    available = {name: name in names for name in COLOR_FILTERS}
+    return {'status': 'OBSERVED_NOT_EXECUTED', 'binary': binary, 'filters': available,
+            'routes': {'hdr_to_sdr_zscale_tonemap': available['zscale'] and available['tonemap'],
+                       'hdr_to_sdr_libplacebo': available['libplacebo'],
+                       'cube_lut': available['lut3d']},
+            'limit': 'Filter names only; no transform was executed or validated.', 'recovery': None}
 
 
 def _python_probe():
@@ -582,6 +623,7 @@ def inspect(root, *, ffmpeg=None, ffprobe=None, bindings=None, env=None, request
                   'ffmpeg': _inspect_media_tool('ffmpeg', ffmpeg, env, identity),
                   'ffprobe': _inspect_media_tool('ffprobe', ffprobe, env, identity),
                   'say': _say_probe(env), 'Pillow': packages['Pillow'], 'numpy': packages['numpy']}
+    components['ffmpeg-color-filters'] = _color_filters_probe(components['ffmpeg'])
     components['style-resources'] = (_style_resources_probe(request)
         if request is not None and request.get('operation')=='work-version' and request.get('action')=='relink-style-resources'
         else {'status':'NEEDS_BINDING','recovery':'Select a concrete relink-style-resources request.'})

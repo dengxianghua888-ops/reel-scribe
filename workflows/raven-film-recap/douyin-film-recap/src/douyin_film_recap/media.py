@@ -68,6 +68,33 @@ def ffprobe_json(path: str | Path) -> dict[str, Any]:
     return json.loads(result.stdout)
 
 
+HDR_TRANSFERS = {"arib-std-b67", "smpte2084"}
+WIDE_GAMUT_PRIMARIES = {"bt2020", "smpte431", "smpte432"}
+
+
+def hdr_signal(video_stream: dict[str, Any]) -> str | None:
+    """Describe why a stream is HDR or wide gamut, or return None for SDR/unknown tags."""
+    reasons = []
+    if video_stream.get("color_transfer") in HDR_TRANSFERS:
+        reasons.append(f"color_transfer={video_stream['color_transfer']}")
+    if video_stream.get("color_primaries") in WIDE_GAMUT_PRIMARIES:
+        reasons.append(f"color_primaries={video_stream['color_primaries']}")
+    return ", ".join(reasons) or None
+
+
+def require_sdr_source(path: str | Path, video_stream: dict[str, Any]) -> None:
+    # The renderer encodes 8-bit SDR-range video without tone mapping and keeps
+    # the source tags: measured HLG/PQ synthetic charts lose ~13 L* and roughly
+    # half their chroma when shown as SDR. Refuse instead of delivering that.
+    reason = hdr_signal(video_stream)
+    if reason:
+        raise ValueError(
+            f"SOURCE_HDR_INPUT_UNSUPPORTED: {Path(path).name}: {reason}; this renderer has no HDR/wide-gamut "
+            "to SDR BT.709 conversion, so output would look dark and desaturated on SDR players. "
+            "Convert the source to SDR BT.709 with an explicit, reviewed tone-mapping step before ingest."
+        )
+
+
 def media_duration(path: str | Path) -> float:
     data = ffprobe_json(path)
     try:
@@ -170,6 +197,7 @@ def build_manifest(input_path: str | Path, config: AppConfig, work_dir: Path) ->
         )
         if not video_stream:
             raise ValueError(f"No video stream found: {video}")
+        require_sdr_source(video, video_stream)
         duration = float(
             probe.get("format", {}).get("duration")
             or video_stream.get("duration")

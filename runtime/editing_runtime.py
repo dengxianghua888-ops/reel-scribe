@@ -1236,9 +1236,18 @@ def execute(request, directory, tools):
     if op == 'still-image-render':
         from still_ops import render_still
         return render_still(request,directory,tools)
+    if op == 'still-color-normalize':
+        from still_color_ops import normalize_still
+        return normalize_still(request, directory, tools)
     if op == 'color-lut-apply':
         from color_ops import apply_lut
         return apply_lut(request,directory,tools)
+    if op == 'color-grade-compile':
+        from color_grade_ops import compile_grade
+        return compile_grade(request, directory, tools)
+    if op == 'color-profile-scan':
+        from color_profile_ops import scan
+        return scan(request, directory, tools)
     if op == 'cue-alignment-check':
         from cue_ops import alignment_check
         return alignment_check(request,directory,tools)
