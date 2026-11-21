@@ -6,6 +6,8 @@ import hashlib
 from pathlib import Path
 import subprocess
 import sys
+import threading
+import time
 
 import pytest
 
@@ -42,6 +44,14 @@ def still(tmp_path, name, rgb8, size=(128, 96), audio=False, transfer='bt709'):
              '-preset', 'ultrafast', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', transfer,
              '-color_range', 'tv', str(out)]
     subprocess.run(args, check=True, timeout=120)
+    return out
+
+
+def derive(tmp_path, video, name, *args):
+    """Re-encode or remux a test clip, keeping the color tags verified-metadata needs."""
+    out = tmp_path / f'{name}.mp4'
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', *args[:-1], '-i', str(video), *args[-1], '-colorspace', 'bt709',
+                    '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv', str(out)], check=True, timeout=120)
     return out
 
 
@@ -149,3 +159,100 @@ def test_request_validation(tmp_path, effects, error):
 def test_readback_frames_must_exist(tmp_path):
     receipt = run(tmp_path, still(tmp_path, 'gray', (100, 100, 100)), {'grain': GRAIN}, 'frames', frames=(10,))
     assert receipt['status'] == 'FAILED' and 'TEXTURE_READBACK_FRAMES_INVALID' in receipt['error']
+
+
+@pytest.mark.parametrize('setpts,error', [
+    ("if(gte(N,5),(N+2)/25/TB,N/25/TB)", 'TEXTURE_CFR_REQUIRED'),  # a gap after frame 4
+    ('PTS+0.2/TB', 'TEXTURE_ZERO_ORIGIN_CFR_REQUIRED'),  # constant rate, late start
+])
+def test_frames_must_keep_a_zero_origin_constant_clock(tmp_path, setpts, error):
+    # Raw frames lose their timestamps and are restamped at one rate, which would retime these clips.
+    video = derive(tmp_path, still(tmp_path, 'gray', (100, 100, 100)), 'retimed',
+                   ['-vf', f"setpts='{setpts}'", '-fps_mode', 'passthrough', '-c:v', 'libx264', '-qp', '0',
+                    '-preset', 'ultrafast'])
+    receipt = run(tmp_path, video, {'grain': GRAIN}, 'clock')
+    assert receipt['status'] == 'FAILED' and error in receipt['error'], receipt.get('error')
+
+
+def test_rotated_sources_are_refused(tmp_path):
+    # FFmpeg autorotates on decode; coded 128x96 frames would come out as 96x128 rows.
+    video = derive(tmp_path, still(tmp_path, 'gray', (100, 100, 100)), 'rotated', '-display_rotation', '90',
+                   ['-c', 'copy'])
+    receipt = run(tmp_path, video, {'grain': GRAIN}, 'rotated')
+    assert receipt['status'] == 'FAILED' and 'ROTATED_TEXTURE_SOURCE_UNSUPPORTED' in receipt['error'], receipt.get('error')
+
+
+def test_readback_uses_the_first_video_stream_like_the_render(tmp_path):
+    small = still(tmp_path, 'small', (90, 120, 150))
+    large = still(tmp_path, 'large', (150, 120, 90), size=(256, 192))
+    video = tmp_path / 'two-streams.mp4'
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(small), '-i', str(large), '-map', '0:v', '-map', '1:v',
+                    '-c', 'copy', str(video)], check=True, timeout=120)
+    receipt = run(tmp_path, video, {'vignette': {'strength': 0.3, 'start': 0.4}}, 'streams')
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    assert abs(frame(receipt['result']['video']['path'], 3)[48, 64] - np.array([90, 120, 150]) / 255).max() < 0.01
+
+
+class Cancel:
+    """Set the run's cancellation event, then observe what the pipeline did."""
+
+    def __init__(self, monkeypatch):
+        self.event, self.calls, self.spawned = threading.Event(), [], []
+        spawn, apply = texture_ops._spawn, texture_ops.apply
+        monkeypatch.setattr(texture_ops, '_spawn', lambda command, log, **pipes: self.spawned.append(
+            spawn(self.replace(command), log, **pipes)) or self.spawned[-1])
+        monkeypatch.setattr(texture_ops, 'apply', lambda *a: self.calls.append(a[1]) or self.during(a[1]) or apply(*a))
+        self.token = rt.RUN_CANCELLATION.set(self.event)
+
+    def replace(self, command):
+        return command
+
+    def during(self, frame_index):
+        pass
+
+    def finish(self):
+        rt.RUN_CANCELLATION.reset(self.token)
+        assert self.spawned and all(p.poll() is not None for p in self.spawned)  # every child reaped
+
+
+def test_cancellation_stops_the_frame_loop_and_reaps_both_processes(tmp_path, monkeypatch):
+    video = still(tmp_path, 'gray', (100, 100, 100))
+    cancel = Cancel(monkeypatch)
+    cancel.during = lambda f: cancel.event.set() if f == 2 else None
+    try:
+        receipt = run(tmp_path, video, {'grain': GRAIN}, 'cancel')
+    finally:
+        cancel.finish()
+    assert receipt['status'] == 'FAILED' and receipt.get('cancelled') is True, receipt
+    assert receipt['error'].startswith('TEXTURE_CANCELLED: texture pipeline') and max(cancel.calls) <= 3, receipt['error']
+
+
+def test_cancellation_interrupts_a_write_blocked_on_a_stuck_encoder(tmp_path, monkeypatch):
+    video = still(tmp_path, 'gray', (100, 100, 100))
+    cancel = Cancel(monkeypatch)
+    # An "encoder" that never reads: the first 72 KiB frame fills the pipe and the write blocks.
+    cancel.replace = lambda c: [sys.executable, '-c', 'import time; time.sleep(60)'] if '-tune' in c else c
+    timer = threading.Timer(0.5, cancel.event.set)
+    started = time.monotonic()
+    timer.start()
+    try:
+        receipt = run(tmp_path, video, {'grain': GRAIN}, 'blocked')
+    finally:
+        timer.cancel()
+        timer.join()
+        cancel.finish()
+    assert receipt.get('cancelled') is True and receipt['error'].startswith('TEXTURE_CANCELLED'), receipt
+    assert time.monotonic() - started < 10 and cancel.calls == [0]
+
+
+def test_a_stalled_pipeline_is_killed_after_the_stall_timeout(tmp_path, monkeypatch):
+    video = still(tmp_path, 'gray', (100, 100, 100))
+    monkeypatch.setattr(texture_ops, 'STALL_TIMEOUT_SEC', 0.5)
+    cancel = Cancel(monkeypatch)
+    cancel.during = lambda f: time.sleep(1.5) if f == 1 else None
+    try:
+        receipt = run(tmp_path, video, {'grain': GRAIN}, 'stall')
+    finally:
+        cancel.finish()
+    assert receipt['status'] == 'FAILED' and receipt['error'].startswith('TEXTURE_STALLED: texture pipeline'), receipt
+    assert cancel.calls == [0, 1]

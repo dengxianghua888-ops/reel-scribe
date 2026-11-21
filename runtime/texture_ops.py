@@ -16,6 +16,8 @@ READBACK_SIGMA = 1.5
 # Default swscale rounding darkened a pass-through RGB48 -> 4:2:0 round trip by ~0.006; these flags remove the bias.
 SWS_FLAGS = 'accurate_rnd+full_chroma_int'
 LUMA_709 = (0.2126, 0.7152, 0.0722)
+# The pipe is supervised: cancellation or no completed frame for this long kills both FFmpeg processes.
+STALL_TIMEOUT_SEC = 300
 
 
 def _r(value, digits=4):
@@ -121,15 +123,100 @@ def apply(rgb, frame_index, effects, transfer):
     return np.clip(out, 0, 1)
 
 
+def _spawn(command, log, **pipes):
+    """FFmpeg in its own process group, so the watchdog can kill it and anything it started."""
+    import subprocess
+    from editing_runtime import SUBPROCESS_LOCK_FDS
+    return subprocess.Popen(command, stderr=log, pass_fds=SUBPROCESS_LOCK_FDS.get(), start_new_session=True, **pipes)
+
+
+def _kill(process):
+    import os
+    import signal
+    if process.poll() is None:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
+class _Watchdog:
+    """Kills the processes on cancellation or when no progress is reported for STALL_TIMEOUT_SEC.
+
+    Killing them is what unblocks a pipe read or write in the calling thread; check() then
+    turns that into a cancellation or stall error instead of a decode or encode failure.
+    """
+
+    def __init__(self, processes, label):
+        import threading
+        import time
+        from editing_runtime import RUN_CANCELLATION
+        self.processes, self.label, self.timeout = processes, label, STALL_TIMEOUT_SEC
+        self.cancellation = RUN_CANCELLATION.get()
+        self.cancelled, self.stalled, self.finished = threading.Event(), threading.Event(), threading.Event()
+        self.last = time.monotonic()
+        self.thread = threading.Thread(target=self._watch, name='texture-pipe-watchdog', daemon=True)
+        self.thread.start()
+
+    def progress(self):
+        import time
+        self.last = time.monotonic()
+
+    def _watch(self):
+        import time
+        while not self.finished.wait(0.05):
+            if self.cancellation is not None and self.cancellation.is_set():
+                self.cancelled.set()
+            elif time.monotonic() - self.last > self.timeout:
+                self.stalled.set()
+            else:
+                continue
+            for process in self.processes:
+                _kill(process)
+            return
+
+    def check(self):
+        from editing_runtime import require, OperationCancelled
+        # The event itself is read too: frames can finish faster than the watchdog polls.
+        if self.cancelled.is_set() or (self.cancellation is not None and self.cancellation.is_set()):
+            raise OperationCancelled('TEXTURE_CANCELLED: %s; partial outputs retained' % self.label)
+        require(not self.stalled.is_set(), 'TEXTURE_STALLED: %s made no progress for %g s; partial outputs retained'
+                % (self.label, self.timeout))
+
+    def stop(self):
+        self.finished.set()
+        self.thread.join()
+        for process in self.processes:
+            _kill(process)
+            process.wait()
+
+
+def _tail(log):
+    log.seek(0)
+    return log.read().decode('utf-8', 'replace')[-2000:]
+
+
 def _frames(path, indices, width, height, rng, tools, pix_fmt='rgb48le'):
     import subprocess
+    import tempfile
     from editing_runtime import require
     from color_numerics import numpy
     np = numpy()
     picks = '+'.join('eq(n,%d)' % i for i in indices)
     vf = f"select='{picks}',scale=in_color_matrix=bt709:in_range={rng}:out_range=pc:flags={SWS_FLAGS},format={pix_fmt}"
-    raw = subprocess.run([tools.binary('ffmpeg'), '-v', 'error', '-i', str(path), '-vf', vf, '-fps_mode', 'passthrough',
-                          '-f', 'rawvideo', '-pix_fmt', pix_fmt, '-'], capture_output=True, check=True, timeout=600).stdout
+    command = [tools.binary('ffmpeg'), '-nostdin', '-v', 'error', '-i', str(path), '-map', '0:v:0', '-vf', vf,
+               '-fps_mode', 'passthrough', '-f', 'rawvideo', '-pix_fmt', pix_fmt, '-']
+    with tempfile.TemporaryFile() as log:
+        process = _spawn(command, log, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE)
+        watchdog = _Watchdog([process], 'readback decode')
+        try:
+            raw = process.stdout.read()
+            process.wait()
+            watchdog.check()
+        finally:
+            watchdog.stop()
+            process.stdout.close()
+        require(process.returncode == 0, 'TEXTURE_READBACK_DECODE_FAILED: ' + _tail(log))
     size = width * height * 3
     require(len(raw) == size * 2 * len(indices), 'TEXTURE_READBACK_DECODE_INCOMPLETE')
     data = np.frombuffer(raw, dtype='<u2').reshape(len(indices), height, width, 3) / 65535.0
@@ -138,7 +225,8 @@ def _frames(path, indices, width, height, rng, tools, pix_fmt='rgb48le'):
 
 def texture(request, directory, tools):
     import subprocess
-    from editing_runtime import exact_keys, require, source, write_json, sha256, frame_rate
+    from fractions import Fraction
+    from editing_runtime import exact_keys, require, source, write_json, sha256, frame_rate, ContractError
     from color_ops import frame_clock
     from color_profile_ops import _validate_stream
     from color_numerics import numpy, lab_from_rgb01, ciede2000
@@ -153,46 +241,83 @@ def texture(request, directory, tools):
     require(request['input_color']['range'] == 'limited', 'TEXTURE_LIMITED_RANGE_REQUIRED')
     effects = _validate(request['effects'])
     transfer, trc = TRANSFERS[request['input_color']['space']]
+    # FFmpeg autorotates on decode, so raw frames of a rotated source would not have the coded dimensions.
+    rotations = [video.get('tags', {}).get('rotate', 0)] + [s.get('rotation', 0) for s in video.get('side_data_list', [])]
+    require(all(float(x) % 360 == 0 for x in rotations), 'ROTATED_TEXTURE_SOURCE_UNSUPPORTED')
+    # Raw frames carry no timestamps and the encoder restamps them at one rate, so only zero-origin CFR survives.
+    fps = frame_rate(video.get('avg_frame_rate'))
+    require(0 < fps <= 120, 'TEXTURE_FRAME_RATE_UNSUPPORTED')
+    require(frame_rate(video.get('r_frame_rate')) == fps, 'TEXTURE_CFR_REQUIRED')
     clock = frame_clock(asset['path'], tools)
+    require(all(abs(t - float(Fraction(i, 1) / fps)) <= 1e-5 for i, t in enumerate(clock)), 'TEXTURE_ZERO_ORIGIN_CFR_REQUIRED')
     readback = request['readback_frames']
     require(isinstance(readback, list) and 1 <= len(readback) <= MAX_READBACK_FRAMES and all(type(f) is int for f in readback)
             and len(set(readback)) == len(readback) and all(0 <= f < len(clock) for f in readback), 'TEXTURE_READBACK_FRAMES_INVALID')
     width, height = int(video['width']), int(video['height'])
     require(width % 2 == 0 and height % 2 == 0, 'TEXTURE_EVEN_DIMENSIONS_REQUIRED')
-    fps = frame_rate(video.get('r_frame_rate') or video.get('avg_frame_rate'))
-    require(fps > 0, 'TEXTURE_FRAME_RATE_UNKNOWN')
-    decoder = subprocess.Popen([tools.binary('ffmpeg'), '-v', 'error', '-i', asset['path'], '-map', '0:v:0', '-vf',
-                                f'scale=in_color_matrix=bt709:in_range=tv:out_range=pc:flags={SWS_FLAGS},format=rgb48le',
-                                '-fps_mode', 'passthrough',
-                                '-f', 'rawvideo', '-pix_fmt', 'rgb48le', '-'], stdout=subprocess.PIPE)
     output = directory / 'textured.mp4'
-    encoder = subprocess.Popen([tools.binary('ffmpeg'), '-v', 'error', '-n', '-f', 'rawvideo', '-pix_fmt', 'rgb48le',
-                                '-s', f'{width}x{height}', '-r', str(fps), '-i', '-', '-i', asset['path'],
-                                '-map', '0:v', '-map', '1:a?', '-vf',
-                                f'scale=out_color_matrix=bt709:in_range=pc:out_range=tv:flags={SWS_FLAGS},format=yuv420p,'
-                                f'setparams=colorspace=bt709:color_primaries=bt709:color_trc={trc}:range=tv',
-                                '-c:v', 'libx264', '-crf', '12', '-preset', 'medium', '-tune', 'grain', '-c:a', 'copy',
-                                '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', trc, '-color_range', 'tv',
-                                '-movflags', '+faststart', str(output)], stdin=subprocess.PIPE)
+    decode_command = [tools.binary('ffmpeg'), '-nostdin', '-v', 'error', '-i', asset['path'], '-map', '0:v:0', '-vf',
+                      f'scale=in_color_matrix=bt709:in_range=tv:out_range=pc:flags={SWS_FLAGS},format=rgb48le',
+                      '-fps_mode', 'passthrough', '-f', 'rawvideo', '-pix_fmt', 'rgb48le', '-']
+    encode_command = [tools.binary('ffmpeg'), '-v', 'error', '-n', '-f', 'rawvideo', '-pix_fmt', 'rgb48le',
+                      '-s', f'{width}x{height}', '-r', str(fps), '-i', '-', '-i', asset['path'],
+                      '-map', '0:v', '-map', '1:a?', '-vf',
+                      f'scale=out_color_matrix=bt709:in_range=pc:out_range=tv:flags={SWS_FLAGS},format=yuv420p,'
+                      f'setparams=colorspace=bt709:color_primaries=bt709:color_trc={trc}:range=tv',
+                      '-c:v', 'libx264', '-crf', '12', '-preset', 'medium', '-tune', 'grain', '-c:a', 'copy',
+                      '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', trc, '-color_range', 'tv',
+                      '-movflags', '+faststart', str(output)]
     size = width * height * 3 * 2
     count = 0
-    try:
-        while True:
-            chunk = decoder.stdout.read(size)
-            if not chunk:
-                break
-            require(len(chunk) == size, 'TEXTURE_DECODE_INCOMPLETE')
-            frame = np.frombuffer(chunk, dtype='<u2').reshape(height, width, 3) / 65535.0
-            textured = apply(frame, count, effects, transfer)
-            encoder.stdin.write(np.round(textured * 65535).astype('<u2').tobytes())
-            count += 1
-    finally:
-        encoder.stdin.close()
-        decoder.stdout.close()
-        require(decoder.wait() == 0 and encoder.wait() == 0, 'TEXTURE_ENCODE_FAILED')
+    with (directory / 'decode.log').open('w+b') as decode_log, (directory / 'encode.log').open('w+b') as encode_log:
+        decoder = _spawn(decode_command, decode_log, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE)
+        try:
+            encoder = _spawn(encode_command, encode_log, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL)
+        except BaseException:
+            _kill(decoder)
+            decoder.wait()
+            raise
+        watchdog = _Watchdog([decoder, encoder], 'texture pipeline')
+        try:
+            try:
+                while True:
+                    watchdog.check()
+                    chunk = decoder.stdout.read(size)
+                    watchdog.check()
+                    if not chunk:
+                        break
+                    require(len(chunk) == size, 'TEXTURE_DECODE_INCOMPLETE')
+                    frame = np.frombuffer(chunk, dtype='<u2').reshape(height, width, 3) / 65535.0
+                    textured = apply(frame, count, effects, transfer)
+                    watchdog.check()
+                    encoder.stdin.write(np.round(textured * 65535).astype('<u2').tobytes())
+                    count += 1
+                    watchdog.progress()
+                encoder.stdin.close()
+                decoder.wait()
+                encoder.wait()  # still supervised: the encoder flushes its lookahead here
+                watchdog.check()
+            except (BrokenPipeError, ContractError):
+                watchdog.check()  # a kill by the watchdog explains the broken pipe or short read
+                raise
+        except BrokenPipeError as exc:
+            encoder.wait()
+            raise ContractError('TEXTURE_ENCODE_FAILED: ' + _tail(encode_log)) from exc
+        finally:
+            watchdog.stop()
+            decoder.stdout.close()
+            if not encoder.stdin.closed:
+                try:
+                    encoder.stdin.close()
+                except BrokenPipeError:
+                    pass
+        require(decoder.returncode == 0, 'TEXTURE_DECODE_FAILED: ' + _tail(decode_log))
+        require(encoder.returncode == 0, 'TEXTURE_ENCODE_FAILED: ' + _tail(encode_log))
     require(count == len(clock), 'TEXTURE_FRAME_COUNT_CHANGED: %d -> %d' % (len(clock), count))
-    out_frames = len(frame_clock(str(output), tools))
+    out_clock = frame_clock(str(output), tools)
+    out_frames = len(out_clock)
     require(out_frames == count, 'TEXTURE_FRAME_COUNT_CHANGED: %d -> %d' % (count, out_frames))
+    require(all(abs(t - s) <= 1e-5 for t, s in zip(out_clock, clock)), 'TEXTURE_OUTPUT_CLOCK_MISMATCH')
     indices = sorted(readback)
     sources = _frames(asset['path'], indices, width, height, 'tv', tools)
     outputs = _frames(str(output), indices, width, height, 'tv', tools)
