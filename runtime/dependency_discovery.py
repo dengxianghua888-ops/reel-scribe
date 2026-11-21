@@ -72,6 +72,7 @@ ATOMIC_REQUIREMENTS = {
     'color-reference-fit': ('ffmpeg', 'ffprobe', 'numpy'),
     'color-grade-adjust': ('numpy',),
     'color-input-transform': ('ffmpeg', 'ffprobe', 'numpy'),
+    'film-texture-apply': ('ffmpeg', 'ffprobe', 'numpy'),
     'localization-plan-compile': ('ffprobe',),
     'work-variant-create': ('sqlite', 'ffprobe', 'fcntl'),
     'work-batch-render': ('sqlite', 'fcntl'),
