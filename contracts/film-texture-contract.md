@@ -6,7 +6,7 @@
 
 | 字段 | 约束 |
 |---|---|
-| `source` | `{path, sha256}`；结束时复核字节未变。只处理第一条视频流（渲染与读回相同）。宽高必须为偶数；不能带旋转元数据（`ROTATED_TEXTURE_SOURCE_UNSUPPORTED`）；必须是零起点恒定帧率：`avg_frame_rate` 与 `r_frame_rate` 相等且在 (0, 120] 内（`TEXTURE_CFR_REQUIRED`），第 i 帧时间戳与 i / fps 相差不超过 10 µs（`TEXTURE_ZERO_ORIGIN_CFR_REQUIRED`） |
+| `source` | `{path, sha256}`；结束时复核字节未变。只处理第一条视频流（渲染与读回相同）。宽高必须为偶数；不能带旋转元数据（`ROTATED_TEXTURE_SOURCE_UNSUPPORTED`）；必须是零起点恒定帧率：`avg_frame_rate` 与 `r_frame_rate` 相等且在 (0, 120] 内（`TEXTURE_CFR_REQUIRED`），第 i 帧时间戳与 i / fps 相差不超过 10 µs（`TEXTURE_ZERO_ORIGIN_CFR_REQUIRED`）。非方形像素可以接受，样本宽高比（SAR）写回输出 |
 | `input_color` | `{space: bt709-sdr \| srgb-sdr, range: limited, basis}`，按[色彩特征合同](color-profile-contract.md)的规则校验标签 |
 | `effects` | `halation`、`vignette`、`grain` 中至少一个，见下 |
 | `readback_frames` | 1–4 个不重复的帧号 |
@@ -32,9 +32,9 @@
 
 ## 管线
 
-源视频以 16 位 RGB 全分辨率解码，numpy 逐帧计算，再经 FFmpeg 编码为 4:2:0：libx264 CRF 12、`-tune grain`，写入与输入相同的 BT.709 或 sRGB 标签，音轨原样复制。原始帧不带时间戳，编码端按同一帧率重新打时间戳，所以输入限定为零起点恒定帧率；输出的帧数和每帧时间戳都必须与源一致（`TEXTURE_FRAME_COUNT_CHANGED`、`TEXTURE_OUTPUT_CLOCK_MISMATCH`）。YUV 与 RGB 之间的转换使用 swscale 的 `accurate_rnd+full_chroma_int`：默认取整会让 RGB48 → 4:2:0 的直通往返整体偏暗约 0.006（约 8 位下 1.5 个码值）。
+源视频以 16 位 RGB 全分辨率解码，numpy 逐帧计算，再经 FFmpeg 编码为 4:2:0：libx264 CRF 12、`-tune grain`，写入与输入相同的 BT.709 或 sRGB 标签，音轨原样复制。原始帧不带时间戳，编码端按同一帧率重新打时间戳，所以输入限定为零起点恒定帧率；原始帧同样不带 SAR，编码时用 `setsar` 写回源的 SAR（源未声明时不写）。输出的帧数、每帧时间戳和 SAR 都必须与源一致（`TEXTURE_FRAME_COUNT_CHANGED`、`TEXTURE_OUTPUT_CLOCK_MISMATCH`、`TEXTURE_OUTPUT_SAR_MISMATCH`）。YUV 与 RGB 之间的转换使用 swscale 的 `accurate_rnd+full_chroma_int`：默认取整会让 RGB48 → 4:2:0 的直通往返整体偏暗约 0.006（约 8 位下 1.5 个码值）。
 
-**监督**：解码、编码两个 FFmpeg 进程各在独立进程组中运行，FFmpeg 的错误输出写入运行目录的 `decode.log`、`encode.log`。监督线程在调用方取消，或连续 300 秒没有完成一帧时，结束这两个进程组；这也会打断阻塞在管道读写上的主线程。结果分别为 `TEXTURE_CANCELLED`（回执标记 `cancelled`）和 `TEXTURE_STALLED`，已写出的部分输出保留。读回解码受同样的监督。
+**监督**：解码、编码两个 FFmpeg 进程各在独立进程组中运行，FFmpeg 的错误输出写入运行目录的 `decode.log`、`encode.log`。监督线程在调用方取消，或连续 300 秒没有完成一帧时，结束这两个进程组；这也会打断阻塞在管道读写上的主线程。结果分别为 `TEXTURE_CANCELLED`（回执标记 `cancelled`）和 `TEXTURE_STALLED`，已写出的部分输出保留。读回解码受同样的监督；选中的帧可能相隔很远，其间没有输出，所以读回以 FFmpeg 每 0.5 秒刷新一次的进度报告（`-progress`）作为进展。
 
 ## 读回
 
@@ -55,4 +55,5 @@
 - 效果是参数化近似，不是任何胶片型号的测量或仿真。
 - `rgb` 模式的色度噪声在 4:2:0 输出中大多丢失，`luma` 模式保留得更好。
 - 读回只覆盖指定帧。
+- 光晕半径和颗粒大小按编码像素计算；非方形像素时，它们在屏幕上不是圆形。
 - 是否好看、适不适合内容，需要人看预览决定。

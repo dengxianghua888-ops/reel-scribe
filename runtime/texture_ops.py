@@ -145,13 +145,16 @@ class _Watchdog:
 
     Killing them is what unblocks a pipe read or write in the calling thread; check() then
     turns that into a cancellation or stall error instead of a decode or encode failure.
+    Progress comes from the caller, or from activity(), polled here, whose value changes
+    while the processes work.
     """
 
-    def __init__(self, processes, label):
+    def __init__(self, processes, label, activity=None):
         import threading
         import time
         from editing_runtime import RUN_CANCELLATION
         self.processes, self.label, self.timeout = processes, label, STALL_TIMEOUT_SEC
+        self.activity, self.seen = activity, None
         self.cancellation = RUN_CANCELLATION.get()
         self.cancelled, self.stalled, self.finished = threading.Event(), threading.Event(), threading.Event()
         self.last = time.monotonic()
@@ -165,6 +168,11 @@ class _Watchdog:
     def _watch(self):
         import time
         while not self.finished.wait(0.05):
+            if self.activity is not None:
+                seen = self.activity()
+                if seen != self.seen:
+                    self.seen = seen
+                    self.progress()
             if self.cancellation is not None and self.cancellation.is_set():
                 self.cancelled.set()
             elif time.monotonic() - self.last > self.timeout:
@@ -191,6 +199,24 @@ class _Watchdog:
             process.wait()
 
 
+def _size(path):
+    import os
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return None
+
+
+def _sar(value):
+    """'16:15' -> Fraction; unknown ('0:1', 'N/A', missing) -> None."""
+    from fractions import Fraction
+    try:
+        num, den = (int(v) for v in str(value).split(':'))
+    except ValueError:
+        return None
+    return Fraction(num, den) if num > 0 and den > 0 else None
+
+
 def _tail(log):
     log.seek(0)
     return log.read().decode('utf-8', 'replace')[-2000:]
@@ -204,11 +230,13 @@ def _frames(path, indices, width, height, rng, tools, pix_fmt='rgb48le'):
     np = numpy()
     picks = '+'.join('eq(n,%d)' % i for i in indices)
     vf = f"select='{picks}',scale=in_color_matrix=bt709:in_range={rng}:out_range=pc:flags={SWS_FLAGS},format={pix_fmt}"
-    command = [tools.binary('ffmpeg'), '-nostdin', '-v', 'error', '-i', str(path), '-map', '0:v:0', '-vf', vf,
-               '-fps_mode', 'passthrough', '-f', 'rawvideo', '-pix_fmt', pix_fmt, '-']
-    with tempfile.TemporaryFile() as log:
+    with tempfile.TemporaryFile() as log, tempfile.NamedTemporaryFile(suffix='.progress') as progress:
+        # Selected frames can be far apart, so stdout alone would look idle; FFmpeg's progress
+        # report is rewritten every half second while it decodes and serves as the activity signal.
+        command = [tools.binary('ffmpeg'), '-nostdin', '-v', 'error', '-i', str(path), '-map', '0:v:0', '-vf', vf,
+                   '-fps_mode', 'passthrough', '-progress', progress.name, '-f', 'rawvideo', '-pix_fmt', pix_fmt, '-']
         process = _spawn(command, log, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE)
-        watchdog = _Watchdog([process], 'readback decode')
+        watchdog = _Watchdog([process], 'readback decode', activity=lambda: _size(progress.name))
         try:
             raw = process.stdout.read()
             process.wait()
@@ -255,6 +283,9 @@ def texture(request, directory, tools):
             and len(set(readback)) == len(readback) and all(0 <= f < len(clock) for f in readback), 'TEXTURE_READBACK_FRAMES_INVALID')
     width, height = int(video['width']), int(video['height'])
     require(width % 2 == 0 and height % 2 == 0, 'TEXTURE_EVEN_DIMENSIONS_REQUIRED')
+    # Raw frames carry no sample aspect ratio; the encoder gets it back explicitly.
+    sar = _sar(video.get('sample_aspect_ratio'))
+    setsar = f'setsar={sar.numerator}/{sar.denominator},' if sar is not None else ''
     output = directory / 'textured.mp4'
     decode_command = [tools.binary('ffmpeg'), '-nostdin', '-v', 'error', '-i', asset['path'], '-map', '0:v:0', '-vf',
                       f'scale=in_color_matrix=bt709:in_range=tv:out_range=pc:flags={SWS_FLAGS},format=rgb48le',
@@ -262,7 +293,7 @@ def texture(request, directory, tools):
     encode_command = [tools.binary('ffmpeg'), '-v', 'error', '-n', '-f', 'rawvideo', '-pix_fmt', 'rgb48le',
                       '-s', f'{width}x{height}', '-r', str(fps), '-i', '-', '-i', asset['path'],
                       '-map', '0:v', '-map', '1:a?', '-vf',
-                      f'scale=out_color_matrix=bt709:in_range=pc:out_range=tv:flags={SWS_FLAGS},format=yuv420p,'
+                      f'scale=out_color_matrix=bt709:in_range=pc:out_range=tv:flags={SWS_FLAGS},format=yuv420p,{setsar}'
                       f'setparams=colorspace=bt709:color_primaries=bt709:color_trc={trc}:range=tv',
                       '-c:v', 'libx264', '-crf', '12', '-preset', 'medium', '-tune', 'grain', '-c:a', 'copy',
                       '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', trc, '-color_range', 'tv',
@@ -318,6 +349,9 @@ def texture(request, directory, tools):
     out_frames = len(out_clock)
     require(out_frames == count, 'TEXTURE_FRAME_COUNT_CHANGED: %d -> %d' % (count, out_frames))
     require(all(abs(t - s) <= 1e-5 for t, s in zip(out_clock, clock)), 'TEXTURE_OUTPUT_CLOCK_MISMATCH')
+    out_video = next(s for s in tools.probe(str(output))['streams'] if s.get('codec_type') == 'video')
+    require(_sar(out_video.get('sample_aspect_ratio')) == sar, 'TEXTURE_OUTPUT_SAR_MISMATCH: %s -> %s'
+            % (video.get('sample_aspect_ratio'), out_video.get('sample_aspect_ratio')))
     indices = sorted(readback)
     sources = _frames(asset['path'], indices, width, height, 'tv', tools)
     outputs = _frames(str(output), indices, width, height, 'tv', tools)
@@ -357,6 +391,7 @@ def texture(request, directory, tools):
     result = {'schema': SCHEMA, 'source': asset, 'stream': stream, 'input_color': request['input_color'],
               'effects': effects, 'order': [e for e in EFFECTS if e in effects],
               'video': {'path': str(output), 'sha256': sha256(output), 'frames': out_frames, 'pix_fmt': 'yuv420p',
+                        'sample_aspect_ratio': out_video.get('sample_aspect_ratio'),
                         'encoding': 'libx264 crf 12, tune grain, 4:2:0'},
               'readback': {'method': 'numpy recomputation of the effects on the decoded source frame vs the decoded output at full '
                                      'resolution; the gate compares both after a %.1f px Gaussian low-pass, and each effect is also '
@@ -365,6 +400,7 @@ def texture(request, directory, tools):
               'aesthetic_judgement': 'NOT_PROVIDED', 'film_stock_claim': 'NONE',
               'limits': ['Effects are parametric approximations, not measurements or emulations of any film stock.',
                          'Grain in rgb mode loses most chroma detail in 4:2:0 output; luma grain survives better.',
-                         'Readback covers the listed frames only.']}
+                         'Readback covers the listed frames only.',
+                         'Radii and grain size are in coded pixels; with non-square pixels they are not round on screen.']}
     write_json(directory / 'film-texture.json', result)
     return result

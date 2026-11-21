@@ -30,14 +30,14 @@ def ref(path):
     return {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
 
 
-def still(tmp_path, name, rgb8, size=(128, 96), audio=False, transfer='bt709'):
+def still(tmp_path, name, rgb8, size=(128, 96), audio=False, transfer='bt709', seconds=0.4):
     from PIL import Image
     png = tmp_path / f'{name}.png'
     Image.fromarray(rgb8.astype(np.uint8) if hasattr(rgb8, 'shape') else
                     np.full((size[1], size[0], 3), rgb8, dtype=np.uint8)).save(png)
     out = tmp_path / f'{name}.mp4'
     tags = cm.frame_tags(colorspace='bt709', color_primaries='bt709', color_trc=transfer, color_range='tv')
-    args = ['ffmpeg', '-v', 'error', '-y', '-loop', '1', '-framerate', '25', '-t', '0.4', '-i', str(png)]
+    args = ['ffmpeg', '-v', 'error', '-y', '-loop', '1', '-framerate', '25', '-t', str(seconds), '-i', str(png)]
     if audio:
         args += ['-f', 'lavfi', '-t', '0.4', '-i', 'sine=frequency=440:sample_rate=48000', '-c:a', 'aac', '-shortest']
     args += ['-vf', f'scale=out_color_matrix=bt709:out_range=tv,format=yuv444p,{tags}', '-c:v', 'libx264', '-qp', '0',
@@ -256,3 +256,26 @@ def test_a_stalled_pipeline_is_killed_after_the_stall_timeout(tmp_path, monkeypa
         cancel.finish()
     assert receipt['status'] == 'FAILED' and receipt['error'].startswith('TEXTURE_STALLED: texture pipeline'), receipt
     assert cancel.calls == [0, 1]
+
+
+def test_sample_aspect_ratio_survives_the_raw_frame_pipe(tmp_path):
+    # 128x96 with 16:15 pixels; rawvideo has no SAR, so the encoder must be told.
+    video = derive(tmp_path, still(tmp_path, 'gray', (100, 100, 100)), 'anamorphic',
+                   ['-vf', 'setsar=16/15', '-c:v', 'libx264', '-qp', '0', '-preset', 'ultrafast'])
+    result = run(tmp_path, video, {'grain': GRAIN}, 'sar')['result']
+    stream = next(s for s in rt.Tools().probe(result['video']['path'])['streams'] if s.get('codec_type') == 'video')
+    assert stream['sample_aspect_ratio'] == result['video']['sample_aspect_ratio'] == '16:15'
+
+
+def test_a_slow_but_working_readback_decode_is_not_a_stall(tmp_path, monkeypatch):
+    # -re paces the readback decode at real time: 2.8 s between the two selected frames, no output in between.
+    video = still(tmp_path, 'gray', (100, 100, 100), seconds=3)
+    monkeypatch.setattr(texture_ops, 'STALL_TIMEOUT_SEC', 1.5)
+    cancel = Cancel(monkeypatch)
+    cancel.replace = lambda c: [c[0], '-re', *c[1:]] if any(a.startswith("select='") for a in c) else c
+    try:
+        receipt = run(tmp_path, video, {'grain': GRAIN}, 'slow', frames=(2, 72))
+    finally:
+        cancel.finish()
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    assert sum('-re' in p.args for p in cancel.spawned) == 2  # source and output readback
