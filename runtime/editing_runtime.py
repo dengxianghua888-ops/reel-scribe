@@ -1242,6 +1242,9 @@ def execute(request, directory, tools):
     if op == 'color-consistency-check':
         from color_check_ops import check
         return check(request, directory, tools)
+    if op == 'color-reference-fit':
+        from color_fit_ops import fit
+        return fit(request, directory, tools)
     if op == 'color-lut-apply':
         from color_ops import apply_lut
         return apply_lut(request,directory,tools)

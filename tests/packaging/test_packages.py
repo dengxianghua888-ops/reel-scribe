@@ -98,7 +98,7 @@ def test_default_build_navigation_and_reproducibility(source, tmp_path, builder)
             assert not (output / name).exists()
         structure = json.loads(run(sys.executable, output / 'scripts/verify_library.py', 'structure', cwd=tmp_path).stdout)
         assert structure['status'] == 'PASSED'
-        assert structure['skills'] == 64
+        assert structure['skills'] == 65
         assert json.loads((output / 'registry/skills.json').read_text()) == json.loads((source / 'registry/skills.json').read_text())
     name = MANIFESTS[BUILDERS.index(builder)]
     first, second = [json.loads((out / name).read_text()) for out in outputs]
@@ -340,7 +340,7 @@ def test_relocated_output_doctor_stdio_and_real_render(source, tmp_path, builder
     assert responses[0]['result']['protocolVersion'] == '2025-03-26'
     assert len(responses[1]['result']['tools']) == 3
     listed = json.loads(responses[2]['result']['content'][0]['text'])['entries']
-    assert len(listed) == 64
+    assert len(listed) == 65
     assert listed == [{k: row.get(k) for k in ('id', 'layer', 'entry', 'status')}
                       for row in original_registry['entries']]
     assert json.loads((relocated / 'registry/skills.json').read_text()) == original_registry
