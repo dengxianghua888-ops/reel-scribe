@@ -1245,6 +1245,9 @@ def execute(request, directory, tools):
     if op == 'color-reference-fit':
         from color_fit_ops import fit
         return fit(request, directory, tools)
+    if op == 'color-grade-adjust':
+        from color_adjust_ops import adjust
+        return adjust(request, directory, tools)
     if op == 'color-lut-apply':
         from color_ops import apply_lut
         return apply_lut(request,directory,tools)
