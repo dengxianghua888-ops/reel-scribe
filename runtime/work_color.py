@@ -125,6 +125,21 @@ def validate(doc, norm, tools):
     return planned
 
 
+def pipeline_space(doc, norm, tag):
+    """Space the picture steps declare for the timeline output, from its transfer tag.
+
+    The timeline inherits its first frames' tag. When that tag is missing, one space
+    declared for every clip is the best evidence; otherwise BT.709 as before.
+    """
+    if tag == 'iec61966-2-1':
+        return 'srgb-sdr'
+    if tag == 'bt709':
+        return 'bt709-sdr'
+    inputs = doc['color']['inputs']
+    spaces = {inputs[c['source_id']]['space'] if c['source_id'] in inputs else None for c in norm['clips']}
+    return next(iter(spaces)) if len(spaces) == 1 and None not in spaces else 'bt709-sdr'
+
+
 def texture_plan(doc, norm):
     """film-texture-apply effects, space and readback frames for the whole picture, or None.
 

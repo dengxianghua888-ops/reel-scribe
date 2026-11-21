@@ -584,7 +584,8 @@ def _render_document_bound(document,directory,tools,*,work_version,audio_backend
             tag=timeline_video.get('color_transfer')
             require(tag in (None,'unknown','unspecified','bt709','iec61966-2-1'),
                     'WORK_COLOR_TIMELINE_TRANSFER_UNSUPPORTED: %s'%tag)
-            space='srgb-sdr' if tag=='iec61966-2-1' else 'bt709-sdr'
+            from work_color import pipeline_space
+            space=pipeline_space(doc,norm,tag)
             invoke({'operation':'color-lut-apply','source':{'path':str(current),'sha256':sha256(current)},
                     'input_color':{'space':space,'range':'limited','basis':'caller-declared'},
                     'interpolation':'tetrahedral','layers':layers},'color')

@@ -629,3 +629,34 @@ def test_texture_changes_need_their_own_scope_and_regrades_retexture(work):
     plain = copy.deepcopy(base)
     plain['color']['grades']['up']['ops'] = [{'type': 'exposure', 'stops': 0.5}]
     assert impact(base, plain, scope(grade_ids=['up']))['required_stages'] == ['color-grade', 'render']
+
+
+def test_untagged_srgb_declared_timeline_keeps_srgb_through_grade_and_texture(work):
+    doc = copy.deepcopy(work['doc'])
+    for clip in doc['plan']['clips']:
+        clip['source_id'] = 'untagged'
+    doc = with_color(doc, grades={'up': {**UP, 'interpretation': 'srgb-sdr-display', 'targets': ['b']}},
+                     inputs={'untagged': {**BT709, 'space': 'srgb-sdr', 'basis': 'caller-declared'}})
+    doc['color']['texture'] = {'effects': VIGNETTE}
+    receipt = render_store(work, doc, 'untagged-srgb')
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    color = json.loads((work['root'] / 'render-untagged-srgb' / 'color' / 'receipt.json').read_text())['result']
+    assert color['input_color']['space'] == 'srgb-sdr' and color['output_color']['observed']['color_transfer'] == 'iec61966-2-1'
+    assert receipt['result']['texture']['space'] == 'srgb-sdr'
+    linear = ((100 / 255 + 0.055) / 1.055) ** 2.4 * 2  # sRGB EOTF, +1 stop, back through the sRGB OETF
+    up = (1.055 * min(linear, 1) ** (1 / 2.4) - 0.055) * 255
+    rgb = _frame_rgb(receipt['result']['video']['path'], 37)
+    assert abs(rgb[28:36, 44:52].mean() - up) < 3
+
+
+@pytest.mark.parametrize('inputs,tag,space', [
+    ({'gray': BT709}, None, 'bt709-sdr'),
+    ({'gray': {**BT709, 'space': 'srgb-sdr'}}, None, 'srgb-sdr'),
+    ({'gray': {**BT709, 'space': 'srgb-sdr'}}, 'bt709', 'bt709-sdr'),  # a real tag wins
+    ({}, None, 'bt709-sdr'),  # undeclared clips: no evidence, BT.709 as before
+])
+def test_pipeline_space_follows_the_tag_then_one_declared_space(work, inputs, tag, space):
+    import work_color
+    doc = with_color(work['doc'], grades={}, inputs=inputs)
+    norm = work_ops.validate_document(work['doc'], work['tools'])[0]
+    assert work_color.pipeline_space(doc, norm, tag) == space
