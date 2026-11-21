@@ -72,6 +72,8 @@ def analyze(base, candidate, scope, tools, *, expected_base_sha256,
         affect('color-grade-or-order', ('color-grade', 'render'))
     if diff['color_revalidation_declared']:
         affect('color-coverage', ('color-grade', 'render'))
+    if diff['color_checks_changed']:
+        affect('color-checks', ('color-grade', 'render'))
     if diff['evidence_mapping_changed']:
         affect('evidence-mapping', ('content-plan',))
     if diff['style_bindings']:

@@ -58,7 +58,7 @@ scope: {
   style_keys: [], note_keys: [], output_fields: [], caption_style: false,
   freeze_positions: [], freeze_duration: false, visual_ids: []（可选，默认空）
   evidence_mapping: false（可选布尔值）
-  grade_ids: []（可选，默认空）, color_inputs: false（可选布尔值）
+  grade_ids: []（可选，默认空）, color_inputs: false（可选布尔值）, color_checks: false（可选布尔值）
 }
 ```
 
@@ -67,7 +67,7 @@ scope: {
 - output_fields 仅限 fps/width/height/fit/allow_source_reuse；画幅/帧率/fit 是全局影响，存在冻结片段时拒绝。
 - 字幕、音轨、风格、备注按独立 ID 控制，改变镜头源内容或速度时相关字幕/音轨/叠层必须纳入复核范围。范围声明本身不证明复核质量。
 - freeze_positions 列出输出起止帧和帧率都要保持的旧片段；freeze_duration 锁全片总帧数与帧率。
-- grade_ids 列出新增、删除、修改或调整顺序的调色层；color_inputs 开放调色输入解释的变化。调色层未变但其目标片段的源内容变了（换源、改源区间、`*` 作品新增片段），也须列入 grade_ids 复核（`COLOR_REVIEW_SCOPE_REQUIRED`）。
+- grade_ids 列出新增、删除、修改或调整顺序的调色层；color_inputs 开放调色输入解释的变化；color_checks 开放调色保护项与上限的变化。调色层未变但其目标片段的源内容变了（换源、改源区间、`*` 作品新增片段），也须列入 grade_ids 复核（`COLOR_REVIEW_SCOPE_REQUIRED`）。
 - evidence_mapping 对已有内容保护的速度变化也必须显式为 true；它只开放既有内容保护的 occurrences/chapters 映射变化；不能增删保护、重写 units/required_units，映射更新仍须通过完整来源覆盖和依赖校验。
 
 输出 candidate.json（包含基础版本、基础文档哈希、新文档与范围）和 revision-diff.json。差异包含源内容变化、片段顺序、输出位置变化、字幕/音轨映射变化和失效项。生成不等于提交，提交端必须重新计算检查，不能信任外部报告说“通过”。
@@ -86,7 +86,7 @@ scope: {
 
 字段：operation、store、expected_version。依赖 [timeline-render](../atomic/timeline-render/SKILL.md)、[audio-mix](../atomic/audio-mix/SKILL.md)、[caption-burn](../atomic/caption-burn/SKILL.md)、[media-qc](../atomic/media-qc/SKILL.md)。
 
-从一个版本快照渲染，依次保留timeline/color/audio/visual/captions/qc子操作回执（无调色段时略过color，无叠层时略过visual）。调色在叠层与字幕之前，字幕和叠层不被调色。最终视频路径与哈希写在 render-binding.json；不固定猜 final.mp4。版本在渲染期间变化时保留旧版产物，但 current_at_finish=false，不能宣称当前作品已导出。
+从一个版本快照渲染，依次保留timeline/color/audio/visual/captions/qc子操作回执（无调色段时略过color，无叠层时略过visual）。调色在叠层与字幕之前，字幕和叠层不被调色；调色之后由 color-check 子操作比较调色前后的画面，门禁 FAILED 时渲染中止。最终视频路径与哈希写在 render-binding.json；不固定猜 final.mp4。版本在渲染期间变化时保留旧版产物，但 current_at_finish=false，不能宣称当前作品已导出。
 
 ## 局部恢复与完整恢复
 

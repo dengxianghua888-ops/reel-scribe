@@ -448,10 +448,38 @@
       ]
     },
     {
+      "id": "color-consistency-check",
+      "layer": "atomic",
+      "entry": "atomic/color-consistency-check/SKILL.md",
+      "description": "比较同一时间线调色前后的视频：按调用者声明的色相范围或区域测量保护项的CIEDE2000偏差，并报告逐段闪烁、剪切、合法范围与相邻段漂移，只在声明了阈值或保护项时形成门禁；不评价好看、不识别肤色或人脸、不把颜色推向目标。",
+      "status": "local-synthetic-tested"
+    },
+    {
+      "id": "color-reference-fit",
+      "layer": "atomic",
+      "entry": "atomic/color-reference-fit/SKILL.md",
+      "description": "把目标帧按参考帧的色彩统计（CIELAB均值方差、多元高斯MKL或逐通道直方图）迁移，并拟合成可编辑的ASC CDL或逐通道曲线调色层草案，报告迁移前、理想迁移与拟合后的分布距离和拟合残差；不采用、不选强度、不声称像参考。",
+      "status": "local-synthetic-tested"
+    },
+    {
+      "id": "color-grade-adjust",
+      "layer": "atomic",
+      "entry": "atomic/color-grade-adjust/SKILL.md",
+      "description": "把调用者按反馈映射表换算好的色温、色调、亮度、对比、饱和度累计步数（每维至多±3，可由风格卡收紧）转成固定步长的参数增量追加到调色层末尾，并在固定探针色上核对每一维的方向；不解析自然语言、不选风格、不采用。",
+      "status": "local-synthetic-tested"
+    },
+    {
       "id": "color-grade-compile",
       "layer": "atomic",
       "entry": "atomic/color-grade-compile/SKILL.md",
       "description": "把明确的曝光、白平衡增益、高光柔和滚降、ASC CDL、曲线、HSL、外部LUT与强度按BT.709或sRGB显示解释编译为3D cube，并按可表示性导出.cc和CLF，报告编译误差；不选风格、不测量或修改媒体。",
+      "status": "local-synthetic-tested"
+    },
+    {
+      "id": "color-input-transform",
+      "layer": "atomic",
+      "entry": "atomic/color-input-transform/SKILL.md",
+      "description": "把调用者声明的HLG或PQ（BT.2020）视频按显式选择的色调映射算子与峰值转换为带BT.709 SDR标签的视频，保留帧数与音轨，并报告采样帧的实测峰值亮度、超出SDR参考白与BT.709色域的比例；不猜测素材类型、不自动选算子、不评价观感。",
       "status": "local-synthetic-tested"
     },
     {

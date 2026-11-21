@@ -909,6 +909,44 @@
       "compatibility": {
         "requires": "参考观察有证据，目标素材可承担机制；用户显式要求优先",
         "avoid": "不从统计推出效果，不默认复制参考资产，不以风格卡冒充已执行操作"
+      },
+      "color_parameters": {
+        "schema": "color-parameter-template/1",
+        "fit_methods": [
+          "reinhard-lab",
+          "histogram"
+        ],
+        "fit_bounds": {
+          "slope": [
+            0.9,
+            1.1
+          ],
+          "offset": [
+            -0.03,
+            0.03
+          ],
+          "saturation": [
+            0.6,
+            1.0
+          ],
+          "curve_max_shift": 0.08
+        },
+        "strength_max": 0.8,
+        "adjust_caps": {
+          "warmth": 1,
+          "tint": 1,
+          "exposure": 1,
+          "contrast": 1,
+          "saturation": 3
+        },
+        "suggested_protections": [
+          "商品色、品牌色、图表色：区域保护，动作 fail",
+          "肤色色相范围加脸部框，动作 fail"
+        ],
+        "disable_when": [
+          "颜色承担信息（图表、交通、品牌、证据色）而没有声明保护",
+          "参考的低饱和来自褪色或损坏的素材，而不是有意的克制"
+        ]
       }
     },
     {
@@ -945,6 +983,41 @@
       "compatibility": {
         "requires": "参考观察有证据，目标素材可承担机制；用户显式要求优先",
         "avoid": "不从统计推出效果，不默认复制参考资产，不以风格卡冒充已执行操作"
+      },
+      "color_parameters": {
+        "schema": "color-parameter-template/1",
+        "fit_methods": [
+          "reinhard-lab"
+        ],
+        "fit_bounds": {
+          "slope": [
+            0.9,
+            1.1
+          ],
+          "offset": [
+            -0.05,
+            0.05
+          ],
+          "saturation": [
+            0.9,
+            1.2
+          ]
+        },
+        "strength_max": 0.7,
+        "adjust_caps": {
+          "warmth": 3,
+          "tint": 1,
+          "exposure": 1,
+          "contrast": 1,
+          "saturation": 1
+        },
+        "suggested_protections": [
+          "肤色色相范围加脸部框，动作 fail；冷暖对照只落在光源与背景区域"
+        ],
+        "disable_when": [
+          "肤色是画面主体却没有声明肤色保护",
+          "目标没有能承担冷暖对照的光源或背景区域"
+        ]
       }
     },
     {
@@ -981,6 +1054,30 @@
       "compatibility": {
         "requires": "参考观察有证据，目标素材可承担机制；用户显式要求优先",
         "avoid": "不从统计推出效果，不默认复制参考资产，不以风格卡冒充已执行操作"
+      },
+      "color_parameters": {
+        "schema": "color-parameter-template/1",
+        "fit_methods": [
+          "histogram"
+        ],
+        "fit_bounds": {
+          "curve_max_shift": 0.06
+        },
+        "strength_max": 0.7,
+        "adjust_caps": {
+          "warmth": 1,
+          "tint": 1,
+          "exposure": 1,
+          "contrast": 2,
+          "saturation": 1
+        },
+        "suggested_protections": [
+          "高光区域里的文字、屏幕：区域保护，动作 fail"
+        ],
+        "disable_when": [
+          "目标高光已经剪白：曲线无法恢复丢失的细节",
+          "高光里有需要读的信息而没有声明保护"
+        ]
       }
     },
     {
@@ -1017,6 +1114,30 @@
       "compatibility": {
         "requires": "参考观察有证据，目标素材可承担机制；用户显式要求优先",
         "avoid": "不从统计推出效果，不默认复制参考资产，不以风格卡冒充已执行操作"
+      },
+      "color_parameters": {
+        "schema": "color-parameter-template/1",
+        "fit_methods": [
+          "histogram"
+        ],
+        "fit_bounds": {
+          "curve_max_shift": 0.06
+        },
+        "strength_max": 0.7,
+        "adjust_caps": {
+          "warmth": 1,
+          "tint": 1,
+          "exposure": 2,
+          "contrast": 2,
+          "saturation": 1
+        },
+        "suggested_protections": [
+          "暗部主体：区域保护，动作 flag，用来复核是否被压黑"
+        ],
+        "disable_when": [
+          "低照度、噪声大的素材：抬暗部会放大噪声",
+          "暗部本来没有可见信息"
+        ]
       }
     },
     {
@@ -1053,6 +1174,23 @@
       "compatibility": {
         "requires": "参考观察有证据，目标素材可承担机制；用户显式要求优先",
         "avoid": "不从统计推出效果，不默认复制参考资产，不以风格卡冒充已执行操作"
+      },
+      "color_parameters": {
+        "schema": "color-parameter-template/1",
+        "fit_methods": [],
+        "strength_max": 1.0,
+        "adjust_caps": {
+          "warmth": 1,
+          "tint": 1,
+          "exposure": 1,
+          "contrast": 2,
+          "saturation": 3
+        },
+        "suggested_protections": [],
+        "disable_when": [
+          "原色承担语义（交通、图表、品牌、证据色）",
+          "去色只是为了“显得高级”，没有说明作用"
+        ]
       }
     },
     {
@@ -1089,6 +1227,42 @@
       "compatibility": {
         "requires": "参考观察有证据，目标素材可承担机制；用户显式要求优先",
         "avoid": "不从统计推出效果，不默认复制参考资产，不以风格卡冒充已执行操作"
+      },
+      "color_parameters": {
+        "schema": "color-parameter-template/1",
+        "fit_methods": [
+          "reinhard-lab",
+          "mvgd"
+        ],
+        "fit_bounds": {
+          "slope": [
+            0.9,
+            1.1
+          ],
+          "offset": [
+            -0.04,
+            0.04
+          ],
+          "saturation": [
+            0.85,
+            1.15
+          ]
+        },
+        "strength_max": 0.8,
+        "adjust_caps": {
+          "warmth": 2,
+          "tint": 1,
+          "exposure": 2,
+          "contrast": 1,
+          "saturation": 1
+        },
+        "suggested_protections": [
+          "人物镜头：肤色色相范围（20°–70°，色度≥12）加调用者声明的脸部框，动作 fail"
+        ],
+        "disable_when": [
+          "参考与目标不是同一场景或同类光线（例如日景参考套夜景）",
+          "镜头间的颜色差异本身承载时间或光线变化"
+        ]
       }
     },
     {
