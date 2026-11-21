@@ -36,6 +36,7 @@
   - 色彩层 C2c：新原子 `color-consistency-check` 比较同一时间线调色前后的画面，按调用者声明的保护项（色相范围可限定区域，或纯区域）和上限（闪烁、剪切、漂移、有限范围外亮度）形成门禁；作品 `color` 段新增 `protections`、`limits` 与范围键 `color_checks`，`work-render` 在调色之后运行检查，`FAILED` 时中止。
   - 色彩层 C3a：新原子 `color-reference-fit`，按 reinhard-lab、mvgd（MKL）或逐通道直方图把目标帧的色彩统计向参考迁移，拟合为可编辑的 ASC CDL 或逐通道曲线调色层草案，报告迁移前、理想迁移与拟合后的分布距离和拟合残差；不采用、不选强度、不声称像参考。
   - 色彩层 C3b：新原子 `color-grade-adjust`，把按映射表换算好的色温、色调、亮度、对比、饱和度累计步数转成固定步长、有上限的参数增量，追加到调色层末尾，并在探针色上逐维核对方向；映射表写在调色反馈合同中。
+  - 色彩层 C3c：6 张色彩类风格卡新增参数模板（拟合方法、拟合区间、强度上限、反馈调整上限、建议保护项、禁用条件）；`color-reference-fit` 新增可选 `bounds`；参考风格工作流的色彩维度改为可执行链路。
   - 修复逐条字幕配方会顺带改写调色层：cue 模式下配方里的调色层必须与作品一致，否则 `CUE_RECIPE_GLOBAL_CHANGE_FORBIDDEN`。调色配方携带已绑定的逐条字幕覆盖时必须完整携带并保留排版约束；配方一次新增多个调色层时按 ID 顺序追加。
   - 修复 `visual-layer-render` 彩色叠层偏色：不透明度改为直接缩放 alpha，叠层全程保持 BT.709 YUVA，不再经过矩阵不一致的 RGB 往返。
   - 新原子 `still-color-normalize`：按内嵌 ICC 用 LittleCMS 把静图转换为无配置文件的 sRGB PNG，可选应用 EXIF 方向；未标记图片只按调用者声明处理。

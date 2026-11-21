@@ -894,6 +894,7 @@
     "tests/runtime/test_color_consistency_check.py",
     "tests/runtime/test_color_grade.py",
     "tests/runtime/test_color_grade_adjust.py",
+    "tests/runtime/test_color_parameter_templates.py",
     "tests/runtime/test_color_profile.py",
     "tests/runtime/test_color_reference_fit.py",
     "tests/runtime/test_creation_brief.py",

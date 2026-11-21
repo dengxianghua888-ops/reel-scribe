@@ -23,6 +23,9 @@ CURVE_POINTS = 17
 SIGMA_FLOOR = 0.5  # CIELAB units; a flat target channel is not stretched without bound
 COV_EPSILON = 1e-6
 JS_BINS = {'L': (0.0, 100.0, 50), 'a': (-100.0, 100.0, 50), 'b': (-100.0, 100.0, 50)}
+# Widest allowed bounds: color-grade-compile's CDL ranges, the saturation search range, any curve shift.
+DEFAULT_BOUNDS = {'slope': (0.0, 4.0), 'offset': (-1.0, 1.0), 'saturation': (0.05, 2.0), 'curve_max_shift': 1.0}
+CDL_BOUNDS = ('slope', 'offset', 'saturation')
 
 
 def _r(value, digits=4):
@@ -103,30 +106,55 @@ def _apply_cdl(rgb, slope, offset, saturation):
     return np.clip(luma + saturation * (sop - luma), 0.0, 1.0)
 
 
-def _fit_cdl(target, ideal, transfer):
+def _bounds(value):
+    from editing_runtime import require, number
+    require(isinstance(value, dict) and value and set(value) <= set(DEFAULT_BOUNDS), 'COLOR_FIT_BOUNDS_INVALID')
+    result = dict(DEFAULT_BOUNDS)
+    for name in CDL_BOUNDS:
+        if name in value:
+            pair = value[name]
+            require(isinstance(pair, list) and len(pair) == 2, 'COLOR_FIT_BOUNDS_INVALID: ' + name)
+            low, high = (number(x, name) for x in pair)
+            wide = DEFAULT_BOUNDS[name]
+            require(wide[0] <= low <= high <= wide[1], 'COLOR_FIT_BOUNDS_INVALID: ' + name)
+            result[name] = (low, high)
+    if 'curve_max_shift' in value:
+        shift = number(value['curve_max_shift'], 'curve_max_shift')
+        require(0 < shift <= 1, 'COLOR_FIT_BOUNDS_INVALID: curve_max_shift')
+        result['curve_max_shift'] = shift
+    return result
+
+
+def _fit_cdl(target, ideal, transfer, bounds=DEFAULT_BOUNDS):
     """Golden-section search on saturation; for each candidate, slope and offset come from least squares.
 
     Slope and saturation are confounded (both widen per-channel spread), so the inner
-    solve is redone for every saturation instead of alternating between them.
+    solve is redone for every saturation instead of alternating between them. Bounds
+    clip the slope, re-solve the offset for the clipped slope, then clip the offset.
     """
     np = _numpy()
     ideal_lab = lab_from_rgb01(ideal, transfer)[0]
     luma = (ideal @ np.array(LUMA_709))[:, None]
     design = [np.stack([target[:, c], np.ones(len(target))], axis=1) for c in range(3)]
 
-    def solve(saturation):
+    def solve(saturation, report=None):
         goal = luma + (ideal - luma) / saturation  # undo the saturation step, then fit the per-channel line
-        slope, offset = np.ones(3), np.zeros(3)
+        raw_slope, raw_offset = np.ones(3), np.zeros(3)
         for c in range(3):
-            (slope[c], offset[c]), *_ = np.linalg.lstsq(design[c], goal[:, c], rcond=None)
-        return np.clip(slope, 0.0, 4.0), np.clip(offset, -1.0, 1.0)
+            (raw_slope[c], raw_offset[c]), *_ = np.linalg.lstsq(design[c], goal[:, c], rcond=None)
+        slope = np.clip(raw_slope, *bounds['slope'])
+        refit = np.where(slope != raw_slope, (goal - slope * target).mean(axis=0), raw_offset)
+        offset = np.clip(refit, *bounds['offset'])
+        if report is not None:
+            report.update(slope=[bool(x) for x in slope != raw_slope], offset=[bool(x) for x in offset != refit])
+        return slope, offset
 
     def error(saturation):
         slope, offset = solve(saturation)
         fitted = lab_from_rgb01(_apply_cdl(target, slope, offset, saturation), transfer)[0]
         return float(((fitted - ideal_lab) ** 2).sum(axis=1).mean())
 
-    low, high = 0.05, 2.0
+    low, high = bounds['saturation']
     golden = (5 ** 0.5 - 1) / 2
     a, b = high - golden * (high - low), low + golden * (high - low)
     fa, fb = error(a), error(b)
@@ -140,29 +168,36 @@ def _fit_cdl(target, ideal, transfer):
             b = low + golden * (high - low)
             fb = error(b)
     saturation = (low + high) / 2
-    slope, offset = solve(saturation)
+    clipped = {}
+    slope, offset = solve(saturation, clipped)
+    edges = bounds['saturation']
+    clipped['saturation'] = bool(edges != DEFAULT_BOUNDS['saturation'] and min(abs(saturation - e) for e in edges) < 1e-3)
     op = {'type': 'cdl', 'slope': [_r(v, 6) for v in slope], 'offset': [_r(v, 6) for v in offset],
           'power': [1.0, 1.0, 1.0], 'saturation': _r(saturation, 6)}
-    return op, _apply_cdl(target, np.array(op['slope']), np.array(op['offset']), op['saturation'])
+    return op, _apply_cdl(target, np.array(op['slope']), np.array(op['offset']), op['saturation']), clipped
 
 
-def _fit_curves(target, ideal):
+def _fit_curves(target, ideal, bounds=DEFAULT_BOUNDS):
     """Per-channel monotone curves through the matched quantile mapping at fixed code values."""
     from color_numerics import pchip
     np = _numpy()
     xs = np.linspace(0.0, 1.0, CURVE_POINTS)
     op = {'type': 'curves'}
+    shift = bounds['curve_max_shift']
+    clipped = {}
     for c, name in enumerate(('red', 'green', 'blue')):
         order = np.argsort(target[:, c], kind='stable')
         source, mapped = target[order, c], ideal[order, c]
-        ys = np.interp(xs, source, mapped)  # outside the observed range: hold the nearest mapped value
+        raw = np.interp(xs, source, mapped)  # outside the observed range: hold the nearest mapped value
+        ys = np.clip(raw, xs - shift, xs + shift)
+        clipped[name] = int(np.sum(ys != raw))
         ys = np.clip(np.maximum.accumulate(ys), 0.0, 1.0)
         op[name] = [[_r(x, 6), _r(y, 6)] for x, y in zip(xs, ys)]
     fitted = target.copy()
     for c, name in enumerate(('red', 'green', 'blue')):
         px, py = zip(*op[name])
         fitted[:, c] = pchip(px, py, target[:, c])
-    return op, np.clip(fitted, 0.0, 1.0)
+    return op, np.clip(fitted, 0.0, 1.0), {'points_clamped': clipped}
 
 
 def _distances(reference_lab, candidate_lab):
@@ -188,7 +223,8 @@ def _distances(reference_lab, candidate_lab):
 def fit(request, directory, tools):
     from editing_runtime import exact_keys, require, source, write_json
     fields = ['operation', 'reference', 'target', 'method', 'grade_id']
-    exact_keys(request, fields, fields)
+    exact_keys(request, fields + ['bounds'], fields)
+    bounds = _bounds(request['bounds']) if 'bounds' in request else dict(DEFAULT_BOUNDS)
     np = _numpy()
     method = request['method']
     require(method in METHODS, 'COLOR_FIT_METHOD_UNSUPPORTED')
@@ -208,7 +244,9 @@ def fit(request, directory, tools):
     reference, target = _subsample(reference, FIT_PIXELS), _subsample(target, FIT_PIXELS)
     reference_lab = lab_from_rgb01(reference, transfer)[0]
     ideal, details = _ideal(method, target, reference, transfer)
-    op, fitted = (_fit_cdl(target, ideal, transfer) if METHODS[method] == 'cdl' else _fit_curves(target, ideal))
+    op, fitted, clipped = (_fit_cdl(target, ideal, transfer, bounds) if METHODS[method] == 'cdl'
+                           else _fit_curves(target, ideal, bounds))
+    applied = [k for k in ((CDL_BOUNDS) if METHODS[method] == 'cdl' else ('curve_max_shift',)) if k in request.get('bounds', {})]
     target_lab, ideal_lab, fitted_lab = (lab_from_rgb01(x, transfer)[0] for x in (target, ideal, fitted))
     residual = ciede2000(ideal_lab, fitted_lab)
     grade = {'schema': 'color-grade/1', 'id': gid, 'interpretation': INTERPRETATIONS[t_space], 'ops': [op]}
@@ -226,6 +264,8 @@ def fit(request, directory, tools):
               'pixels': {'reference': int(len(reference)), 'target': int(len(target)),
                          'sampling': 'point-sampled frames, then an evenly strided subsample of at most %d pixels' % FIT_PIXELS},
               'method_details': details, 'grade': grade, 'adopted': False, 'strength': 'NOT_CHOSEN',
+              'bounds': {'applied': {k: list(bounds[k]) if isinstance(bounds[k], tuple) else bounds[k] for k in applied},
+                         'ignored': sorted(set(request.get('bounds', {})) - set(applied)), 'hit': clipped},
               'distances_to_reference': {'before': _distances(reference_lab, target_lab),
                                          'ideal_transfer': _distances(reference_lab, ideal_lab),
                                          'fitted_grade': _distances(reference_lab, fitted_lab)},

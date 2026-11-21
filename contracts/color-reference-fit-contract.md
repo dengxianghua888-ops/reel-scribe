@@ -9,6 +9,7 @@
 | `reference` / `target` | `{source: {path, sha256}, input_color, frames}`。`input_color` 按[色彩特征合同](color-profile-contract.md)的规则校验；`frames` 为 1–32 个不重复的帧号，均在视频帧数内 |
 | `method` | `reinhard-lab`、`mvgd` 或 `histogram` |
 | `grade_id` | 草案调色层的 ID，规则同 color-grade-compile（不得含引号、换行或 `#`） |
+| `bounds`（可选） | `{slope?: [lo, hi], offset?: [lo, hi], saturation?: [lo, hi], curve_max_shift?: x}`，只能收窄：slope 在 0–4、offset 在 −1–1、饱和度在 0.05–2、曲线偏移在 (0, 1] 内。通常取自风格卡的参数模板 |
 
 参考和目标的解释可以不同（例如 sRGB 照片参考、BT.709 视频目标）：参考像素先经 CIELAB 换算到目标解释的码值，所有方法都在目标的码值域中计算，草案的 `interpretation` 与目标一致。
 
@@ -24,6 +25,7 @@
 
 - **CDL 拟合**：power 固定为 1。在 [0.05, 2] 上对饱和度做黄金分割搜索，目标是 CIELAB 平方误差；每个候选饱和度先撤销饱和度步骤，再用逐通道最小二乘求出对应的 slope、offset。斜率和饱和度都会拉开各通道的离散程度，交替求解会让斜率吸收饱和度变化，所以每次都重新求解。参数裁剪到 color-grade-compile 的取值范围。
 - **曲线拟合**：在 17 个等距码值处插值匹配映射，强制单调不减；观测范围以外保持最近的映射值。
+- **区间约束**：CDL 的饱和度只在区间内搜索；slope 超出区间时裁到边界，并按裁剪后的 slope 重新求 offset，再把 offset 裁到区间内。曲线的每个控制点限制在对角线 ±`curve_max_shift` 之内，再强制单调。与模型无关的键（例如 CDL 方法收到 `curve_max_shift`）不报错，列入 `bounds.ignored`。
 - 草案用 color-grade-compile 的解析链复算一遍，与拟合结果的 ΔE2000 必须小于 0.05，否则 `COLOR_FIT_GRADE_MISMATCH`。
 
 ## 输出 `color-reference-fit.json`
@@ -35,6 +37,7 @@
   - `js_divergence_lab`：L*、a*、b* 各 50 格直方图 JS 散度（以 2 为底）的均值。
 - `fit_residual_delta_e2000`：理想迁移与草案结果逐像素 ΔE2000 的中位数和 p95，表示可编辑参数能表达多少统计迁移。
 - `method_details`：Reinhard 的均值与缩放、MKL 的线性映射矩阵。
+- `bounds`：生效的区间（`applied`）、被忽略的键（`ignored`）和触到边界的参数（`hit`：CDL 逐通道的 slope、offset 和饱和度，曲线逐通道被限制的点数）。触到边界说明统计迁移想走得更远，模板挡住了它；拟合后的距离因此会比不约束时大。
 
 ## 不能据此声称
 

@@ -152,7 +152,7 @@ def test_cdl_fit_separates_saturation_from_slope():
     import color_fit_ops
     pixels = mosaic().reshape(-1, 3)
     luma = (pixels @ np.array(cn.LUMA_709))[:, None]
-    op, _ = color_fit_ops._fit_cdl(pixels, np.clip(luma + 1.3 * (pixels - luma), 0, 1), 'bt1886')
+    op, _, _ = color_fit_ops._fit_cdl(pixels, np.clip(luma + 1.3 * (pixels - luma), 0, 1), 'bt1886')
     assert abs(op['saturation'] - 1.3) < 0.01 and np.allclose(op['slope'], 1, atol=0.01)
 
 
@@ -165,3 +165,31 @@ def test_more_saturated_reference_raises_fitted_saturation(tmp_path, target):
     assert result['grade']['ops'][0]['saturation'] > 1.1
     distances = result['distances_to_reference']
     assert distances['fitted_grade']['sliced_wasserstein_lab'] < 0.5 * distances['before']['sliced_wasserstein_lab']
+
+
+def test_bounds_keep_cdl_and_curves_inside_a_template(tmp_path, target):
+    pixels, target_video = target
+    reference = video(tmp_path, 'affine', pixels * np.array([1.12, 1.0, 0.88]) + np.array([0.03, 0.0, -0.02]))
+    free = run_fit(tmp_path, reference, target_video, 'mvgd', 'free')['result']
+    bounded = run_fit(tmp_path, reference, target_video, 'mvgd', 'bounded',
+                      bounds={'slope': [0.95, 1.05], 'saturation': [0.9, 1.1], 'curve_max_shift': 0.02})['result']
+    op = bounded['grade']['ops'][0]
+    assert op['slope'][0] == 1.05 and op['slope'][2] == 0.95 and 0.9 <= op['saturation'] <= 1.1
+    assert bounded['bounds']['hit']['slope'] == [True, False, True]
+    assert bounded['bounds']['applied'] == {'slope': [0.95, 1.05], 'saturation': [0.9, 1.1]}
+    assert bounded['bounds']['ignored'] == ['curve_max_shift']
+    distance = lambda r, k: r['distances_to_reference'][k]['sliced_wasserstein_lab']  # noqa: E731
+    assert distance(free, 'fitted_grade') < distance(bounded, 'fitted_grade') < distance(bounded, 'before')
+    curved = video(tmp_path, 'curved', np.stack([pixels[..., 0] ** 0.8, pixels[..., 1], pixels[..., 2] ** 1.25], axis=-1))
+    result = run_fit(tmp_path, curved, target_video, 'histogram', 'shift', bounds={'curve_max_shift': 0.02})['result']
+    curves = result['grade']['ops'][0]
+    assert all(abs(y - x) <= 0.02 + 1e-9 for name in ('red', 'green', 'blue') for x, y in curves[name])
+    assert result['bounds']['hit']['points_clamped']['red'] > 0
+
+
+@pytest.mark.parametrize('bounds', [{'slope': [1.2, 1.1]}, {'saturation': [0, 3]}, {'contrast': [0, 1]}, {},
+                                    {'curve_max_shift': 0}])
+def test_bounds_validation(tmp_path, target, bounds):
+    _, target_video = target
+    receipt = run_fit(tmp_path, target_video, target_video, 'mvgd', 'bad-bounds', bounds=bounds)
+    assert receipt['status'] == 'FAILED' and 'COLOR_FIT_BOUNDS_INVALID' in receipt['error'], receipt.get('error')
