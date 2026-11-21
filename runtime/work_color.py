@@ -37,7 +37,7 @@ def _check_input(sid, declared, media):
     require(declared['basis'] in ('verified-metadata', 'caller-declared'), 'WORK_COLOR_BASIS_REQUIRED: ' + sid)
     video = next((s for s in media['streams'] if s.get('codec_type') == 'video'), None)
     require(video is not None, 'VIDEO_STREAM_REQUIRED: ' + sid)
-    require(video.get('color_transfer') not in ('arib-std-b67', 'smpte2084'), 'WORK_COLOR_HDR_SOURCE_UNSUPPORTED: ' + sid)
+    require(video.get('color_transfer') not in ('arib-std-b67', 'smpte2084'), 'WORK_COLOR_HDR_SOURCE_UNSUPPORTED: %s; convert it first with color-input-transform' % sid)
     expected = {'color_space': 'bt709', 'color_primaries': 'bt709', 'color_transfer': SPACE_TRANSFER[declared['space']],
                 'color_range': 'tv' if declared['range'] == 'limited' else 'pc'}
     unknown = (None, 'unknown', 'unspecified')

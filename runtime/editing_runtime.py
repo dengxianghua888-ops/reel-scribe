@@ -1248,6 +1248,9 @@ def execute(request, directory, tools):
     if op == 'color-grade-adjust':
         from color_adjust_ops import adjust
         return adjust(request, directory, tools)
+    if op == 'color-input-transform':
+        from color_input_ops import transform
+        return transform(request, directory, tools)
     if op == 'color-lut-apply':
         from color_ops import apply_lut
         return apply_lut(request,directory,tools)

@@ -110,6 +110,7 @@
 - 分析参考叙事/节奏/构图/声画/色彩/文字，提炼机制并用于目标素材：raven-reference-style。先识别analysis/plan/final/revision，保留当前题材规则与作品主风格。
 - 仅缩短/舒展走raven-pacing-restructure；用户明确要求按参考改变节奏时走参考适配并复用节奏约束。参数完整的LUT应用直接color-lut-apply，不自动挑风格。
 - 已有明确调色参数（曝光档、白平衡增益、高光滚降、CDL、曲线、HSL、外部LUT与强度）要编译成LUT或导出CDL/CLF：`color-grade-compile`，解释与素材传递函数一致（BT.709用bt709-sdr-display，sRGB照片素材用srgb-sdr-display）；参数来源由上层负责，编译成功不代表画面更好。实际套用仍用color-lut-apply（可带strength）。
+- 手机HLG、PQ等BT.2020 HDR素材要进入SDR剪辑、调色或影视流水线：先`color-input-transform`显式转换为BT.709 SDR，色调映射算子和峰值由上层选，参考回执里实测的峰值亮度；不自动判断素材类型，杜比视界只读基础层。
 - 有参考片（或参考截图转成的视频）和目标素材，要把目标的色彩统计向参考靠拢：`color-reference-fit`，选方法（reinhard-lab、mvgd、histogram），输出可编辑的CDL或曲线调色层草案和迁移前后的分布距离；距离变小不等于“像参考”，强度、采用和保护项由上层决定，再经color-grade-compile与预览。
 - 看过预览后的口头调色反馈（“暖一点”“对比强一些”“淡一点”“偏绿了”）：先按[调色反馈合同](../contracts/color-grade-adjust-contract.md)的映射表换算成各维度累计步数，再`color-grade-adjust`得到新的调色层草案并重新预览；不确定说法对应哪一维时先问，不猜。
 - 比较同一时间线调色前后的变化（调用者声明的肤色色相范围、品牌或证据区域是否保持，闪烁、剪切、相邻镜头漂移）：`color-consistency-check`。保护项只“保持”不“校正”，没有声明阈值时只报告数值；作品渲染会在调色后自动调用。
