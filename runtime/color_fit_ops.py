@@ -22,7 +22,8 @@ SEED = 20261121
 CURVE_POINTS = 17
 SIGMA_FLOOR = 0.5  # CIELAB units; a flat target channel is not stretched without bound
 COV_EPSILON = 1e-6
-JS_BINS = {'L': (0.0, 100.0, 50), 'a': (-100.0, 100.0, 50), 'b': (-100.0, 100.0, 50)}
+# Wide enough for the BT.709/sRGB gamut (blue b* is about -108); values outside are clipped into the edge bins.
+JS_BINS = {'L': (0.0, 100.0, 50), 'a': (-128.0, 128.0, 64), 'b': (-128.0, 128.0, 64)}
 # Widest allowed bounds: color-grade-compile's CDL ranges, the saturation search range, any curve shift.
 DEFAULT_BOUNDS = {'slope': (0.0, 4.0), 'offset': (-1.0, 1.0), 'saturation': (0.05, 2.0), 'curve_max_shift': 1.0}
 CDL_BOUNDS = ('slope', 'offset', 'saturation')
@@ -186,8 +187,10 @@ def _fit_curves(target, ideal, bounds=DEFAULT_BOUNDS):
     shift = bounds['curve_max_shift']
     clipped = {}
     for c, name in enumerate(('red', 'green', 'blue')):
-        order = np.argsort(target[:, c], kind='stable')
-        source, mapped = target[order, c], ideal[order, c]
+        # Quantized footage repeats code values; each distinct source value maps to the mean of its targets,
+        # otherwise interpolation over tied x would pick one end of their quantile range.
+        source, inverse = np.unique(target[:, c], return_inverse=True)
+        mapped = np.bincount(inverse, weights=ideal[:, c]) / np.bincount(inverse)
         raw = np.interp(xs, source, mapped)  # outside the observed range: hold the nearest mapped value
         ys = np.clip(raw, xs - shift, xs + shift)
         clipped[name] = int(np.sum(ys != raw))
@@ -209,15 +212,16 @@ def _distances(reference_lab, candidate_lab):
     n = min(len(reference_lab), len(candidate_lab))
     a, b = _subsample(reference_lab, n), _subsample(candidate_lab, n)
     sliced = float(np.mean([np.abs(np.sort(a @ d) - np.sort(b @ d)).mean() for d in directions]))
-    js = []
-    for index, (low, high, bins) in enumerate(JS_BINS.values()):
-        p = np.histogram(reference_lab[:, index], bins=bins, range=(low, high))[0].astype(float) + 1e-12
-        q = np.histogram(candidate_lab[:, index], bins=bins, range=(low, high))[0].astype(float) + 1e-12
+    js = {}
+    for index, (name, (low, high, bins)) in enumerate(JS_BINS.items()):
+        p = np.histogram(np.clip(reference_lab[:, index], low, high), bins=bins, range=(low, high))[0].astype(float) + 1e-12
+        q = np.histogram(np.clip(candidate_lab[:, index], low, high), bins=bins, range=(low, high))[0].astype(float) + 1e-12
         p, q = p / p.sum(), q / q.sum()
         m = (p + q) / 2
-        js.append(0.5 * (p * np.log2(p / m)).sum() + 0.5 * (q * np.log2(q / m)).sum())
+        js[name] = float(0.5 * (p * np.log2(p / m)).sum() + 0.5 * (q * np.log2(q / m)).sum())
     return {'mean_color_delta_e2000': _r(mean), 'sliced_wasserstein_lab': _r(sliced),
-            'js_divergence_lab': _r(float(np.mean(js)), 6)}
+            'js_divergence_lab': _r(float(np.mean(list(js.values()))), 6),
+            'js_divergence_lab_channels': {k: _r(v, 6) for k, v in js.items()}}
 
 
 def fit(request, directory, tools):

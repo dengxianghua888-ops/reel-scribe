@@ -21,10 +21,10 @@
 |---|---|---|
 | `reinhard-lab` | CIELAB 每个通道 `(x − μt)·σr/σt + μr`；σt 下限 0.5，避免把近乎平坦的通道无限拉伸 | ASC CDL |
 | `mvgd` | Pitié 的 MKL 映射：`T = Σt^-½ (Σt^½ Σr Σt^½)^½ Σt^-½`，`x' = T(x − μt) + μr`，在 RGB 码值上计算，协方差加 1e-6 的对角正则 | ASC CDL |
-| `histogram` | 每个通道按秩把目标分位数映射到参考的同一分位数 | 逐通道曲线，17 个固定控制点，单调不减 |
+| `histogram` | 每个通道按秩把目标分位数映射到参考的同一分位数 | 逐通道曲线，17 个固定控制点，单调不减；码值相同的目标像素取其映射值的均值 |
 
 - **CDL 拟合**：power 固定为 1。在 [0.05, 2] 上对饱和度做黄金分割搜索，目标是 CIELAB 平方误差；每个候选饱和度先撤销饱和度步骤，再用逐通道最小二乘求出对应的 slope、offset。斜率和饱和度都会拉开各通道的离散程度，交替求解会让斜率吸收饱和度变化，所以每次都重新求解。参数裁剪到 color-grade-compile 的取值范围。
-- **曲线拟合**：在 17 个等距码值处插值匹配映射，强制单调不减；观测范围以外保持最近的映射值。
+- **曲线拟合**：在 17 个等距码值处插值匹配映射，强制单调不减；观测范围以外保持最近的映射值。量化视频每个通道只有有限个码值，同一码值的像素按秩会分到一段参考分位数；先把它们合并为均值再插值，否则会系统性偏向这一段的一端。
 - **区间约束**：CDL 的饱和度只在区间内搜索；slope 超出区间时裁到边界，并按裁剪后的 slope 重新求 offset，再把 offset 裁到区间内。曲线的每个控制点限制在对角线 ±`curve_max_shift` 之内，再强制单调。与模型无关的键（例如 CDL 方法收到 `curve_max_shift`）不报错，列入 `bounds.ignored`。
 - 草案用 color-grade-compile 的解析链复算一遍，与拟合结果的 ΔE2000 必须小于 0.05，否则 `COLOR_FIT_GRADE_MISMATCH`。
 
@@ -34,7 +34,7 @@
 - `distances_to_reference`：`before`（目标原样）、`ideal_transfer`（统计迁移的理想结果）、`fitted_grade`（草案的结果）三组与参考的距离：
   - `mean_color_delta_e2000`：两组像素平均 CIELAB 的 CIEDE2000；
   - `sliced_wasserstein_lab`：64 个固定随机方向上的一维 Wasserstein-1 均值；
-  - `js_divergence_lab`：L*、a*、b* 各 50 格直方图 JS 散度（以 2 为底）的均值。
+  - `js_divergence_lab`：L*（0–100，50 格）、a*、b*（−128–128，各 64 格）直方图 JS 散度（以 2 为底）的均值，范围外的值计入边缘格；`js_divergence_lab_channels` 给出三个通道各自的值。范围覆盖 BT.709/sRGB 色域，纯蓝的 b* 约为 −108。素材颜色很少时直方图稀疏，JS 比较粗糙。
 - `fit_residual_delta_e2000`：理想迁移与草案结果逐像素 ΔE2000 的中位数和 p95，表示可编辑参数能表达多少统计迁移。
 - `method_details`：Reinhard 的均值与缩放、MKL 的线性映射矩阵。
 - `bounds`：生效的区间（`applied`）、被忽略的键（`ignored`）和触到边界的参数（`hit`：CDL 逐通道的 slope、offset 和饱和度，曲线逐通道被限制的点数）。触到边界说明统计迁移想走得更远，模板挡住了它；拟合后的距离因此会比不约束时大。

@@ -96,9 +96,11 @@ def test_histogram_matching_fits_monotone_channel_curves(tmp_path, target):
         ys = [y for _, y in op[name]]
         assert all(a <= b for a, b in zip(ys, ys[1:]))
     mid = dict((x, y) for x, y in op['red'])[0.5]
-    assert abs(mid - 0.5 ** 0.8) < 0.04  # red lifted like the reference's x**0.8
+    assert abs(mid - 0.5 ** 0.8) < 0.005  # red lifted like the reference's x**0.8
     distances = result['distances_to_reference']
-    assert distances['fitted_grade']['js_divergence_lab'] < 0.3 * distances['before']['js_divergence_lab']
+    assert distances['fitted_grade']['sliced_wasserstein_lab'] < 0.1 * distances['before']['sliced_wasserstein_lab']
+    # 96 flat color blocks give a sparse histogram, so JS is a coarse measure here.
+    assert distances['fitted_grade']['js_divergence_lab'] < 0.5 * distances['before']['js_divergence_lab']
 
 
 def test_fitted_grade_compiles_and_an_srgb_reference_is_converted_first(tmp_path, target):
@@ -193,3 +195,24 @@ def test_bounds_validation(tmp_path, target, bounds):
     _, target_video = target
     receipt = run_fit(tmp_path, target_video, target_video, 'mvgd', 'bad-bounds', bounds=bounds)
     assert receipt['status'] == 'FAILED' and 'COLOR_FIT_BOUNDS_INVALID' in receipt['error'], receipt.get('error')
+
+
+def test_histogram_curve_maps_tied_source_values_to_their_mean_target():
+    import color_fit_ops
+    target = np.full((4000, 3), 0.5)  # one quantized value per channel: every sample ties
+    reference = np.repeat(np.linspace(0.0, 1.0, 4000)[:, None], 3, axis=1)
+    ideal, _ = color_fit_ops._ideal('histogram', target, reference, 'bt1886')
+    op, fitted, _ = color_fit_ops._fit_curves(target, ideal)
+    assert abs(dict((x, y) for x, y in op['red'])[0.5] - 0.5) < 0.01
+    assert np.allclose(fitted, 0.5, atol=0.01)
+
+
+def test_js_histograms_keep_saturated_blue():
+    import color_fit_ops
+    blue = cn.lab_from_rgb01(np.array([[0.0, 0.0, 1.0]] * 1000), 'bt1886')[0]
+    gray = cn.lab_from_rgb01(np.array([[0.5, 0.5, 0.5]] * 1000), 'bt1886')[0]
+    assert blue[0, 2] < -100  # BT.709 blue lies outside a +/-100 b* range
+    mostly_blue = np.concatenate([blue[:500], gray[:500]])
+    mostly_gray = np.concatenate([blue[:100], gray[:900]])
+    channels = color_fit_ops._distances(mostly_blue, mostly_gray)['js_divergence_lab_channels']
+    assert channels['b'] > 0.1  # the change in the share of saturated blue must show in b*
