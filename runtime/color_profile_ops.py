@@ -262,7 +262,7 @@ def _validate_stream(video, input_color):
     require(input_color['range'] in ('limited', 'full'), 'COLOR_PROFILE_RANGE_REQUIRED')
     require(input_color['basis'] in ('verified-metadata', 'caller-declared'), 'COLOR_PROFILE_BASIS_REQUIRED')
     transfer, primaries = video.get('color_transfer'), video.get('color_primaries')
-    require(transfer not in HDR_TRANSFERS, 'COLOR_PROFILE_HDR_TRANSFER_UNSUPPORTED: %s; convert to declared SDR BT.709 first' % transfer)
+    require(transfer not in HDR_TRANSFERS, 'COLOR_PROFILE_HDR_TRANSFER_UNSUPPORTED: %s; convert to declared SDR BT.709 first (color-input-transform)' % transfer)
     require(primaries not in WIDE_PRIMARIES, 'COLOR_PROFILE_WIDE_GAMUT_UNSUPPORTED: %s' % primaries)
     pix_fmt = video.get('pix_fmt')
     require(pix_fmt in SDR_PIXEL_FORMATS, 'COLOR_PROFILE_PIXEL_FORMAT_UNSUPPORTED: %s' % pix_fmt)

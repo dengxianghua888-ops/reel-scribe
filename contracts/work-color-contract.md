@@ -12,7 +12,12 @@ color: {
   grades: {grade_id: {targets: "*" 或 [clip_id, ...],
                       interpretation: bt709-sdr-display | srgb-sdr-display,
                       ops: [...], strength: 0..1（可选）, lut_size: 17 | 33 | 65}},
-  order: [grade_id, ...]
+  order: [grade_id, ...],
+  protections: {protection_id: {kind: hue-range | region, targets: "*" 或 [clip_id, ...],
+                                hue_degrees/min_chroma/box?（hue-range）或 box（region）,
+                                max_median_delta_e2000, action: fail | flag}}（可选）,
+  limits: {max_flicker_increase?, max_clip_increase?, max_drift_increase?,
+           max_out_of_range_fraction?}（可选）
 }
 ```
 
@@ -26,6 +31,8 @@ color: {
   - 每个目标片段的素材都必须在 `inputs` 中声明，且声明的解释与调色层一致：`bt709-sdr` 对应 `bt709-sdr-display`，`srgb-sdr` 对应 `srgb-sdr-display`。
   - 最多 16 层。
 - `order`：每个调色层恰好出现一次，按此顺序叠加。文档以规范化 JSON 存储，字典键会排序，所以顺序必须显式写出。
+- `protections`（可选，至多 16 项）：调用者要求调色时保持的颜色。字段与 [color-consistency-check](color-consistency-contract.md) 的保护项相同，只是用 `targets`（`"*"` 或片段 ID）代替段 ID。目标片段的素材必须已在 `inputs` 声明，因为测量要按它的解释换算 CIELAB。
+- `limits`（可选）：闪烁、剪切、相邻镜头漂移的增量上限和有限范围外亮度比例上限，含义同上。
 
 ## 渲染
 
@@ -34,16 +41,19 @@ color: {
 - 每个调色层先用 `color-grade-compile` 编译成 cube，然后由一次 `color-lut-apply`（`layers` 模式）按各层目标片段的输出帧区间依次套用。层与层之间保持 32 位浮点 RGB，区间外的帧只重编码。
 - `color-lut-apply` 在每个区间的中间帧，以及一帧不在任何区间内的帧上读回解码结果。读回按固定分析尺寸逐点取样、不做平均，用请求的插值方式对同一批源像素做 numpy 预测并比较（ΔE2000 中位数不超过 3，否则失败）。
 - 回执记录每层的片段、帧区间和编译后的 cube 哈希。
+- **调色门禁**：调色之后、混音之前，`color-consistency-check` 比较时间线与调色结果。每个声明了输入的片段是一段，每段取 1–3 个样本帧（至多 256 个片段）。门禁为 `FAILED` 时渲染以 `WORK_COLOR_CHECK_FAILED` 中止，后续步骤不再执行；`FLAGGED` 和 `PASSED` 继续渲染，结果的 `color_check` 记录门禁、原因和报告哈希。没有声明保护项和上限时只报告数值。
+- 门禁比较的是调色前后的同一帧，所以它只衡量“调色改变了什么”，字幕和叠层不在其中。没有调色层时不运行。
 - 时间线本身不受调色影响。目前 A/B 预览的每个变体仍各自渲染时间线，还没有复用。
 
 时间线输出继承第一个片段素材帧上的色彩标签。调色步骤按有限范围、以调用方声明为依据（`caller-declared`）交给 `color-lut-apply`，并沿用时间线输出的实际传递函数标签：sRGB 标签按 `srgb-sdr` 套用并保持该标签，BT.709 或缺失标签按 `bt709-sdr`，其他标签以 `WORK_COLOR_TIMELINE_TRANSFER_UNSUPPORTED` 拒绝。LUT 只作用于码值，每个调色层的解释已经在作品校验阶段按素材逐一核对，标签只用于一致性检查和保持管线原有的标签。sRGB 素材的码值不做传递函数转换；调色层用 `srgb-sdr-display` 时，其中的数学按 sRGB 曲线计算。
 
 ## 修订范围
 
-`scope` 新增两个可选键：
+`scope` 新增三个可选键：
 
 - `grade_ids: []`：新增、删除、修改或调整顺序的调色层都必须列在这里。
 - `color_inputs: false`：`inputs` 的任何变化都需要 `true`。
+- `color_checks: false`：`protections` 或 `limits` 的任何变化都需要 `true`。放宽或删除保护项与新增保护项同样要显式授权。
 
 调色层本身没变、但它覆盖的源内容变了，也必须把它列入 `grade_ids`，否则报 `COLOR_REVIEW_SCOPE_REQUIRED`，表示被调色的是新素材，需要复核。“源内容”指目标片段的素材、哈希、源区间和速度。例如：
 
@@ -55,7 +65,8 @@ color: {
 
 调色段的任何变化都会使渲染、技术 QC、内容复核和画面复核失效。差异报告新增以下字段：
 - `color_grades`、`color_inputs_changed`、`color_order_changed`：调色段本身的变化；
-- `color_revalidation_declared`：因源内容变化而声明复核的调色层。
+- `color_revalidation_declared`：因源内容变化而声明复核的调色层；
+- `color_checks_changed`：保护项或上限是否变化。
 
 ## 局部撤销
 
@@ -86,6 +97,7 @@ color: {
 |---|---|---|
 | `color-grade-or-order` | 调色层增删改、`inputs` 变化、`order` 变化 | `color-grade`、`render` |
 | `color-coverage` | 调色层未变，但覆盖的源内容变了，已声明复核 | `color-grade`、`render` |
+| `color-checks` | 保护项或上限变化 | `color-grade`、`render`（门禁结果绑定在渲染回执里） |
 
 时间线变化本身另有分类；它带来的重新调色由 `color-coverage` 体现。旧整份文档的 QA 失效规则不变。
 
@@ -95,4 +107,6 @@ color: {
 - 只有在调用方声明了色彩解释，且标签不冲突时才调色；代码不会推断素材该用哪种解释。
 - 传递函数混用的时间线（如 sRGB 照片与 BT.709 视频混剪）仍按声明逐片段校验和调色，但输出只带第一个片段的传递函数标签，这一标签不能代表所有片段。真实素材实测见[作品调色真实素材操作记录](../docs/color-work-real-run-20261120.md)。
 - 调色层不等于风格绑定；`style_bindings` 仍只是创作记录，配方映射只说明“这些参数来自这份配方”，不证明调色效果符合风格卡的意图。
-- 保护项门禁（色彩一致性检查、肤色等受保护范围）尚未接入，属于 C2c。
+- 保护项只“保持”颜色，不把肤色、品牌色推向标准值；`hue-range` 不是肤色检测，范围由调用者声明。
+- 风格配方不能声明或修改保护项和上限；A/B 预览中违反 `fail` 保护项的变体会渲染失败。
+- 局部撤销不支持保护项和上限，需要时用显式范围的普通修订。
