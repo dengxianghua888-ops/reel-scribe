@@ -109,13 +109,13 @@ def revision_diff(base,candidate,scope,tools):
     from editing_runtime import exact_keys,require,fingerprint
     fields=['clip_ids','source_ids','caption_ids','audio_ids','style_keys','note_keys','output_fields','caption_style',
             'freeze_positions','freeze_duration']
-    exact_keys(scope,fields+['visual_ids','evidence_mapping','grade_ids','color_inputs','color_checks'],fields)
+    exact_keys(scope,fields+['visual_ids','evidence_mapping','grade_ids','color_inputs','color_checks','color_texture'],fields)
     scope={**scope,'visual_ids':scope.get('visual_ids',[]),'evidence_mapping':scope.get('evidence_mapping',False),
            'grade_ids':scope.get('grade_ids',[]),'color_inputs':scope.get('color_inputs',False),
-           'color_checks':scope.get('color_checks',False)}
-    fields=fields+['visual_ids','evidence_mapping','grade_ids','color_inputs','color_checks']
+           'color_checks':scope.get('color_checks',False),'color_texture':scope.get('color_texture',False)}
+    fields=fields+['visual_ids','evidence_mapping','grade_ids','color_inputs','color_checks','color_texture']
     for k in fields:
-        if k in ['caption_style','freeze_duration','evidence_mapping','color_inputs','color_checks']:
+        if k in ['caption_style','freeze_duration','evidence_mapping','color_inputs','color_checks','color_texture']:
             require(type(scope[k]) is bool,'BOOLEAN_SCOPE_REQUIRED: '+k)
         else:
             require(isinstance(scope[k],list) and all(isinstance(x,str) for x in scope[k]) and len(set(scope[k]))==len(scope[k]),'ID_SCOPE_REQUIRED: '+k)
@@ -601,6 +601,23 @@ def _render_document_bound(document,directory,tools,*,work_version,audio_backend
             color_check={'gate':report['gate'],'failures':report['failures'],'flags':report['flags'],
                          'report':{'path':str(directory/'color-check/color-consistency.json'),
                                    'sha256':sha256(directory/'color-check/color-consistency.json')}}
+    texture=None
+    if 'color' in doc:
+        # Texture is picture too: after grading and its gate, so the check measures the grade alone,
+        # and before audio mix, visual layers and captions, so overlays and text stay clean.
+        from work_color import texture_plan
+        plan=texture_plan(doc,norm)
+        if plan is not None:
+            invoke({'operation':'film-texture-apply','source':{'path':str(current),'sha256':sha256(current)},
+                    'input_color':{'space':plan['space'],'range':'limited','basis':'caller-declared'},
+                    'effects':plan['effects'],'readback_frames':plan['readback_frames']},'texture')
+            current=directory/'texture/textured.mp4'
+            report=directory/'texture/film-texture.json'
+            texture={'effects':plan['effects'],'space':plan['space'],'readback_clip_ids':plan['readback_clip_ids'],
+                     'readback_frames':plan['readback_frames'],
+                     'readback_max_median_delta_e2000':max(r['delta_e2000_median'] for r in
+                         json.loads(report.read_text(encoding='utf-8'))['readback']['frames']),
+                     'report':{'path':str(report),'sha256':sha256(report)}}
     if tracks:
         invoke({'operation':'audio-mix','source':{'path':str(current),'sha256':sha256(current)},'base_gain_db':0,'tracks':tracks},'audio')
         current=directory/'audio/mixed.mp4'
@@ -628,6 +645,8 @@ def _render_document_bound(document,directory,tools,*,work_version,audio_backend
             **({'timeline_reuse':shared[0]} if shared is not None else {}),
             **({'color_grades':graded,'color_order':'after timeline, before audio mix, visual layers and captions'} if graded else {}),
             **({'color_check':color_check} if color_check is not None else {}),
+            **({'texture':texture,'texture_order':'after color grades and the color check, before audio mix, visual layers and captions'}
+               if texture is not None else {}),
             'layer_counts':{'audio_tracks':len(tracks),'visual_layers':len(visual),'captions':len(cues),'color_grades':len(graded)}}
 
 
@@ -679,6 +698,7 @@ def work_render(request,directory,tools):
             'content_review':'NOT_RUN','listening_review':'NOT_RUN','native_editor_acceptance':'NOT_RUN'}
     if 'timeline_reuse' in rendered:result['timeline_reuse']=rendered['timeline_reuse']
     if 'color_check' in rendered:result['color_check']=rendered['color_check']
+    if 'texture' in rendered:result['texture']=rendered['texture']
     if preview:
         result.update(preview_status='CANDIDATE_PREVIEW_NOT_COMMITTED',
                       preview_candidate=candidate_ref,

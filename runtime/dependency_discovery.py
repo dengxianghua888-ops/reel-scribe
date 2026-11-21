@@ -690,7 +690,7 @@ def inspect(root, *, ffmpeg=None, ffprobe=None, bindings=None, env=None, request
             if not work_content_reason and selected_document.get('caption_style') is not None and 'font' not in profile:
                 profile += ('font',)
             if not work_content_reason and isinstance(selected_document.get('color'), dict):
-                profile += ('numpy',)  # color-grade-compile and layered color-lut-apply
+                profile += ('numpy',)  # color-grade-compile, layered color-lut-apply and film-texture-apply
         if identifier in ('timeline-render', 'work-render') and selected is not None:
             if stretch.get('required'):
                 profile += ('audio-time-stretch',)

@@ -5,7 +5,9 @@ Rendering compiles each grade with color-grade-compile and applies all of them
 after the timeline (before audio mix, visual layers and captions) with
 color-lut-apply layers, so captions and overlays are never graded. Then
 color-consistency-check compares the timeline and the graded picture; optional
-caller-declared protections and limits turn that comparison into a gate.
+caller-declared protections and limits turn that comparison into a gate. An
+optional texture (film-texture-apply effects) acts on the whole graded picture
+after that gate, still before audio mix, visual layers and captions.
 """
 from fractions import Fraction
 
@@ -14,6 +16,7 @@ SPACES = ('bt709-sdr', 'srgb-sdr')
 SPACE_INTERPRETATION = {'bt709-sdr': 'bt709-sdr-display', 'srgb-sdr': 'srgb-sdr-display'}
 MAX_GRADES = 16
 MAX_CHECK_FRAMES = 512
+TEXTURE_READBACK_CLIPS = 4
 
 
 def lut_references(document):
@@ -82,7 +85,8 @@ def validate(doc, norm, tools):
     from editing_runtime import exact_keys, require
     from color_grade_ops import normalize, LUT_SIZES
     color = doc['color']
-    exact_keys(color, ['schema', 'inputs', 'grades', 'order', 'protections', 'limits'], ['schema', 'inputs', 'grades', 'order'])
+    exact_keys(color, ['schema', 'inputs', 'grades', 'order', 'protections', 'limits', 'texture'],
+               ['schema', 'inputs', 'grades', 'order'])
     require(color['schema'] == SCHEMA, 'WORK_COLOR_SCHEMA_UNSUPPORTED')
     require(isinstance(color['inputs'], dict) and isinstance(color['grades'], dict), 'WORK_COLOR_ID_MAP_REQUIRED')
     require(len(color['grades']) <= MAX_GRADES, 'WORK_COLOR_TOO_MANY_GRADES')
@@ -117,7 +121,37 @@ def validate(doc, norm, tools):
         planned.append({'id': gid, 'spec': spec, 'lut_size': grade['lut_size'], 'clip_ids': ids,
                         'ranges': frame_ranges(norm, set(ids))})
     _checks(color, norm)
+    texture_plan(doc, norm)
     return planned
+
+
+def texture_plan(doc, norm):
+    """film-texture-apply effects, space and readback frames for the whole picture, or None.
+
+    The texture covers every clip, so every clip's source needs a declared input and all
+    of them must share one space: halation and vignette are computed in that space's linear light.
+    """
+    from editing_runtime import exact_keys, require
+    from texture_ops import _validate
+    color = doc.get('color') or {}
+    if 'texture' not in color:
+        return None
+    texture = color['texture']
+    exact_keys(texture, ['effects'], ['effects'])
+    effects = _validate(texture['effects'])
+    spaces = set()
+    for clip in norm['clips']:
+        declared = color['inputs'].get(clip['source_id'])
+        require(declared is not None, 'WORK_TEXTURE_INPUT_DECLARATION_REQUIRED: %s (clip %s)' % (clip['source_id'], clip['id']))
+        spaces.add(declared['space'])
+    require(len(spaces) == 1, 'WORK_TEXTURE_SPACES_MIXED: %s' % ', '.join(sorted(spaces)))
+    clips = norm['clips']
+    count = min(TEXTURE_READBACK_CLIPS, len(clips))
+    # Middle frames of up to four clips spread over the timeline; derived, so edits never leave stale frame numbers.
+    picks = sorted({round(i * (len(clips) - 1) / (count - 1)) for i in range(count)} if count > 1 else {0})
+    frames = sorted({(clips[i]['output_start_frame'] + clips[i]['output_end_frame'] - 1) // 2 for i in picks})
+    return {'effects': effects, 'space': spaces.pop(), 'readback_frames': frames,
+            'readback_clip_ids': [clips[i]['id'] for i in picks]}
 
 
 def _checks(color, norm):
@@ -192,6 +226,10 @@ def revision_changes(base, candidate, scope, old_norm, new_norm):
     checks = [{k: (c or {}).get(k) for k in ('protections', 'limits')} for c in (old, new)]
     checks_changed = checks[0] != checks[1]
     require(not checks_changed or scope['color_checks'], 'OUTSIDE_SCOPE: color.protections or color.limits')
-    return {'color_checks_changed': checks_changed, 'color_grades': changed, 'color_inputs_changed': inputs_changed, 'color_order_changed': bool(reordered) or
+    texture_changed = (old or {}).get('texture') != (new or {}).get('texture')
+    require(not texture_changed or scope['color_texture'], 'OUTSIDE_SCOPE: color.texture')
+    return {'color_texture_changed': texture_changed,
+            'color_textured': 'texture' in (old or {}) or 'texture' in (new or {}),
+            'color_checks_changed': checks_changed, 'color_grades': changed, 'color_inputs_changed': inputs_changed, 'color_order_changed': bool(reordered) or
             ([g for g in old_order if g in new_order] != [g for g in new_order if g in old_order]),
             'color_revalidation_declared': affected}
