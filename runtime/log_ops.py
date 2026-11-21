@@ -25,9 +25,9 @@ ANALYSIS_WIDTH = 256
 BAKE_POINTS = 4096
 READBACK_MAX_MEDIAN_DE2000 = 2.0
 WARN_FRACTION = 0.01
-SWS_FLAGS = 'accurate_rnd+full_chroma_int'
-# Y'CbCr -> float RGB goes through zscale: swscale clamps float RGB at 1.0, which would erase
-# superwhite code values and hide a wrong code_values declaration from the measurements.
+# Y'CbCr <-> float RGB goes through zscale (zimg): swscale clamps float RGB at 1.0, which would erase
+# superwhite code values and hide a wrong code_values declaration from the measurements, and its
+# float conversions changed between FFmpeg releases.
 
 
 def _r(value, digits=4):
@@ -186,7 +186,7 @@ def transform(request, directory, tools):
     # Fixed local file name: the cube path is never interpreted as filter code.
     vf = (f"zscale=matrixin={matrix}:rangein={rng}:range=full,format=gbrpf32le,"
           f"lut3d=file=log.cube:interp=tetrahedral,"
-          f"scale=out_color_matrix=bt709:out_range=tv:flags={SWS_FLAGS},format={out_fmt},"
+          f"zscale=matrix=709:range=limited,format={out_fmt},"
           f"setparams=colorspace=bt709:color_primaries=bt709:color_trc={trc}:range=tv")
     tools.ff(['-i', asset['path'], '-vf', vf, '-map', '0:v:0', '-map', '0:a?', '-fps_mode', 'passthrough',
               '-c:v', 'libx264', '-crf', '18', '-preset', 'medium', '-c:a', 'copy', '-colorspace', 'bt709',

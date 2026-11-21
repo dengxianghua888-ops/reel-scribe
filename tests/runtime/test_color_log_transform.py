@@ -53,10 +53,14 @@ def encode_log(tmp_path, colorspace, name, code_values='full', matrix='bt2020', 
     args = ['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb48le', '-s', '128x64', '-r', '25', '-i', '-']
     if audio:
         args += ['-f', 'lavfi', '-t', '0.4', '-i', 'sine=frequency=440:sample_rate=48000', '-c:a', 'aac']
-    args += ['-vf', f'scale=out_color_matrix={matrix}:out_range={rng}:flags=accurate_rnd+full_chroma_int,format={pix_fmt}',
-             '-c:v', 'libx264', '-qp', '0', '-preset', 'ultrafast']
+    # zimg for the RGB -> Y'CbCr step: swscale's full-range float paths differ between FFmpeg releases.
+    space = 'bt2020nc' if matrix == 'bt2020' else 'bt709'
+    params = (f'colorspace={space}:color_primaries=bt2020:range={rng}' if tags else
+              f'colorspace=unknown:color_primaries=unknown:color_trc=unknown:range={rng}')
+    args += ['-vf', f"zscale=matrix={'2020_ncl' if matrix == 'bt2020' else '709'}:range={'full' if rng == 'pc' else 'limited'},"
+                    f'format={pix_fmt},setparams={params}', '-c:v', 'libx264', '-qp', '0', '-preset', 'ultrafast']
     if tags:
-        args += ['-color_primaries', 'bt2020', '-colorspace', 'bt2020nc' if matrix == 'bt2020' else 'bt709', '-color_range', rng]
+        args += ['-color_primaries', 'bt2020', '-colorspace', space, '-color_range', rng]
     subprocess.run(args + [str(out)], input=raw, check=True, timeout=120)
     return out, codes.reshape(64, 128, 3)
 
@@ -69,8 +73,7 @@ def request(video, view=ACES_SDR, display=REC709, declared=None, **extra):
 
 def patch_rgb(video, frame=3):
     raw = subprocess.run(['ffmpeg', '-v', 'error', '-i', str(video), '-vf',
-                          f"select='eq(n,{frame})',scale=in_color_matrix=bt709:in_range=tv:out_range=pc:"
-                          "flags=accurate_rnd+full_chroma_int,format=rgb48le",
+                          f"select='eq(n,{frame})',zscale=matrixin=709:rangein=limited:range=full,format=rgb48le",
                           '-fps_mode', 'passthrough', '-frames:v', '1', '-f', 'rawvideo', '-'], capture_output=True, check=True).stdout
     rgb = np.frombuffer(raw, dtype='<u2').reshape(64, 128, 3) / 65535.0
     return np.array([rgb[8:56, i * 32 + 8:i * 32 + 24].reshape(-1, 3).mean(axis=0) for i in range(4)])

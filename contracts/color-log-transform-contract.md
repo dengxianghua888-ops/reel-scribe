@@ -32,10 +32,10 @@
 
 1. OCIO 按“Log 色彩空间 → 显示/视图”建立处理器（`OPTIMIZATION_LOSSLESS`）。
 2. 在 Log 码值的 `lut_size`³ 网格上求值，裁剪到 [0,1] 后写成 `log.cube`。
-3. FFmpeg：`zscale` 按声明的矩阵和码值范围把 Y'CbCr 转为 32 位浮点 RGB → `lut3d`（四面体插值）→ BT.709 矩阵、有限范围 → 写入 BT.709 原色与所选显示的传递函数标签。
+3. FFmpeg：`zscale` 按声明的矩阵和码值范围把 Y'CbCr 转为 32 位浮点 RGB → `lut3d`（四面体插值）→ `zscale` 转为 BT.709 矩阵、有限范围 → 写入 BT.709 原色与所选显示的传递函数标签。
 4. libx264 CRF 18 编码，`-fps_mode passthrough` 保持帧时序，音轨原样复制。完整滤镜串写在结果的 `filter` 中。
 
-Y'CbCr 到浮点 RGB 用 `zscale`，不用 `scale`：实测 swscale 转浮点 RGB 时把大于 1.0 的值截掉，会抹掉超白码值，也会让下面的码值测量看不出范围声明错误。cube 的定义域是 [0,1]，超出的码值在套用时被裁剪。
+Y'CbCr 与浮点 RGB 之间的转换都用 `zscale`，不用 `scale`：实测 swscale 转浮点 RGB 时把大于 1.0 的值截掉，会抹掉超白码值，也会让下面的码值测量看不出范围声明错误；它的浮点与全范围转换在 FFmpeg 6.1 与 8.0 之间结果也不同。cube 的定义域是 [0,1]，超出的码值在套用时被裁剪。
 
 ## 测量与读回
 
