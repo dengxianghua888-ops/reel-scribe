@@ -362,3 +362,32 @@ def test_dependency_profile_follows_the_mode():
     assert 'opencolorio' in required and branch == 'ocio-processor' and not unknown
     required, unknown, branch = _selected_requirements('color-log-transform', {'lut': {}})
     assert set(required) == {'ffmpeg', 'ffprobe', 'numpy'} and branch == 'vendor-lut' and not unknown
+
+
+def noisy_log(tmp_path, sigma=6 / 1023, width=1024, height=288, frames=12):
+    """Apple Log of a mid-grey gradient with per-pixel noise that changes every frame, like a sensor's."""
+    rng = np.random.default_rng(7)
+    base = np.linspace(0.35, 0.65, width)[None, :, None] * np.ones((height, 1, 3))
+    raw = b''.join((np.clip(base + rng.normal(0, sigma, base.shape), 0, 1) * 65535 + 0.5).astype('<u2').tobytes()
+                   for _ in range(frames))
+    out = tmp_path / 'noisy.mov'
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb48le', '-s', f'{width}x{height}', '-r', '24',
+                    '-i', '-', '-vf', 'zscale=matrix=2020_ncl:range=full,format=yuv444p10le,setparams=colorspace=bt2020nc:range=pc',
+                    '-c:v', 'libx264', '-qp', '0', '-preset', 'ultrafast', str(out)], input=raw, check=True, timeout=120)
+    return out
+
+
+def test_readback_compares_block_means_so_sensor_noise_is_not_counted(tmp_path):
+    receipt = rt.run(request(noisy_log(tmp_path), sample_frames=[3, 8]), tmp_path / 'noisy', rt.Tools())
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    readback = receipt['result']['readback']
+    # Per-pixel comparison measured about 3.1 here (above the gate of 2): the output encode smooths the noise.
+    assert readback['block'] == 4 and readback['delta_e2000_median'] < 1.5
+    assert receipt['result']['measured_source']['basis'].endswith('the centre pixel of every 4x4 block')
+
+
+def test_readback_still_catches_a_wrong_render(tmp_path, monkeypatch):
+    bake = log_ops._bake
+    monkeypatch.setattr(log_ops, '_bake', lambda *a: (lambda t, info: (t * 0.85, info))(*bake(*a)))  # render 15% darker
+    receipt = rt.run(request(noisy_log(tmp_path), sample_frames=[3, 8]), tmp_path / 'wrong', rt.Tools())
+    assert receipt['status'] == 'FAILED' and 'COLOR_LOG_READBACK_MISMATCH' in receipt['error'], receipt.get('error')
