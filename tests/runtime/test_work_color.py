@@ -543,3 +543,120 @@ def test_changing_checks_needs_its_own_scope_and_only_reruns_color_and_render(wo
     report = revision_impact.analyze(base, protected, authorized, work['tools'], expected_base_sha256=rt.fingerprint(base),
                                      expected_candidate_sha256=rt.fingerprint(protected))
     assert report['classification'] == ['color-checks'] and report['required_stages'] == ['color-grade', 'render']
+
+
+# --- C4c: film texture on the whole picture, after grading and before overlays ----------
+
+VIGNETTE = {'vignette': {'strength': 0.5, 'start': 0.3}}
+GRAIN = {'grain': {'amount': 0.03, 'size_px': 0, 'mode': 'luma', 'midtone_weighted': False, 'temporal': 'per-frame',
+                   'seed': 5}}
+
+
+def test_texture_follows_the_color_gate_and_precedes_overlays(work):
+    doc = with_color(work['doc'])
+    doc['color']['texture'] = {'effects': VIGNETTE}
+    doc['visual_layers'] = {'inset': {'source': ref(work['green']), 'source_start_frame': 0, 'anchor_clip_id': 'b',
+                                      'offset_frames': 0, 'duration_frames': 20, 'rect': [0, 0, 48, 32], 'opacity': 1,
+                                      'z': 1, 'allow_upscale': False, 'input_color': 'bt709-sdr-limited'}}
+    receipt = render_store(work, doc, 'textured')
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    result = receipt['result']
+    children = [c['operation'] for c in result['source_consumption']['child_receipts']]
+    assert (children.index('color-lut-apply') < children.index('color-consistency-check') < children.index('film-texture-apply')
+            < children.index('visual-layer-render') < children.index('media-qc'))
+    texture = result['texture']
+    assert texture['readback_clip_ids'] == ['a', 'b'] and texture['readback_frames'] == [12, 37]
+    assert texture['space'] == 'bt709-sdr' and texture['readback_max_median_delta_e2000'] < 1
+    # The gate compared the timeline with the graded picture before texture: no protections, so it only reports.
+    assert result['color_check']['gate'] == 'PASSED'
+    rgb = _frame_rgb(result['video']['path'], 37)
+    up = float(np.clip((100 / 255) ** 2.4 * 2, 0, 1) ** (1 / 2.4) * 255)
+    assert abs(rgb[33:40, 49:58].mean() - up) < 3  # graded, beside the inset and inside the vignette's start radius
+    assert rgb[58:, 88:].mean() < up - 25  # graded corner, darkened by the texture
+    inset = rgb[4:28, 4:44].reshape(-1, 3).mean(axis=0)
+    assert np.allclose(inset, [30, 180, 40], atol=6)  # overlay composited after texture is not vignetted
+
+
+def test_texture_alone_needs_no_grade(work):
+    doc = with_color(work['doc'], grades={})
+    doc['color']['texture'] = {'effects': GRAIN}
+    receipt = render_store(work, doc, 'grain-only')
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    children = [c['operation'] for c in receipt['result']['source_consumption']['child_receipts']]
+    assert 'film-texture-apply' in children and 'color-lut-apply' not in children and 'color-consistency-check' not in children
+    assert 'color_check' not in receipt['result']
+    rgb = _frame_rgb(receipt['result']['video']['path'], 12)
+    assert abs(rgb.mean() - 100) < 2 and rgb[..., 1].std() > 3  # zero-mean grain on the untouched gray
+
+
+@pytest.mark.parametrize('change,error', [
+    (lambda d: d['color'].update(texture={'effects': {}}), 'TEXTURE_EFFECTS_INVALID'),
+    (lambda d: d['color'].update(texture={'effects': {'vignette': {'strength': 0.9, 'start': 0.3}}}),
+     'TEXTURE_VIGNETTE_OUT_OF_RANGE'),
+    (lambda d: d['plan']['clips'][1].update(source_id='untagged'),
+     'WORK_TEXTURE_INPUT_DECLARATION_REQUIRED: untagged \\(clip b\\)'),
+    (lambda d: (d['plan']['clips'][1].update(source_id='untagged'),
+                d['color']['inputs'].update(untagged={**BT709, 'space': 'srgb-sdr', 'basis': 'caller-declared'})),
+     'WORK_TEXTURE_SPACES_MIXED: bt709-sdr, srgb-sdr'),
+])
+def test_texture_validation(work, change, error):
+    doc = with_color(work['doc'], grades={})
+    doc['color']['texture'] = {'effects': VIGNETTE}
+    change(doc)
+    with pytest.raises(rt.ContractError, match=error):
+        work_ops.validate_document(doc, work['tools'])
+
+
+def test_texture_changes_need_their_own_scope_and_regrades_retexture(work):
+    import revision_impact
+    base = with_color(work['doc'])
+    textured = copy.deepcopy(base)
+    textured['color']['texture'] = {'effects': VIGNETTE}
+    with pytest.raises(rt.ContractError, match='OUTSIDE_SCOPE: color.texture'):
+        diff(work, base, textured, scope(grade_ids=['up'], color_checks=True))
+
+    def impact(before, after, authorized):
+        return revision_impact.analyze(before, after, authorized, work['tools'], expected_base_sha256=rt.fingerprint(before),
+                                       expected_candidate_sha256=rt.fingerprint(after))
+    added = impact(base, textured, scope(color_texture=True))
+    assert added['classification'] == ['color-texture'] and added['required_stages'] == ['film-texture', 'render']
+    regraded = copy.deepcopy(textured)
+    regraded['color']['grades']['up']['ops'] = [{'type': 'exposure', 'stops': 0.5}]
+    report = impact(textured, regraded, scope(grade_ids=['up']))
+    assert report['classification'] == ['color-grade-or-order']
+    assert report['required_stages'] == ['color-grade', 'film-texture', 'render']
+    # Without a texture a regrade leaves the texture stage alone.
+    plain = copy.deepcopy(base)
+    plain['color']['grades']['up']['ops'] = [{'type': 'exposure', 'stops': 0.5}]
+    assert impact(base, plain, scope(grade_ids=['up']))['required_stages'] == ['color-grade', 'render']
+
+
+def test_untagged_srgb_declared_timeline_keeps_srgb_through_grade_and_texture(work):
+    doc = copy.deepcopy(work['doc'])
+    for clip in doc['plan']['clips']:
+        clip['source_id'] = 'untagged'
+    doc = with_color(doc, grades={'up': {**UP, 'interpretation': 'srgb-sdr-display', 'targets': ['b']}},
+                     inputs={'untagged': {**BT709, 'space': 'srgb-sdr', 'basis': 'caller-declared'}})
+    doc['color']['texture'] = {'effects': VIGNETTE}
+    receipt = render_store(work, doc, 'untagged-srgb')
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    color = json.loads((work['root'] / 'render-untagged-srgb' / 'color' / 'receipt.json').read_text())['result']
+    assert color['input_color']['space'] == 'srgb-sdr' and color['output_color']['observed']['color_transfer'] == 'iec61966-2-1'
+    assert receipt['result']['texture']['space'] == 'srgb-sdr'
+    linear = ((100 / 255 + 0.055) / 1.055) ** 2.4 * 2  # sRGB EOTF, +1 stop, back through the sRGB OETF
+    up = (1.055 * min(linear, 1) ** (1 / 2.4) - 0.055) * 255
+    rgb = _frame_rgb(receipt['result']['video']['path'], 37)
+    assert abs(rgb[28:36, 44:52].mean() - up) < 3
+
+
+@pytest.mark.parametrize('inputs,tag,space', [
+    ({'gray': BT709}, None, 'bt709-sdr'),
+    ({'gray': {**BT709, 'space': 'srgb-sdr'}}, None, 'srgb-sdr'),
+    ({'gray': {**BT709, 'space': 'srgb-sdr'}}, 'bt709', 'bt709-sdr'),  # a real tag wins
+    ({}, None, 'bt709-sdr'),  # undeclared clips: no evidence, BT.709 as before
+])
+def test_pipeline_space_follows_the_tag_then_one_declared_space(work, inputs, tag, space):
+    import work_color
+    doc = with_color(work['doc'], grades={}, inputs=inputs)
+    norm = work_ops.validate_document(work['doc'], work['tools'])[0]
+    assert work_color.pipeline_space(doc, norm, tag) == space

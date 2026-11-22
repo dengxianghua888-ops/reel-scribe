@@ -13,7 +13,7 @@ description: 比较当前作品文档与明确候选，在显式片段、字幕�
 
 新增/删除字幕、音轨、风格与备注需各自授权 ID。重选镜头时，锚定其上的字幕和音频要在复核范围内，不能仅凭相对时间还合法就宣称仍与内容一致。来源替换不得通过同 source_id 绕过其他冻结片段。
 
-可选 scope.grade_ids、scope.color_inputs、scope.color_checks 控制调色层、输入解释、调色保护项与上限的变化，调色层覆盖的源内容改变时也须列入 grade_ids（见[作品调色合同](../../contracts/work-color-contract.md)）。可选 scope.visual_ids 控制 visual_layers 的增删改；层覆盖窗口下主轨源内容改变，或全局几何变化时，受影响层须列入复核范围。
+可选 scope.grade_ids、scope.color_inputs、scope.color_checks、scope.color_texture 控制调色层、输入解释、调色保护项与上限、画面质感的变化，调色层覆盖的源内容改变时也须列入 grade_ids（见[作品调色合同](../../contracts/work-color-contract.md)）。可选 scope.visual_ids 控制 visual_layers 的增删改；层覆盖窗口下主轨源内容改变，或全局几何变化时，受影响层须列入复核范围。
 
 已有 evidence_protection 随作品保留，不能在候选中连声明一起删除或改写。需要重排承载对象时，可用布尔 scope.evidence_mapping 开放 occurrences/chapters 修改，覆盖和依赖仍须成立；units/required_units 不在普通修改范围。保护变更是独立 work-version set-protection 操作，由上层依据真实意图决定。预览不读取 SQLite，最终 commit 会用数据库当前头重新核基础和保护；伪造预览基础不能当作采纳成功。
 

@@ -490,6 +490,13 @@
       "status": "local-synthetic-tested"
     },
     {
+      "id": "color-log-transform",
+      "layer": "atomic",
+      "entry": "atomic/color-log-transform/SKILL.md",
+      "description": "把调用者声明的相机Log视频（Apple Log、S-Log3、V-Log、LogC等）经带版本号的OpenColorIO内置配置，按调用方选择的显示与视图转换为BT.709或sRGB SDR，保留帧数与音轨，报告LUT烘焙误差、读回误差和超出码值或显示范围的比例；不猜测相机、码值范围或观感。",
+      "status": "local-synthetic-tested"
+    },
+    {
       "id": "color-lut-apply",
       "layer": "atomic",
       "entry": "atomic/color-lut-apply/SKILL.md",

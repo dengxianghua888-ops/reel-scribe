@@ -25,7 +25,7 @@ from threading import RLock
 SCHEMA = 'editing-install-diagnostics/1'
 ASR_PACKAGES = ('faster-whisper', 'ctranslate2', 'av', 'tokenizers', 'numpy',
                 'onnxruntime', 'huggingface-hub')
-PACKAGE_NAMES = ('Pillow', 'numpy') + ASR_PACKAGES
+PACKAGE_NAMES = ('Pillow', 'numpy', 'opencolorio') + ASR_PACKAGES
 # Profiles describe only this optional local runtime, not requirements for using
 # a generic Skill with the running Agent's own editor tools. Added local atomic
 # IDs fail closed until a dependency profile is declared.
@@ -73,6 +73,7 @@ ATOMIC_REQUIREMENTS = {
     'color-grade-adjust': ('numpy',),
     'color-input-transform': ('ffmpeg', 'ffprobe', 'numpy'),
     'film-texture-apply': ('ffmpeg', 'ffprobe', 'numpy'),
+    'color-log-transform': ('ffmpeg', 'ffprobe', 'numpy', 'opencolorio'),
     'localization-plan-compile': ('ffprobe',),
     'work-variant-create': ('sqlite', 'ffprobe', 'fcntl'),
     'work-batch-render': ('sqlite', 'fcntl'),
@@ -630,7 +631,8 @@ def inspect(root, *, ffmpeg=None, ffprobe=None, bindings=None, env=None, request
     components = {'python': _python_probe(), 'sqlite': {'status': 'PRESENT', 'version': sqlite3.sqlite_version},
                   'ffmpeg': _inspect_media_tool('ffmpeg', ffmpeg, env, identity),
                   'ffprobe': _inspect_media_tool('ffprobe', ffprobe, env, identity),
-                  'say': _say_probe(env), 'Pillow': packages['Pillow'], 'numpy': packages['numpy']}
+                  'say': _say_probe(env), 'Pillow': packages['Pillow'], 'numpy': packages['numpy'],
+                  'opencolorio': packages['opencolorio']}
     components['ffmpeg-color-filters'] = _color_filters_probe(components['ffmpeg'])
     components['style-resources'] = (_style_resources_probe(request)
         if request is not None and request.get('operation')=='work-version' and request.get('action')=='relink-style-resources'
@@ -690,7 +692,7 @@ def inspect(root, *, ffmpeg=None, ffprobe=None, bindings=None, env=None, request
             if not work_content_reason and selected_document.get('caption_style') is not None and 'font' not in profile:
                 profile += ('font',)
             if not work_content_reason and isinstance(selected_document.get('color'), dict):
-                profile += ('numpy',)  # color-grade-compile and layered color-lut-apply
+                profile += ('numpy',)  # color-grade-compile, layered color-lut-apply and film-texture-apply
         if identifier in ('timeline-render', 'work-render') and selected is not None:
             if stretch.get('required'):
                 profile += ('audio-time-stretch',)

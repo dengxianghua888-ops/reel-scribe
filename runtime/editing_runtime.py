@@ -1251,6 +1251,9 @@ def execute(request, directory, tools):
     if op == 'color-input-transform':
         from color_input_ops import transform
         return transform(request, directory, tools)
+    if op == 'color-log-transform':
+        from log_ops import transform
+        return transform(request, directory, tools)
     if op == 'film-texture-apply':
         from texture_ops import texture
         return texture(request, directory, tools)
