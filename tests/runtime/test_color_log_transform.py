@@ -196,3 +196,169 @@ def test_output_feeds_color_profile_scan_as_verified_bt709(tmp_path):
                    'samples': {'mode': 'times', 'times': [0.1]}, 'max_samples': 1, 'analysis_size': [96, 48],
                    'input_color': result['output_interpretation'], 'palette_colors': 2}, tmp_path / 'scan', rt.Tools())
     assert scan['status'] == 'SUCCEEDED', scan.get('error')
+
+
+# --- archived configs and vendor LUTs ------------------------------------------------------
+
+def vendor_code(x):
+    """Log curve of the test 'vendor' config: v = 0.1 * log2(x + 0.01) + 0.65 (code 0.41 at 18% grey)."""
+    return 0.1 * math.log2(x + 0.01) + 0.65
+
+
+def vendor_archive(tmp_path, keep_lut=True):
+    """A custom config whose Log space decodes through its own 1D LUT file, packed with Config.archive."""
+    import zipfile
+    work = tmp_path / 'vendor-config'
+    (work / 'luts').mkdir(parents=True)
+    n = 4096
+    rows = ['  %.9f' % (2 ** ((i / (n - 1) - 0.65) / 0.1) - 0.01) for i in range(n)]
+    (work / 'luts' / 'vendorlog.spi1d').write_text('\n'.join(['Version 1', 'From 0.0 1.0', f'Length {n}', 'Components 1', '{']
+                                                             + rows + ['}']) + '\n')
+    cfg = ocio.Config.CreateRaw()
+    cfg.setWorkingDir(str(work))
+    cfg.setSearchPath('luts')
+    cfg.addColorSpace(ocio.ColorSpace(name='Linear Rec.709', encoding='scene-linear'))
+    log = ocio.ColorSpace(name='Vendor Log', encoding='log', family='Camera')
+    log.setTransform(ocio.FileTransform(src='vendorlog.spi1d', interpolation=ocio.INTERP_LINEAR), ocio.COLORSPACE_DIR_TO_REFERENCE)
+    cfg.addColorSpace(log)
+    display = ocio.ColorSpace(name='sRGB Encoded', encoding='sdr-video')
+    display.setTransform(ocio.ExponentWithLinearTransform(gamma=[2.4] * 3 + [1], offset=[0.055] * 3 + [0],
+                                                          direction=ocio.TRANSFORM_DIR_INVERSE), ocio.COLORSPACE_DIR_FROM_REFERENCE)
+    cfg.addColorSpace(display)
+    cfg.setRole('scene_linear', 'Linear Rec.709')
+    cfg.setRole('default', 'Linear Rec.709')
+    cfg.addDisplayView('sRGB - Display', 'Video', 'sRGB Encoded')
+    cfg.validate()
+    archive = tmp_path / 'vendor.ocioz'
+    cfg.archive(str(archive))
+    plain = tmp_path / 'vendor.ocio'
+    plain.write_text(cfg.serialize())
+    if not keep_lut:  # same config, archive without its LUT
+        stripped = tmp_path / 'stripped.ocioz'
+        with zipfile.ZipFile(archive) as src, zipfile.ZipFile(stripped, 'w') as dst:
+            for item in src.infolist():
+                if not item.filename.endswith('.spi1d'):
+                    dst.writestr(item, src.read(item))
+        return stripped, plain
+    return archive, plain
+
+
+def encode_codes(tmp_path, codes, name):
+    """Write (64, 128, 3) code values as 10 frames of full-range 10-bit 4:4:4 video with BT.2020 tags."""
+    out = tmp_path / f'{name}.mp4'
+    raw = (np.clip(codes, 0, 1) * 65535 + 0.5).astype('<u2').tobytes() * 10
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb48le', '-s', '128x64', '-r', '25', '-i', '-',
+                    '-vf', 'zscale=matrix=2020_ncl:range=full,format=yuv444p10le,setparams=colorspace=bt2020nc:range=pc',
+                    '-c:v', 'libx264', '-qp', '0', '-preset', 'ultrafast', '-color_primaries', 'bt2020',
+                    '-colorspace', 'bt2020nc', '-color_range', 'pc', str(out)], input=raw, check=True, timeout=120)
+    return out
+
+
+def test_archived_config_decodes_through_its_own_lut(tmp_path):
+    archive, _ = vendor_archive(tmp_path)
+    codes = np.zeros((64, 128, 3))
+    for i, value in enumerate(PATCHES):
+        codes[:, i * 32:(i + 1) * 32] = [vendor_code(v) for v in value]
+    video = encode_codes(tmp_path, codes, 'vendor-log')
+    req = request(video, view='Video', display='sRGB - Display',
+                  declared={'colorspace': 'Vendor Log', 'matrix': 'bt2020nc', 'code_values': 'full'})
+    req['ocio']['config'] = ref(archive)
+    receipt = rt.run(req, tmp_path / 'archived', rt.Tools())
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    result = receipt['result']
+    assert result['mode'] == 'ocio' and result['ocio']['config_origin']['kind'] == 'archive'
+    assert result['ocio']['config_origin']['sha256'] == ref(archive)['sha256']
+    grey = patch_rgb(result['video']['path'])[0]
+    assert grey == pytest.approx([1.055 * 0.18 ** (1 / 2.4) - 0.055] * 3, abs=0.004)  # sRGB-encoded 18% grey
+
+
+def test_plain_tampered_and_incomplete_configs_are_refused(tmp_path):
+    archive, plain = vendor_archive(tmp_path)
+    stripped, _ = vendor_archive(tmp_path / 'stripped', keep_lut=False)
+    video = encode_codes(tmp_path, np.full((64, 128, 3), 0.41), 'grey')
+    declared = {'colorspace': 'Vendor Log', 'matrix': 'bt2020nc', 'code_values': 'full'}
+    for config, error in [(ref(plain), 'COLOR_LOG_CONFIG_ARCHIVE_REQUIRED'),
+                          ({**ref(archive), 'sha256': '0' * 64}, 'SOURCE_HASH_MISMATCH'),
+                          (ref(stripped), 'COLOR_LOG_PROCESSOR_UNAVAILABLE')]:
+        req = request(video, view='Video', display='sRGB - Display', declared=declared)
+        req['ocio']['config'] = config
+        receipt = rt.run(req, tmp_path / error.lower(), rt.Tools())
+        assert receipt['status'] == 'FAILED' and error in receipt['error'], receipt.get('error')
+
+
+def test_archives_with_the_same_lut_name_do_not_share_lut_data(tmp_path):
+    """OCIO caches LUT files by their path inside the archive; each archive must still decode with its own."""
+    import zipfile
+    archive, _ = vendor_archive(tmp_path)
+    flat = tmp_path / 'flat.ocioz'  # same config and LUT name, LUT replaced by a constant
+    with zipfile.ZipFile(archive) as src, zipfile.ZipFile(flat, 'w') as dst:
+        for item in src.infolist():
+            data = src.read(item)
+            if item.filename.endswith('.spi1d'):
+                lines = data.decode().splitlines()
+                data = ('\n'.join(lines[:5] + ['  0.5'] * 4096 + ['}']) + '\n').encode()
+            dst.writestr(item, data)
+    view = {'display': 'sRGB - Display', 'view': 'Video'}
+    grey = [vendor_code(0.18)] * 3
+    first = log_ops.apply_exact(log_ops.processor({'config': ref(archive), **view}, 'Vendor Log')[0], [grey])[0]
+    second = log_ops.apply_exact(log_ops.processor({'config': ref(flat), **view}, 'Vendor Log')[0], [grey])[0]
+    assert first == pytest.approx([1.055 * 0.18 ** (1 / 2.4) - 0.055] * 3, abs=0.002)
+    assert second == pytest.approx([1.055 * 0.5 ** (1 / 2.4) - 0.055] * 3, abs=0.002)
+    again = log_ops.apply_exact(log_ops.processor({'config': ref(archive), **view}, 'Vendor Log')[0], [grey])[0]
+    assert again == pytest.approx(first, abs=1e-6)
+
+
+def vendor_cube(tmp_path, size=33):
+    """A 'vendor' Apple Log -> Rec.709 cube, baked here from OCIO's ACES 2.0 SDR view."""
+    cpu = log_ops.processor({'config': CONFIG, 'display': REC709, 'view': ACES_SDR}, 'Apple Log')[0]
+    table = np.clip(log_ops.apply_exact(cpu, cn.identity_table(size).reshape(-1, 3)), 0, 1).reshape(size, size, size, 3)
+    path = tmp_path / 'vendor.cube'
+    path.write_text(cn.cube_text(table, 'Vendor Apple Log to Rec709'))
+    return path
+
+
+def lut_request(video, cube, **extra):
+    req = request(video)
+    del req['ocio'], req['lut_size']
+    return {**req, 'lut': {'cube': ref(cube), 'display': REC709}, **extra}
+
+
+def test_vendor_lut_mode_needs_no_ocio_and_matches_the_ocio_path(tmp_path, monkeypatch):
+    video, _ = encode_log(tmp_path, 'Apple Log', 'apple')
+    via_ocio = rt.run(request(video), tmp_path / 'ocio', rt.Tools())['result']
+    cube = vendor_cube(tmp_path)
+    monkeypatch.setattr(log_ops, '_ocio', lambda: (_ for _ in ()).throw(AssertionError('OCIO must not be needed')))
+    receipt = rt.run(lut_request(video, cube), tmp_path / 'lut', rt.Tools())
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    result = receipt['result']
+    assert result['mode'] == 'lut' and 'ocio' not in result and result['lut']['cube']['sha256'] == ref(cube)['sha256']
+    assert result['lut']['size'] == 33 and result['readback']['delta_e2000_median'] < 1.0
+    a, b = patch_rgb(via_ocio['video']['path']), patch_rgb(result['video']['path'])
+    delta = cn.ciede2000(cn.lab_from_rgb01(a, 'bt1886')[0], cn.lab_from_rgb01(b, 'bt1886')[0])
+    assert delta.max() < 1.0, delta  # a 33-point vendor cube vs the 65-point bake of the same transform
+
+
+@pytest.mark.parametrize('change,error', [
+    (lambda r, c: r.update(ocio={'config': CONFIG, 'display': REC709, 'view': ACES_SDR}), 'COLOR_LOG_OCIO_OR_LUT_REQUIRED'),
+    (lambda r, c: r.pop('lut'), 'COLOR_LOG_OCIO_OR_LUT_REQUIRED'),
+    (lambda r, c: r.update(lut_size=65), 'UNKNOWN_FIELDS: lut_size'),
+    (lambda r, c: r['lut'].update(display='Display P3 - Display'), 'COLOR_LOG_DISPLAY_UNSUPPORTED'),
+    (lambda r, c: r['lut'].update(cube={**ref(c), 'sha256': '0' * 64}), 'SOURCE_HASH_MISMATCH'),
+    (lambda r, c: r['input'].update(colorspace=' '), 'COLOR_LOG_COLORSPACE_LABEL_REQUIRED'),
+])
+def test_vendor_lut_validation(tmp_path, change, error):
+    video, _ = encode_log(tmp_path, 'Apple Log', 'apple')
+    cube = vendor_cube(tmp_path)
+    req = lut_request(video, cube)
+    change(req, cube)
+    receipt = rt.run(req, tmp_path / 'invalid', rt.Tools())
+    assert receipt['status'] == 'FAILED' and error in receipt['error'], receipt.get('error')
+
+
+def test_dependency_profile_follows_the_mode():
+    from dependency_discovery import _selected_requirements
+    assert 'opencolorio' in _selected_requirements('color-log-transform', None)[0]
+    required, unknown, branch = _selected_requirements('color-log-transform', {'ocio': {}})
+    assert 'opencolorio' in required and branch == 'ocio-processor' and not unknown
+    required, unknown, branch = _selected_requirements('color-log-transform', {'lut': {}})
+    assert set(required) == {'ffmpeg', 'ffprobe', 'numpy'} and branch == 'vendor-lut' and not unknown

@@ -1,6 +1,8 @@
 """Strict Blender 4.3.2 cut snapshot bridge; never saves the open host or adopts edits.
 Blender: -b --disable-autoexec PROJECT --python-exit-code 1 --python THIS -- PACKAGE NEW_OTIO EXPECTED_HOST_SHA256
-The resulting saved OTIO feeds existing film otio_readback.capture_saved_snapshot.
+         [EXTENSION_SCOPE EXTENSION_SHA256] [--color INTERPRETATION NEW_GRADES_JSON]
+The resulting saved OTIO feeds existing film otio_readback.capture_saved_snapshot. Color Balance
+modifiers block the cut unless the caller asks for them to be read into a separate grades file.
 """
 import importlib.util
 import json
@@ -15,6 +17,8 @@ from fractions import Fraction
 _spec = importlib.util.spec_from_file_location('cut_import', Path(__file__).with_name('blender_cut_import.py'))
 imp = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(imp)
 require = imp.require
+_cb_spec = importlib.util.spec_from_file_location('color_balance', Path(__file__).with_name('blender_color_balance.py'))
+cb = importlib.util.module_from_spec(_cb_spec); _cb_spec.loader.exec_module(cb)
 
 # Restrict processing rather than silently discarding unsupported native properties.
 COMMON = {'mute': False, 'blend_type': 'ALPHA_OVER', 'blend_alpha': 1.0,
@@ -32,7 +36,9 @@ def integer(value):
     return int(value)
 
 
-def observe(bpy):
+def observe(bpy, color_balance=False):
+    """Native cut observation. With color_balance, movie-strip modifiers are left to
+    blender_color_balance.read_grades, which accepts only one plain Color Balance modifier."""
     require(tuple(bpy.app.version) == imp.SUPPORTED_VERSION, 'HOST_VERSION_UNSUPPORTED')
     scene = bpy.context.scene
     require(scene.get('reel_adapter') == 'experimental-blender-cut/1', 'HOST_ADAPTER_BINDING')
@@ -52,7 +58,12 @@ def observe(bpy):
     rows = []
     for strip in seq.sequences_all:
         require(strip.type in ('MOVIE', 'SOUND'), 'HOST_STRIP_TYPE_UNSUPPORTED')
-        require(not strip.modifiers, 'HOST_MODIFIER_UNSUPPORTED')
+        if strip.modifiers:
+            # A modifier changes the picture; the OTIO cut cannot carry it. Only an explicit grades
+            # output may take Color Balance on picture strips, so nothing is dropped silently.
+            require(color_balance and strip.type == 'MOVIE',
+                    'HOST_MODIFIER_UNSUPPORTED: %s' % strip.name + ('' if color_balance or strip.type != 'MOVIE'
+                                                                     else ' (Color Balance needs a grades output)'))
         for key, expected in {**COMMON, **(VIDEO if strip.type == 'MOVIE' else AUDIO)}.items():
             require(hasattr(strip, key) and getattr(strip, key) == expected, 'HOST_PROCESSING_UNSUPPORTED: ' + key)
         if strip.type == 'MOVIE':
@@ -217,22 +228,63 @@ def project(root, observed, media_probe=imp.probe, *, extension_scope=None):
     return timeline
 
 
-def export_snapshot(root, output, bpy, expected_host_sha256, extension_reference=None):
+def color_output(root, output, grades_output, interpretation):
+    """Both or neither; a new .json beside, never inside, the package and distinct from the OTIO."""
+    require((grades_output is None)==(interpretation is None),'HOST_COLOR_OUTPUT_ARGUMENTS')
+    if grades_output is None:return None
+    require(interpretation in cb.INTERPRETATIONS,'HOST_COLOR_INTERPRETATION_UNSUPPORTED')
+    grades_output=Path(grades_output).absolute()
+    require(grades_output.suffix=='.json' and grades_output.parent.is_dir() and not grades_output.exists()
+            and not grades_output.is_symlink() and grades_output!=Path(output).absolute(),'GRADES_OUTPUT_UNSAFE_OR_EXISTS')
+    require(not grades_output.resolve().is_relative_to(Path(root).resolve()),'OUTPUT_CANNOT_MODIFY_PACKAGE')
+    return grades_output
+
+
+def export_snapshot(root, output, bpy, expected_host_sha256, extension_reference=None, grades_output=None, interpretation=None):
     source=Path(bpy.data.filepath)
     require(source.is_file() and not source.is_symlink(),'SAVED_HOST_REQUIRED')
     before=imp.digest(source)
     require(before == expected_host_sha256, 'HOST_FILE_IDENTITY_CONFLICT')
+    grades_output=color_output(root,output,grades_output,interpretation)
     scope=read_extension(extension_reference) if extension_reference is not None else None
     if scope is not None:require(scope.get('host_sha256')==before,'HOST_EXTENSION_HOST_MISMATCH')
-    timeline=project(root,observe(bpy),extension_scope=scope)
+    observed=observe(bpy,color_balance=grades_output is not None)
+    timeline=project(root,observed,extension_scope=scope)
+    grades=None
+    if grades_output is not None:
+        # Same loaded host as the cut; the grades carry its identity so they cannot be paired with another save.
+        grades={**cb.read_grades(bpy,interpretation),'saved_host_sha256':before,'package_sha256':observed['package_sha256']}
     if scope is not None:require(read_extension(extension_reference)==scope,'HOST_EXTENSION_IDENTITY_CHANGED')
     require(imp.digest(source)==before,'HOST_FILE_CHANGED_DURING_READBACK')
     output=Path(output)
     require(output.parent.is_dir() and output.suffix=='.otio' and not output.is_symlink(), 'OUTPUT_UNSAFE')
     require(not output.resolve().is_relative_to(Path(root).resolve()), 'OUTPUT_CANNOT_MODIFY_PACKAGE')
     atomic_new(output, json.dumps(timeline,ensure_ascii=False,sort_keys=True,allow_nan=False).encode())
-    return {'saved_otio':str(output),'saved_host_sha256':before, 'saved_host_path':str(source),
+    result={'saved_otio':str(output),'saved_host_sha256':before, 'saved_host_path':str(source),
             'saved_otio_sha256':imp.digest(output), 'adoption_performed':False,'host_cas':False}
+    if grades is not None:
+        try:atomic_new(grades_output,json.dumps(grades,ensure_ascii=False,sort_keys=True,allow_nan=False).encode())
+        except BaseException:
+            output.unlink();raise
+        result['grades']={'path':str(grades_output),'sha256':imp.digest(grades_output),'interpretation':interpretation,
+                          'graded_strips':sorted(grades['grades'])}
+    return result
+
+
+def host_arguments(args):
+    """PACKAGE NEW_OTIO HOST_SHA [SCOPE SCOPE_SHA] [--color INTERPRETATION NEW_GRADES] -> export_snapshot arguments."""
+    options={}
+    if '--color' in args:
+        at=args.index('--color');require(len(args)==at+3,'EXPECTED_COLOR_INTERPRETATION_AND_GRADES')
+        options={'interpretation':args[at+1],'grades_output':args[at+2]};args=args[:at]
+    require(len(args) in (3,5),'EXPECTED_PACKAGE_NEW_OTIO_AND_HOST_SHA')
+    return args[:3]+[{'path':args[3],'sha256':args[4]} if len(args)==5 else None],options
+
+
+def host_main(argv, bpy):
+    """In-Blender entry: Blender's argv up to '--', then the host arguments."""
+    (root,output,host_sha,reference),options=host_arguments(argv[argv.index('--')+1:])
+    return export_snapshot(root,output,bpy,host_sha,reference,**options)
 
 
 def atomic_new(output, raw):
@@ -248,12 +300,13 @@ def atomic_new(output, raw):
         except OSError:pass
 
 
-def launch(saved_host, root, output, *, blender='blender', extension_reference=None):
+def launch(saved_host, root, output, *, blender='blender', extension_reference=None, grades_output=None, interpretation=None):
     """Only supported public entry: controlled saved-file load with pre/post identity."""
     saved_host=Path(saved_host).absolute();root=Path(root).absolute();output=Path(output).absolute()
     require(saved_host.is_file() and not saved_host.is_symlink(),'SAVED_HOST_REQUIRED')
     require(not output.exists() and not output.is_symlink() and output.parent.is_dir(),'OUTPUT_UNSAFE_OR_EXISTS')
     require(not output.resolve().is_relative_to(root.resolve()),'OUTPUT_CANNOT_MODIFY_PACKAGE')
+    grades_output=color_output(root,output,grades_output,interpretation)
     imp.package(root)
     package_sha=imp.digest(root/'checksums.json')
     expected=imp.digest(saved_host)
@@ -268,6 +321,8 @@ def launch(saved_host, root, output, *, blender='blender', extension_reference=N
             frozen=Path(tmp)/'extension.json';raw_scope=Path(extension_reference['path']).read_bytes()
             require(hashlib.sha256(raw_scope).hexdigest()==extension_reference['sha256'],'HOST_EXTENSION_IDENTITY_CHANGED')
             frozen.write_bytes(raw_scope);extra=[str(frozen),extension_reference['sha256']]
+        staged_grades=Path(tmp)/'grades.json'
+        if grades_output is not None:extra+=['--color',interpretation,str(staged_grades)]
         result=subprocess.run([blender,'-b','--disable-autoexec',str(saved_host),'--python-exit-code','1',
             '--python',str(Path(__file__).resolve()),'--',str(root),str(staged),expected]+extra,
             capture_output=True,text=True,timeout=180)
@@ -277,11 +332,22 @@ def launch(saved_host, root, output, *, blender='blender', extension_reference=N
         require(imp.digest(root/'checksums.json')==package_sha,'PACKAGE_CHANGED_DURING_READBACK')
         if scope is not None:require(read_extension(extension_reference)==scope,'HOST_EXTENSION_IDENTITY_CHANGED')
         raw=staged.read_bytes();json.loads(raw)
+        grades=None
+        if grades_output is not None:
+            raw_grades=staged_grades.read_bytes();grades=json.loads(raw_grades,object_pairs_hook=imp.unique)
+            require(grades.get('saved_host_sha256')==expected and grades.get('package_sha256')==package_sha
+                    and grades.get('interpretation')==interpretation,'HOST_GRADES_IDENTITY_MISMATCH')
         atomic_new(output,raw)
+        if grades is not None:
+            try:atomic_new(grades_output,raw_grades)
+            except BaseException:
+                output.unlink();raise
     return {'saved_otio':str(output),'saved_host_path':str(saved_host),'saved_host_sha256':expected,
             'saved_otio_sha256':imp.digest(output),'adoption_performed':False,'host_cas':False,
             'mode':'controlled-background-saved-file-readback',
-            'extension_scope':scope,'extension_scope_sha256':extension_reference['sha256'] if scope is not None else None}
+            'extension_scope':scope,'extension_scope_sha256':extension_reference['sha256'] if scope is not None else None,
+            'grades':None if grades is None else {'path':str(grades_output),'sha256':imp.digest(grades_output),
+                                                  'interpretation':interpretation,'graded_strips':sorted(grades['grades'])}}
 
 
 if __name__=='__main__':
@@ -293,12 +359,12 @@ if __name__=='__main__':
         parser.add_argument('--host',required=True);parser.add_argument('--package',required=True)
         parser.add_argument('--output',required=True);parser.add_argument('--blender',default='blender')
         parser.add_argument('--extension-scope');parser.add_argument('--extension-scope-sha256')
+        parser.add_argument('--grades-output',help='new .json for Color Balance grades; without it any modifier is refused')
+        parser.add_argument('--interpretation',choices=cb.INTERPRETATIONS,help='declared interpretation of the read grades')
         args=parser.parse_args()
         require(bool(args.extension_scope)==bool(args.extension_scope_sha256),'HOST_EXTENSION_REFERENCE_REQUIRED')
         reference={'path':args.extension_scope,'sha256':args.extension_scope_sha256} if args.extension_scope else None
-        print(json.dumps(launch(args.host,args.package,args.output,blender=args.blender,extension_reference=reference)))
+        print(json.dumps(launch(args.host,args.package,args.output,blender=args.blender,extension_reference=reference,
+                                grades_output=args.grades_output,interpretation=args.interpretation)))
     else:
-        args=sys.argv[sys.argv.index('--')+1:]
-        require(len(args) in (3,5),'EXPECTED_PACKAGE_NEW_OTIO_AND_HOST_SHA')
-        reference={'path':args[3],'sha256':args[4]} if len(args)==5 else None
-        print(json.dumps(export_snapshot(args[0],args[1],bpy,args[2],reference)))
+        print(json.dumps(host_main(sys.argv,bpy)))

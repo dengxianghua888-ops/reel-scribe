@@ -111,7 +111,7 @@
 - 仅缩短/舒展走raven-pacing-restructure；用户明确要求按参考改变节奏时走参考适配并复用节奏约束。参数完整的LUT应用直接color-lut-apply，不自动挑风格。
 - 已有明确调色参数（曝光档、白平衡增益、高光滚降、CDL、曲线、HSL、外部LUT与强度）要编译成LUT或导出CDL/CLF：`color-grade-compile`，解释与素材传递函数一致（BT.709用bt709-sdr-display，sRGB照片素材用srgb-sdr-display）；参数来源由上层负责，编译成功不代表画面更好。实际套用仍用color-lut-apply（可带strength）。
 - 手机HLG、PQ等BT.2020 HDR素材要进入SDR剪辑、调色或影视流水线：先`color-input-transform`显式转换为BT.709 SDR，色调映射算子和峰值由上层选，参考回执里实测的峰值亮度；不自动判断素材类型，杜比视界只读基础层。
-- Apple Log、S-Log3、V-Log、LogC等相机Log素材要进入SDR剪辑或调色：`color-log-transform`，Log色彩空间、码值范围和YUV矩阵由调用方声明，OpenColorIO配置须带版本号，显示与视图由上层选；不猜相机，也不替上层选观感。
+- Apple Log、S-Log3、V-Log、LogC等相机Log素材要进入SDR剪辑或调色：`color-log-transform`，Log色彩空间、码值范围和YUV矩阵由调用方声明；转换用带版本号的OpenColorIO内置配置或按哈希绑定的`.ocioz`归档（显示与视图由上层选），或用调用方提供的厂商Log转显示`.cube`；不猜相机，也不替上层选观感。
 - 明确要加颗粒、光晕（高光周围的红橙辉光）或暗角，且参数已定：`film-texture-apply`，三者顺序固定、各自可省略，颗粒带种子；不选风格，也不声称像某种胶片。调色之后、字幕叠层之前施加。
 - 有参考片（或参考截图转成的视频）和目标素材，要把目标的色彩统计向参考靠拢：`color-reference-fit`，选方法（reinhard-lab、mvgd、histogram），输出可编辑的CDL或曲线调色层草案和迁移前后的分布距离；距离变小不等于“像参考”，强度、采用和保护项由上层决定，再经color-grade-compile与预览。
 - 看过预览后的口头调色反馈（“暖一点”“对比强一些”“淡一点”“偏绿了”）：先按[调色反馈合同](../contracts/color-grade-adjust-contract.md)的映射表换算成各维度累计步数，再`color-grade-adjust`得到新的调色层草案并重新预览；不确定说法对应哪一维时先问，不猜。

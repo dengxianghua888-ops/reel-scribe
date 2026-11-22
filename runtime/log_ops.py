@@ -9,6 +9,11 @@ the exact processor, reads sampled frames back against the exact processor on
 the decoded source, and measures how much of the source falls outside the code
 value range or the display range, so the caller can check the declarations.
 """
+import shutil
+import tempfile
+import threading
+from pathlib import Path
+
 SCHEMA = 'color-log-transform/1'
 # Display -> (transfer for CIELAB comparison, output transfer tag, output interpretation space)
 DISPLAYS = {'Rec.1886 Rec.709 - Display': ('bt1886', 'bt709', 'bt709-sdr'),
@@ -44,29 +49,66 @@ def _ocio():
     return ocio
 
 
-def _config(ocio, name):
-    """Only versioned built-in configs: their content is fixed by the OCIO release, unlike '-latest' or files."""
-    from editing_runtime import require
-    require(isinstance(name, str) and name.startswith('ocio://'), 'COLOR_LOG_CONFIG_UNSUPPORTED')
-    builtin = name[len('ocio://'):]
-    require(builtin in list(ocio.BuiltinConfigRegistry()), 'COLOR_LOG_CONFIG_UNSUPPORTED: %s' % name)
-    return ocio.Config.CreateFromFile(name)
+_OCIO_LOCK = threading.Lock()
+
+
+def _config(ocio, ref, private):
+    """A versioned built-in config, or a hash-bound .ocioz archive loaded from a private copy.
+
+    Built-in configs are fixed by the OCIO release, unlike '-latest' aliases. An .ocioz archive holds
+    the config and every LUT it uses in one file, so its hash binds them all; a plain .ocio file can
+    reference LUTs outside itself and is refused. OCIO reads an archive's LUTs lazily, so the archive is
+    copied into `private` and the copy's bytes are checked against the declared hash before loading.
+    """
+    from editing_runtime import require, source, sha256
+    if isinstance(ref, str):
+        require(ref.startswith('ocio://'), 'COLOR_LOG_CONFIG_UNSUPPORTED')
+        require(ref[len('ocio://'):] in list(ocio.BuiltinConfigRegistry()), 'COLOR_LOG_CONFIG_UNSUPPORTED: %s' % ref)
+        return ocio.Config.CreateFromFile(ref), {'kind': 'builtin', 'name': ref}
+    require(isinstance(ref, dict), 'COLOR_LOG_CONFIG_UNSUPPORTED')
+    asset = source(ref)
+    require(asset['path'].endswith('.ocioz'),
+            'COLOR_LOG_CONFIG_ARCHIVE_REQUIRED: a plain config can reference LUTs outside the hashed file; package it with ocioarchive')
+    copy = private / 'config.ocioz'
+    shutil.copyfile(asset['path'], copy)
+    require(sha256(copy) == asset['sha256'], 'SOURCE_HASH_MISMATCH: %s changed while it was copied' % asset['path'])
+    try:
+        config = ocio.Config.CreateFromFile(str(copy))
+    except Exception as exc:  # OCIO raises its own exception type for unreadable archives
+        raise ValueError('COLOR_LOG_CONFIG_ARCHIVE_INVALID: %s' % exc) from exc
+    return config, {'kind': 'archive', **asset}
 
 
 def processor(request_ocio, colorspace, ocio=None):
-    """Exact CPU processor from a Log colorspace to the requested display and view, plus its config."""
+    """Exact CPU processor from a Log colorspace to the requested display and view, and what built it.
+
+    OCIO keeps one process-wide cache of LUT files keyed by their path inside the archive, so a second
+    archive with another LUT under the same name would silently reuse the first one's data. The cache is
+    cleared and the processor built under one lock; the CPU processor then holds its own copy of the data.
+    """
     from editing_runtime import exact_keys, require
     ocio = ocio or _ocio()
     exact_keys(request_ocio, ['config', 'display', 'view'], ['config', 'display', 'view'])
-    config = _config(ocio, request_ocio['config'])
-    space = config.getColorSpace(colorspace) if isinstance(colorspace, str) else None
-    require(space is not None and space.getEncoding() == 'log' and not space.isData()
-            and space.getFamily().startswith('Input/'), 'COLOR_LOG_COLORSPACE_UNSUPPORTED: %s' % colorspace)
-    display, view = request_ocio['display'], request_ocio['view']
-    require(display in DISPLAYS and display in list(config.getDisplays()), 'COLOR_LOG_DISPLAY_UNSUPPORTED: %s' % display)
-    require(view in list(config.getViews(display)), 'COLOR_LOG_VIEW_UNSUPPORTED: %s' % view)
-    proc = config.getProcessor(colorspace, display, view, ocio.TRANSFORM_DIR_FORWARD)
-    return proc.getOptimizedCPUProcessor(ocio.OPTIMIZATION_LOSSLESS), config, proc
+    with _OCIO_LOCK, tempfile.TemporaryDirectory(prefix='reel-ocio-') as private:
+        ocio.ClearAllCaches()
+        config, origin = _config(ocio, request_ocio['config'], Path(private))
+        space = config.getColorSpace(colorspace) if isinstance(colorspace, str) else None
+        # Built-in configs mark camera spaces as the Input/ family; an archive only has to say the space is Log.
+        require(space is not None and space.getEncoding() == 'log' and not space.isData()
+                and (origin['kind'] == 'archive' or space.getFamily().startswith('Input/')),
+                'COLOR_LOG_COLORSPACE_UNSUPPORTED: %s' % colorspace)
+        display, view = request_ocio['display'], request_ocio['view']
+        require(display in DISPLAYS and display in list(config.getDisplays()), 'COLOR_LOG_DISPLAY_UNSUPPORTED: %s' % display)
+        require(view in list(config.getViews(display)), 'COLOR_LOG_VIEW_UNSUPPORTED: %s' % view)
+        try:
+            proc = config.getProcessor(colorspace, display, view, ocio.TRANSFORM_DIR_FORWARD)
+            cpu = proc.getOptimizedCPUProcessor(ocio.OPTIMIZATION_LOSSLESS)
+        except Exception as exc:  # e.g. a LUT missing from the archive
+            raise ValueError('COLOR_LOG_PROCESSOR_UNAVAILABLE: %s' % exc) from exc
+        built = {'config_origin': origin, 'version': ocio.__version__, 'config_name': config.getName(),
+                 'config_cache_id': config.getCacheID(), 'processor_cache_id': proc.getCacheID()}
+        ocio.ClearAllCaches()  # drop the archive's LUT data before the private copy goes
+    return cpu, built
 
 
 def apply_exact(cpu, rgb):
@@ -159,20 +201,35 @@ def transform(request, directory, tools):
     from editing_runtime import exact_keys, require, source, write_json, sha256
     from color_ops import frame_clock
     from color_numerics import numpy, cube_text, lab_from_rgb01, ciede2000
-    fields = ['operation', 'source', 'input', 'ocio', 'lut_size', 'output_pix_fmt', 'sample_frames']
+    require(isinstance(request, dict) and (('ocio' in request) != ('lut' in request)), 'COLOR_LOG_OCIO_OR_LUT_REQUIRED')
+    mode = 'ocio' if 'ocio' in request else 'lut'
+    fields = ['operation', 'source', 'input', 'output_pix_fmt', 'sample_frames'] + (['ocio', 'lut_size'] if mode == 'ocio' else ['lut'])
     exact_keys(request, fields, fields)
     np = numpy()
-    ocio = _ocio()
     asset = source(request['source'])
     media = tools.probe(asset['path'])
     video = next((s for s in media['streams'] if s.get('codec_type') == 'video'), None)
     require(video is not None, 'VIDEO_STREAM_REQUIRED')
     declared = request['input']
     stream, warnings = _validate_stream(video, declared)
-    cpu, config, proc = processor(request['ocio'], declared['colorspace'], ocio)
-    transfer, trc, space = DISPLAYS[request['ocio']['display']]
-    size = request['lut_size']
-    require(type(size) is int and size in LUT_SIZES, 'COLOR_LOG_LUT_SIZE_UNSUPPORTED')
+    if mode == 'ocio':
+        ocio = _ocio()
+        cpu, built = processor(request['ocio'], declared['colorspace'], ocio)
+        display = request['ocio']['display']
+        size = request['lut_size']
+        require(type(size) is int and size in LUT_SIZES, 'COLOR_LOG_LUT_SIZE_UNSUPPORTED')
+    else:
+        # A vendor Log -> display cube: the vendor's documentation, not OCIO, defines what it does.
+        from color_ops import verified_cube
+        from color_numerics import table_from_rows
+        exact_keys(request['lut'], ['cube', 'display'], ['cube', 'display'])
+        require(isinstance(declared['colorspace'], str) and declared['colorspace'].strip(), 'COLOR_LOG_COLORSPACE_LABEL_REQUIRED')
+        display = request['lut']['display']
+        require(display in DISPLAYS, 'COLOR_LOG_DISPLAY_UNSUPPORTED: %s' % display)
+        cube_ref, info, rows, payload = verified_cube(request['lut']['cube'])
+        size = info['size']
+        vendor_table = table_from_rows(rows, size)
+    transfer, trc, space = DISPLAYS[display]
     out_fmt = request['output_pix_fmt']
     require(out_fmt in OUTPUT_FORMATS, 'COLOR_LOG_OUTPUT_FORMAT_UNSUPPORTED')
     clock = frame_clock(asset['path'], tools)
@@ -180,8 +237,11 @@ def transform(request, directory, tools):
     require(isinstance(frames, list) and 1 <= len(frames) <= MAX_SAMPLE_FRAMES and all(type(f) is int for f in frames)
             and len(set(frames)) == len(frames) and all(0 <= f < len(clock) for f in frames), 'COLOR_LOG_SAMPLE_FRAMES_INVALID')
     frames = sorted(frames)
-    table, bake = _bake(cpu, size, transfer)
-    (directory / 'log.cube').write_text(cube_text(table, 'color-log-transform'), encoding='utf-8')
+    if mode == 'ocio':
+        table, bake = _bake(cpu, size, transfer)
+        (directory / 'log.cube').write_text(cube_text(table, 'color-log-transform'), encoding='utf-8')
+    else:
+        (directory / 'log.cube').write_bytes(payload)  # the verified bytes, under a fixed local name
     matrix, rng = MATRICES[declared['matrix']], CODE_VALUES[declared['code_values']]
     # Fixed local file name: the cube path is never interpreted as filter code.
     vf = (f"zscale=matrixin={matrix}:rangein={rng}:range=full,format=gbrpf32le,"
@@ -204,7 +264,11 @@ def transform(request, directory, tools):
     codes = _frames(asset['path'], frames, matrix, rng, width, height, tools, 'source readback decode')
     decoded = _frames(str(output), frames, '709', 'limited', width, height, tools, 'output readback decode')
     # The cube's domain is [0,1]: the rendered picture saw clipped code values, so the prediction does too.
-    exact = apply_exact(cpu, np.clip(codes, 0.0, 1.0))
+    if mode == 'ocio':
+        exact = apply_exact(cpu, np.clip(codes, 0.0, 1.0))
+    else:
+        from color_numerics import interpolate
+        exact = interpolate(vendor_table, np.clip(codes, 0.0, 1.0), 'tetrahedral')
     predicted = np.clip(exact, 0.0, 1.0)
     delta = ciede2000(lab_from_rgb01(predicted, transfer)[0], lab_from_rgb01(np.clip(decoded, 0.0, 1.0), transfer)[0])
     measured = {'code_values_outside_0_1_fraction': _r(np.mean((codes < -0.002).any(axis=1) | (codes > 1.002).any(axis=1)), 6),
@@ -216,28 +280,35 @@ def transform(request, directory, tools):
                         % (100 * measured['code_values_outside_0_1_fraction']))
     if measured['display_clipped_fraction'] > WARN_FRACTION:
         warnings.append('%.2f%% of sampled pixels fall outside the display range for view %s and are clipped'
-                        % (100 * measured['display_clipped_fraction'], request['ocio']['view']))
+                        % (100 * measured['display_clipped_fraction'], request['ocio']['view']))  # never in lut mode
     readback = {'frames': frames, 'delta_e2000_median': _r(np.median(delta)), 'delta_e2000_p95': _r(np.percentile(delta, 95)),
                 'max_median_delta_e2000': READBACK_MAX_MEDIAN_DE2000,
-                'basis': 'exact OCIO processor on the decoded source frames vs the decoded output, clipped to [0,1]'}
+                'basis': ('exact OCIO processor' if mode == 'ocio' else 'tetrahedral interpolation of the vendor cube')
+                         + ' on the decoded source frames vs the decoded output, clipped to [0,1]'}
     require(readback['delta_e2000_median'] <= READBACK_MAX_MEDIAN_DE2000, 'COLOR_LOG_READBACK_MISMATCH: %.3f' % readback['delta_e2000_median'])
     source(request['source'])  # bytes must still match after decoding
     cube = directory / 'log.cube'
+    if mode == 'ocio':
+        method = {'ocio': {**request['ocio'], **built},
+                  'cube': {'path': str(cube), 'sha256': sha256(cube), 'size': size, **bake}}
+    else:
+        source(request['lut']['cube'])
+        method = {'lut': {'cube': cube_ref, 'size': size, 'display': display, 'basis': 'caller-provided vendor LUT'},
+                  'cube': {'path': str(cube), 'sha256': sha256(cube), 'size': size}}
     result = {'schema': SCHEMA, 'source': asset, 'stream': stream, 'input': declared, 'input_basis': 'caller-declared',
-              'ocio': {**request['ocio'], 'version': ocio.__version__, 'config_name': config.getName(),
-                       'config_cache_id': config.getCacheID(), 'processor_cache_id': proc.getCacheID()},
-              'cube': {'path': str(cube), 'sha256': sha256(cube), 'size': size, **bake},
+              'mode': mode, **method,
               'filter': vf,
               'video': {'path': str(output), 'sha256': sha256(output), 'pix_fmt': out_video.get('pix_fmt'),
                         'frames': out_frames, 'tags': tags},
               'measured_source': measured, 'readback': readback, 'warnings': warnings,
               'output_interpretation': {'space': space, 'range': 'limited', 'basis': 'verified-metadata'},
-              'look_selection': 'CALLER_CHOSEN_VIEW', 'aesthetic_judgement': 'NOT_PROVIDED',
+              'look_selection': 'CALLER_CHOSEN_VIEW' if mode == 'ocio' else 'CALLER_CHOSEN_VENDOR_LUT',
+              'aesthetic_judgement': 'NOT_PROVIDED',
               'limits': ['The colorspace, code values and matrix are the caller\'s declarations; no tag identifies camera Log.',
                          'The view is the caller\'s choice; another view gives another picture.',
                          'Code values outside [0,1] are clipped at the cube; code_values_outside_0_1_fraction reports how many.',
                          'Values outside the display range are clipped; display_clipped_fraction reports how many sampled pixels.',
-                         'The cube samples the processor; bake_delta_e2000 reports the interpolation error.',
+                         'In ocio mode the cube samples the processor (bake_delta_e2000); in lut mode the vendor cube is applied as given.',
                          'Readback covers the sampled frames only.']}
     write_json(directory / 'color-log-transform.json', result)
     return result
