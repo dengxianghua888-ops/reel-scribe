@@ -26,6 +26,9 @@ INTERPRETATIONS = ('bt709-sdr-display', 'srgb-sdr-display')
 # Same bounds as color-grade-compile's cdl op, so every read-back grade compiles.
 LIMITS = {'slope': (0.0, 4.0), 'offset': (-1.0, 1.0), 'power': (0.1, 4.0)}
 TOLERANCE = 1e-6  # Blender stores float32
+# Float32 storage may change a grade's output by at most half a 10-bit code value, checked on these inputs.
+OUTPUT_TOLERANCE = 0.5 / 1023
+PROBES = [i / 4096 for i in range(4097)]
 MODIFIER_NAME = 'reel-grade'
 
 
@@ -96,16 +99,37 @@ def validate_grade(grade):
 
 
 def grade_to_settings(grade):
-    """Offset/Power/Slope settings as Blender's UI stores them: offset is shifted by 1, power is inverted."""
+    """Offset/Power/Slope settings as Blender's UI stores them: offset is shifted by 1, power is inverted.
+
+    Refused when Blender's float32 storage would change the output by more than half a 10-bit code
+    value (for example an offset of 4e-8 stores as exactly 1, so the offset disappears).
+    """
     op = validate_grade(grade)
-    return {'correction_method': 'OFFSET_POWER_SLOPE', 'slope': op['slope'], 'offset': [v + 1 for v in op['offset']],
-            'power': [1 / v for v in op['power']], 'invert_slope': False, 'invert_offset': False,
-            'invert_power': False, 'color_multiply': 1.0}
+    settings = {'correction_method': 'OFFSET_POWER_SLOPE', 'slope': op['slope'], 'offset': [v + 1 for v in op['offset']],
+                'power': [1 / v for v in op['power']], 'invert_slope': False, 'invert_offset': False,
+                'invert_power': False, 'color_multiply': 1.0}
+    stored = {k: [f32(v) for v in value] if isinstance(value, list) else value for k, value in settings.items()}
+    difference = output_difference(op, stored)
+    require(difference <= OUTPUT_TOLERANCE, 'BLENDER_STORAGE_CHANGES_GRADE: float32 storage changes the output by up to '
+            '%.3g (limit %.3g, half a 10-bit code value)' % (difference, OUTPUT_TOLERANCE))
+    return settings
 
 
 def f32(value):
     """Round to float32, as Blender stores and computes these values."""
     return struct.unpack('<f', struct.pack('<f', value))[0]
+
+
+def output_difference(op, stored):
+    """Largest output difference, over PROBES and channels, between Reel's CDL and Blender's effective one."""
+    slope, offset, power = effective_cdl(stored)
+    worst = 0.0
+    for c in range(3):
+        for x in PROBES:
+            reel = min(max(x * op['slope'][c] + op['offset'][c], 0.0), 1.0) ** op['power'][c]
+            host = min(max(x * slope[c] + offset[c], 0.0) ** power[c], 1.0)
+            worst = max(worst, abs(min(reel, 1.0) - host))
+    return worst
 
 
 def _reciprocal(value, name):
@@ -277,13 +301,10 @@ def apply_grades(bpy, grades, output):
         modifier.color_multiply = settings['color_multiply']
         _plain_modifier(modifier, sid)
         stored = modifier_settings(modifier)
-        expected = validate_grade(grades[sid])
-        effective = effective_cdl(stored)
-        for index, name in enumerate(('slope', 'offset', 'power')):
-            require(all(abs(a - b) <= TOLERANCE * max(1, abs(b)) for a, b in zip(effective[index], expected[name])),
-                    'HOST_READBACK_MISMATCH: %s %s' % (sid, name))
+        difference = output_difference(validate_grade(grades[sid]), stored)
+        require(difference <= OUTPUT_TOLERANCE, 'HOST_READBACK_MISMATCH: %s output differs by %.3g' % (sid, difference))
         strips[sid]['reel_grade_sha256'] = hashlib.sha256(canonical(grades[sid]).encode()).hexdigest()
-        rows[sid] = {'grade_id': grades[sid]['id'], 'blender_settings': stored}
+        rows[sid] = {'grade_id': grades[sid]['id'], 'blender_settings': stored, 'max_output_difference': difference}
     require(not output.exists(), 'OUTPUT_EXISTS')
     bpy.ops.wm.save_as_mainfile(filepath=str(output), check_existing=True, copy=True)
     return {'schema': SCHEMA, 'direction': 'apply', 'host_version': list(version), 'output': str(output),

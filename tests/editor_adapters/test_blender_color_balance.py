@@ -249,7 +249,10 @@ def test_cli_assignments_schema(tmp_path):
 
 def test_small_offsets_keep_their_effect_on_read():
     """A tiny offset under a low power lifts black visibly; read-back must not round it away."""
-    settings = stored(cb.grade_to_settings(grade(slope=[1.0] * 3, offset=[0.0000004, 0.0, 0.0], power=[0.1, 1.0, 1.0])))
+    # Set in Blender's UI (apply itself refuses this grade: float32 storage moves its output, see below).
+    settings = stored({'correction_method': 'OFFSET_POWER_SLOPE', 'slope': [1.0] * 3, 'offset': [1.0000004, 1.0, 1.0],
+                       'power': [10.0, 1.0, 1.0], 'invert_slope': False, 'invert_offset': False, 'invert_power': False,
+                       'color_multiply': 1.0})
     value = cb.settings_to_grade(settings, 'tiny', 'srgb-sdr-display')
     # 1.0000004 is stored in float32 as 1 + 3.5762787e-07, which is the offset Blender applies.
     assert value['ops'][0]['offset'] == [3.5762787e-07, 0.0, 0.0] and value['ops'][0]['power'] == [0.1, 1.0, 1.0]
@@ -261,15 +264,22 @@ def test_small_offsets_keep_their_effect_on_read():
 def test_read_back_values_apply_again_to_the_same_effect():
     """Slope and offset come back to the identical float32; power is stored as a reciprocal, so it may move one ulp."""
     rng = random.Random(3)
+    checked = 0
     for _ in range(200):
         value = grade(slope=[round(rng.uniform(0.2, 2.5), rng.randint(1, 8)) for _ in range(3)],
                       offset=[rng.uniform(-0.3, 0.3) * 10 ** -rng.randint(0, 7) for _ in range(3)],
                       power=[round(rng.uniform(0.3, 3), rng.randint(1, 8)) for _ in range(3)])
-        first = stored(cb.grade_to_settings(value))
+        try:
+            first = stored(cb.grade_to_settings(value))
+        except ValueError as error:  # tiny offsets that float32 cannot store are refused on apply
+            assert 'BLENDER_STORAGE_CHANGES_GRADE' in str(error)
+            continue
+        checked += 1
         again = stored(cb.grade_to_settings(cb.settings_to_grade(first, 'g', 'srgb-sdr-display')))
         before, after = cb.effective_cdl(first), cb.effective_cdl(again)
         assert after[0] == before[0] and after[1] == before[1]
         assert after[2] == pytest.approx(before[2], rel=2.4e-7)
+    assert checked >= 100
 
 
 @pytest.mark.parametrize('strip_id,expected', [
@@ -292,3 +302,30 @@ def test_stub_read_uses_safe_grade_ids(tmp_path):
     cb.apply_grades(bpy, {'shot#1': WARM}, tmp_path / 'graded.blend')
     row = cb.read_grades(bpy, 'srgb-sdr-display')['grades']['shot#1']
     assert row['grade']['id'] == cb.grade_id_for('shot#1') and '#' not in row['grade']['id']
+
+
+@pytest.mark.parametrize('offset,power,accepted', [
+    (4e-8, 0.1, False),  # 1 + 4e-8 stores as exactly 1: black would drop from about 46/255 to 0
+    (-4e-8, 0.1, True),  # the offset is clamped away at black anyway
+    (1e-5, 0.1, True),  # stored as 1.0000100136: the output moves by about 4e-5
+    (0.02, 0.9, True),
+])
+def test_float32_storage_that_changes_the_output_is_refused(offset, power, accepted):
+    value = grade(slope=[1.0] * 3, offset=[offset, 0.0, 0.0], power=[power, 1.0, 1.0])
+    if accepted:
+        settings = cb.grade_to_settings(value)
+        assert cb.output_difference(cb.validate_grade(value), stored(settings)) <= cb.OUTPUT_TOLERANCE
+    else:
+        with pytest.raises(ValueError, match='BLENDER_STORAGE_CHANGES_GRADE'):
+            cb.grade_to_settings(value)
+        assert (4e-8) ** 0.1 * 255 == pytest.approx(46.4, abs=0.1)
+
+
+def test_stub_apply_refuses_storage_loss_before_changing_the_host(tmp_path):
+    bpy = host()
+    with pytest.raises(ValueError, match='BLENDER_STORAGE_CHANGES_GRADE'):
+        cb.apply_grades(bpy, {'one': grade(slope=[1.0] * 3, offset=[4e-8, 0.0, 0.0], power=[0.1, 1.0, 1.0])},
+                        tmp_path / 'out.blend')
+    assert all(not s.modifiers for s in bpy.context.scene.sequence_editor.sequences_all)
+    result = cb.apply_grades(bpy, {'one': WARM}, tmp_path / 'ok.blend')
+    assert result['strips']['one']['max_output_difference'] <= cb.OUTPUT_TOLERANCE
