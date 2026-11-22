@@ -14,7 +14,7 @@ python tools/editor-adapters/blender_cut_readback.py --host edited.blend --packa
 
 只读选定场景和原有 MOVIE/SOUND 实例；保留稳定 ID、资源和轨道。只允许原导出窗内裁短以及连续配对顺移，不接受扩展到未导出源窗、留白、重排、增加/删除实例。音频保持原 OTIO 样本率，帧换算后不是整数样本则拒绝，不静默取整。源码中的原音与视频对必须保持源窗/目标窗一致。
 
-颜色处理、变换、裁剪、反放、retiming、修饰器、声音偏移/音量/声像、mono、场景动画/合成器、frame step/time remap、静音轨和输出规格改变等均在支持范围外，拒绝而非丢掉。固定版本和默认处理断言只是此受限宿主子集，不代表任意 Blender 工程都能忠实交换。导入器原有不支持字幕/效果/分数帧率的边界不变。
+颜色处理、变换、裁剪、反放、retiming、修饰器、声音偏移/音量/声像、mono、场景动画/合成器、frame step/time remap、静音轨和输出规格改变等均在支持范围外，拒绝而非丢掉。唯一例外是调用方显式要求读出调色时画面条带上的 Color Balance，见下文“与 Color Balance 调色一起读回”。固定版本和默认处理断言只是此受限宿主子集，不代表任意 Blender 工程都能忠实交换。导入器原有不支持字幕/效果/分数帧率的边界不变。
 
 输出使用同目录临时文件、fsync 和独占硬链接发布；写入失败不发布半份目标，不覆盖现有文件。stdout 回执含原生工程及 OTIO 摘要，应随快照作为 companion 保存。后续复用已有 `otio_readback.capture_saved_snapshot`（明确 `media_root` 指向原包）和 `propose_saved_readback`，不得把桥接成功当成下游许可或采纳成功。原生工程若后来改动，需要重新受控读回；既有提案实时检查的是保存 OTIO，不是活跃 Blender 状态。
 
@@ -32,6 +32,28 @@ python tools/editor-adapters/blender_cut_readback.py --host edited.blend --packa
 早期验证曾把音频 time range 错写成视频帧率，未改工程都被既有解析拒绝。已修复保留原样本率并新增回归；旧 CONFLICT 结果保留，不算最终通过。首轮默认属性假设也曾被真实宿主拒绝，最终按 4.3.2 实际默认值限定。
 
 **本批成果是保存分支的可靠观察和保守提案桥接，不是完整可采用编辑器往返。** 下步应按既有 revision 权威，在明确授权范围内实现 Storyboard 映射，再运行 pre/post QC；不能通过忽略 CONFLICT 直接修改真源。
+
+## 与 Color Balance 调色一起读回（实验）
+
+默认仍拒绝任何修饰器：画面条带带 Color Balance 时报 `HOST_MODIFIER_UNSUPPORTED: <实例> (Color Balance needs a grades output)`。剪切 OTIO 表达不了调色，静默丢掉会让用户在宿主里的调色消失。调用方可以显式要求把调色另存一份：
+
+```sh
+python tools/editor-adapters/blender_cut_readback.py --host edited.blend --package exported-package --output new-saved.otio \
+  --grades-output new-grades.json --interpretation srgb-sdr-display
+```
+
+- 两个参数必须同时给出。`--interpretation` 只能是 `bt709-sdr-display` 或 `srgb-sdr-display`，是调用方的声明：Blender 按码值调色，不记录解释。调色输出必须是新的 `.json`，不能在原包内，也不能与 OTIO 同路径。
+- 此时画面条带上的修饰器交给 [Blender Color Balance 桥](editor-adapters/blender-color-balance.md) 的读取规则：每个条带至多一个启用、无遮罩的 Color Balance，读成 `cdl` 调色层；其他类型、多个修饰器、停用或带遮罩仍拒绝（`HOST_MODIFIER_*`），不发布任何文件。剪切本身的规则不变。4.3 的声音条带不能挂修饰器。
+- 调色与剪切出自同一次加载的同一份宿主，调色文件记录 `saved_host_sha256` 和 `package_sha256`。launcher 发布前核对这两个摘要与解释，与本次读回不符报 `HOST_GRADES_IDENTITY_MISMATCH`。先发布 OTIO，再发布调色；调色发布失败时撤回刚发布的 OTIO，不留下只有剪切、没有调色的一半。
+- 回执多一项 `grades`：路径、摘要、解释和有调色的实例列表；没有要求调色时为 `null`。调色文件只是读出的观察，不会写入 Work，也不代表采纳。
+
+验证（2026-11-22）：PyPI 的 bpy 4.3.0 模块（桥固定 4.3.2，测试只对加载的模块放开版本固定）中，用 importer 导入真实小样包，Color Balance 桥加上暖色 CDL 后另存，再在进程内读回：
+
+- 不要求调色时拒绝且不留输出；
+- 要求调色时，OTIO 与未调色工程的读回逐字节相同，读出的 slope/offset/power 与写入值相差不超过 5e-8，调色文件的宿主与包摘要正确，宿主文件未变；
+- Curves 修饰器、停用的 Color Balance、两个 Color Balance 各自被拒绝。
+
+这些在 `tests/editor_adapters/test_blender_cut_readback_host.py`（缺少 bpy 时跳过）。launcher 的参数、发布与撤回用替身宿主程序测试（`test_blender_cut_readback_color.py`），不是 Blender 4.3.2 实机运行；GUI 未验收。
 
 ## 显式绑定的成对源窗扩展（实验）
 

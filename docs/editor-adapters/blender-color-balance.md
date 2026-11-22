@@ -52,7 +52,7 @@ blender -b --disable-autoexec PROJECT.blend --python-exit-code 1 \
 - **Read-back values** are what Blender applies, emulated in float32, written as the shortest decimal equal to it in float32; nothing is rounded to a fixed number of places, so small values keep their effect. For example, an offset of 4e-7 under a power of 0.1 lifts black to about 58/255, and it reads back as 3.5762787e-07, the float32 offset Blender actually applies. Because Blender stores the offset as `offset + 1`, a set offset of 0.02 reads back as 0.01999998. Applying a read-back grade again stores the identical slope and offset; the power is stored as a reciprocal and may move by one float32 ulp.
 - **Grade ids** are `blender-<instance id>` when that is a valid color-grade id (non-blank, at most 120 characters, no quote, newline or `#`); otherwise `blender-` plus the first 16 hex digits of the instance id's SHA-256. The instance id stays the key in the output.
 
-The [cut readback](../blender-saved-cut-readback-20261112.md) still rejects every modifier. A project carrying Color Balance must have its grades read with this tool; its cut cannot be read back by the cut bridge until that bridge is extended.
+The [cut readback](../blender-saved-cut-readback-20261112.md) rejects every modifier by default. Given `--grades-output` and `--interpretation`, it reads the cut and, through this tool's read rules, the Color Balance grades from the same loaded host, and writes the grades beside the OTIO with the host and package hashes; other modifiers still block the cut.
 
 ## Acceptance evidence, 2026-11-22
 
