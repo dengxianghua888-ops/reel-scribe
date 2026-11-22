@@ -156,6 +156,13 @@ def _selected_requirements(identifier, request):
             branch = 'strength-derived-cube'
         else:
             branch = 'verified-cube-as-is'
+    elif identifier == 'color-log-transform' and isinstance(request, dict):
+        # A caller's vendor cube replaces the OCIO processor; without a request the OCIO branch is assumed.
+        if 'lut' in request and 'ocio' not in request:
+            required.remove('opencolorio')
+            branch = 'vendor-lut'
+        elif 'ocio' in request:
+            branch = 'ocio-processor'
     return tuple(dict.fromkeys(required)), unknown, branch
 
 
