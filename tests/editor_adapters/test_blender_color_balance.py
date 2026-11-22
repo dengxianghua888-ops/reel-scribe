@@ -329,3 +329,28 @@ def test_stub_apply_refuses_storage_loss_before_changing_the_host(tmp_path):
     assert all(not s.modifiers for s in bpy.context.scene.sequence_editor.sequences_all)
     result = cb.apply_grades(bpy, {'one': WARM}, tmp_path / 'ok.blend')
     assert result['strips']['one']['max_output_difference'] <= cb.OUTPUT_TOLERANCE
+
+
+@pytest.mark.parametrize('offset', [
+    -0.501960793999176,  # black point just above code 128: storage moves it below, so code 128 jumps to 45/255
+    -128 / 255,  # black point exactly on code 128
+])
+def test_storage_that_moves_a_low_power_black_point_across_a_code_level_is_refused(offset):
+    value = grade(slope=[1.0] * 3, offset=[offset, 0.0, 0.0], power=[0.1, 1.0, 1.0])
+    settings = stored({**{k: v for k, v in cb.grade_to_settings(grade()).items()},
+                       'offset': [offset + 1, 1.0, 1.0], 'power': [10.0, 1.0, 1.0], 'slope': [1.0, 1.0, 1.0]})
+    s, o, p = cb.effective_cdl(settings)
+    x = 128 / 255
+    moved = abs(max(x + offset, 0) ** 0.1 - max(x * s[0] + o[0], 0) ** p[0])
+    if moved > cb.OUTPUT_TOLERANCE:
+        with pytest.raises(ValueError, match='BLENDER_STORAGE_CHANGES_GRADE'):
+            cb.grade_to_settings(value)
+    else:  # storage kept the black point on the same side of every code level
+        cb.grade_to_settings(value)
+    assert offset != -0.501960793999176 or moved > 0.17  # the reported case: about 45 8-bit code values
+
+
+def test_threshold_levels_cover_every_depth_near_the_threshold():
+    levels = cb._threshold_levels([128 / 255])
+    assert 128 / 255 in levels and 513 / 1023 in levels and 2056 / 4095 in levels and 32896 / 65535 in levels
+    assert all(abs(v - 128 / 255) <= cb.THRESHOLD_WINDOW + 1 / 255 for v in levels)

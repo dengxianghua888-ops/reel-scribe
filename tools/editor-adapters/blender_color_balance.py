@@ -26,9 +26,13 @@ INTERPRETATIONS = ('bt709-sdr-display', 'srgb-sdr-display')
 # Same bounds as color-grade-compile's cdl op, so every read-back grade compiles.
 LIMITS = {'slope': (0.0, 4.0), 'offset': (-1.0, 1.0), 'power': (0.1, 4.0)}
 TOLERANCE = 1e-6  # Blender stores float32
-# Float32 storage may change a grade's output by at most half a 10-bit code value, checked on these inputs.
+# Float32 storage may change a grade's output by at most half a 10-bit code value, checked on a uniform
+# grid plus every 8-, 10-, 12- and 16-bit code level near the clipping thresholds: with a power below 1
+# the output rises steeply right above the lower threshold, and storage moves that threshold slightly.
 OUTPUT_TOLERANCE = 0.5 / 1023
 PROBES = [i / 4096 for i in range(4097)]
+LEVEL_DEPTHS = (8, 10, 12, 16)
+THRESHOLD_WINDOW = 1e-3
 MODIFIER_NAME = 'reel-grade'
 
 
@@ -120,12 +124,33 @@ def f32(value):
     return struct.unpack('<f', struct.pack('<f', value))[0]
 
 
+def _threshold_levels(thresholds):
+    """Integer code levels of LEVEL_DEPTHS within THRESHOLD_WINDOW of the given inputs."""
+    levels = set()
+    for depth in LEVEL_DEPTHS:
+        n = 2 ** depth - 1
+        for t in thresholds:
+            if -THRESHOLD_WINDOW <= t <= 1 + THRESHOLD_WINDOW:
+                low, high = math.floor((t - THRESHOLD_WINDOW) * n), math.ceil((t + THRESHOLD_WINDOW) * n)
+                levels.update(k / n for k in range(max(0, low), min(n, high) + 1))
+    return levels
+
+
 def output_difference(op, stored):
-    """Largest output difference, over PROBES and channels, between Reel's CDL and Blender's effective one."""
+    """Largest output difference between Reel's CDL and Blender's effective one, over the probes of each channel.
+
+    Probes are the uniform grid plus integer code levels near the requested and stored clipping
+    thresholds. Float inputs within about 1e-7 of a lower threshold are ill-conditioned for low powers
+    in any float32 evaluation (Blender's own x * slope + offset rounds by that much), so they are not probed.
+    """
     slope, offset, power = effective_cdl(stored)
     worst = 0.0
     for c in range(3):
-        for x in PROBES:
+        thresholds = []
+        for s, o in ((op['slope'][c], op['offset'][c]), (slope[c], offset[c])):
+            if s > 0:
+                thresholds += [-o / s, (1 - o) / s]
+        for x in PROBES + sorted(_threshold_levels(thresholds)):
             reel = min(max(x * op['slope'][c] + op['offset'][c], 0.0), 1.0) ** op['power'][c]
             host = min(max(x * slope[c] + offset[c], 0.0) ** power[c], 1.0)
             worst = max(worst, abs(min(reel, 1.0) - host))
