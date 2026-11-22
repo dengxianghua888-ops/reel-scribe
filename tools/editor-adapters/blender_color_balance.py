@@ -15,6 +15,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import struct
 import sys
 
 SCHEMA = 'blender-color-balance/1'
@@ -55,12 +56,23 @@ def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
 
 
+def valid_id(value):
+    """color-grade-compile's id rule: non-blank, at most 120 characters, no quote, newline or '#'."""
+    return isinstance(value, str) and bool(value.strip()) and len(value) <= 120 and not set(value) & {'"', '\n', '\r', '#'}
+
+
+def grade_id_for(strip_id):
+    """A compilable grade id for a strip; instance ids may be any non-empty string, so fall back to a digest."""
+    candidate = 'blender-' + strip_id
+    return candidate if valid_id(candidate) else 'blender-' + hashlib.sha256(strip_id.encode('utf-8')).hexdigest()[:16]
+
+
 def validate_grade(grade):
     """A color-grade/1 grade Color Balance can carry exactly; returns its cdl op."""
     require(isinstance(grade, dict) and set(grade) <= {'schema', 'id', 'interpretation', 'ops', 'strength'}
             and {'schema', 'id', 'interpretation', 'ops'} <= set(grade), 'GRADE_FIELDS_INVALID')
     require(grade['schema'] == 'color-grade/1', 'GRADE_SCHEMA_UNSUPPORTED')
-    require(isinstance(grade['id'], str) and grade['id'] and not set(grade['id']) & {'"', '\n', '\r', '#'}, 'GRADE_ID_INVALID')
+    require(valid_id(grade['id']), 'GRADE_ID_INVALID')
     require(grade['interpretation'] in INTERPRETATIONS, 'GRADE_INTERPRETATION_UNSUPPORTED')
     reasons = []
     if 'strength' in grade and number(grade['strength'], 'strength') != 1:
@@ -91,16 +103,34 @@ def grade_to_settings(grade):
             'invert_power': False, 'color_multiply': 1.0}
 
 
+def f32(value):
+    """Round to float32, as Blender stores and computes these values."""
+    return struct.unpack('<f', struct.pack('<f', value))[0]
+
+
 def _reciprocal(value, name):
     require(value > 0, 'VALUE_OUT_OF_RANGE: %s must be above 0' % name)  # 4.3 and 5.x treat 0 differently
-    return 1 / value
+    return f32(1 / value)
 
 
-def effective_cdl(settings):
+def _shortest(value, same):
+    """Shortest decimal c with same(c); value itself if none (never rounds a value away)."""
+    for digits in range(1, 18):
+        candidate = float('%.*g' % (digits, value))
+        if same(candidate):
+            return candidate
+    return value
+
+
+def effective_cdl(settings, snap=False):
     """Per-channel slope, offset and power that Blender applies, from either mode (Blender source semantics).
 
     Lift/Gamma/Gain computes ((x - 1) * lift + 1) * gain, clamps below 0 and raises to gamma:
     the same as an ASC CDL with slope = lift * gain, offset = (1 - lift) * gain, power = gamma.
+    With snap, each value becomes the shortest decimal equal in float32 to what Blender applies, so a
+    read-back grade renders like the host and small values keep their magnitude. Offsets are stored
+    as offset + 1, so Blender's effective offset can differ from the value that was set (0.02 applies
+    as 0.01999998); applying the read-back value again stores the identical float32.
     """
     method = settings['correction_method']
     require(abs(number(settings['color_multiply'], 'color_multiply') - 1) <= TOLERANCE,
@@ -109,33 +139,34 @@ def effective_cdl(settings):
     for c in range(3):
         if method == 'OFFSET_POWER_SLOPE':
             s = number(settings['slope'][c], 'slope')
-            s = _reciprocal(s, 'slope') if settings['invert_slope'] else s
-            o = number(settings['offset'][c], 'offset') - 1
+            s = _reciprocal(s, 'slope') if settings['invert_slope'] else f32(s)
+            o = f32(f32(number(settings['offset'][c], 'offset')) - 1)
             o = -o if settings['invert_offset'] else o
             p = number(settings['power'][c], 'power')
-            p = p if settings['invert_power'] else _reciprocal(p, 'power')
+            p = f32(p) if settings['invert_power'] else _reciprocal(p, 'power')
         else:
             require(method == 'LIFT_GAMMA_GAIN', 'BLENDER_METHOD_UNSUPPORTED: %s' % method)
-            lift = 2 - number(settings['lift'][c], 'lift')
+            lift = f32(2 - number(settings['lift'][c], 'lift'))
             if settings['invert_lift']:
                 if lift > 1:
-                    lift = (lift - 1) ** 2 + 1
-                lift = 2 - lift
+                    lift = f32((lift - 1) ** 2 + 1)
+                lift = f32(2 - lift)
             gain = number(settings['gain'][c], 'gain')
-            gain = _reciprocal(gain, 'gain') if settings['invert_gain'] else gain
+            gain = _reciprocal(gain, 'gain') if settings['invert_gain'] else f32(gain)
             gamma = number(settings['gamma'][c], 'gamma')
-            gamma = gamma if settings['invert_gamma'] else _reciprocal(gamma, 'gamma')
+            gamma = f32(gamma) if settings['invert_gamma'] else _reciprocal(gamma, 'gamma')
             s, o, p = lift * gain, (1 - lift) * gain, gamma
+        if snap:
+            s, o, p = (_shortest(v, lambda x, t=v: f32(x) == f32(t)) for v in (s, o, p))
         slope.append(s); offset.append(o); power.append(p)
     return slope, offset, power
 
 
 def settings_to_grade(settings, grade_id, interpretation):
-    """color-grade/1 grade with one cdl op; values rounded to 1e-6 (float32 storage)."""
+    """color-grade/1 grade with one cdl op whose values have Blender's effect (see effective_cdl)."""
     require(interpretation in INTERPRETATIONS, 'GRADE_INTERPRETATION_UNSUPPORTED')
-    slope, offset, power = effective_cdl(settings)
-    op = {'type': 'cdl', 'slope': [round(v, 6) for v in slope], 'offset': [round(v, 6) for v in offset],
-          'power': [round(v, 6) for v in power], 'saturation': 1.0}
+    slope, offset, power = effective_cdl(settings, snap=True)
+    op = {'type': 'cdl', 'slope': slope, 'offset': offset, 'power': power, 'saturation': 1.0}
     for name, (low, high) in LIMITS.items():
         require(all(low <= v <= high for v in op[name]), 'BLENDER_VALUE_OUT_OF_RANGE: %s %s' % (name, op[name]))
     grade = {'schema': 'color-grade/1', 'id': grade_id, 'interpretation': interpretation, 'ops': [op]}
@@ -207,7 +238,7 @@ def read_grades(bpy, interpretation):
         _plain_modifier(mods[0], sid)
         settings = modifier_settings(mods[0])
         rows[sid] = {'mode': settings['correction_method'], 'blender_settings': settings,
-                     'grade': settings_to_grade(settings, 'blender-' + sid, interpretation)}
+                     'grade': settings_to_grade(settings, grade_id_for(sid), interpretation)}
     return {'schema': SCHEMA, 'direction': 'read', 'host_version': list(version), 'interpretation': interpretation,
             'grades': rows, 'ungraded_strips': sorted(set(strips) - set(rows)),
             'limits': ['Only Color Balance modifiers are read; any other modifier, a stack or a mask is rejected.',

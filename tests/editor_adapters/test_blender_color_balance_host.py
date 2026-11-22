@@ -83,8 +83,9 @@ def test_applied_grade_renders_as_the_cdl_and_reads_back(project):
     assert np.abs(graded - before).max() > 20  # the grade did change the picture
     assert np.abs(graded - cdl(before, WARM['ops'][0])).max() <= 1.0  # 8-bit rounding of Blender's 1024-entry table
     bpy.ops.wm.open_mainfile(filepath=str(root / 'graded.blend'))
-    read = cb.read_grades(bpy, 'srgb-sdr-display')
-    assert read['grades']['one']['grade']['ops'][0] == {**WARM['ops'][0], 'saturation': 1.0}
+    read = cb.read_grades(bpy, 'srgb-sdr-display')['grades']['one']['grade']['ops'][0]
+    for key in ('slope', 'offset', 'power'):  # offsets come back as Blender applies them (float32 offset + 1)
+        assert read[key] == pytest.approx(WARM['ops'][0][key], abs=5e-8)
     reopened = render(root / 'reopened.png')
     assert np.array_equal(reopened, graded)  # the saved copy carries the modifier
     bpy.ops.wm.open_mainfile(filepath=str(base))

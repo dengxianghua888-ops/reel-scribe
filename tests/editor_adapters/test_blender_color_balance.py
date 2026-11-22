@@ -48,8 +48,10 @@ def test_apply_settings_follow_blenders_ui_storage():
     assert settings['correction_method'] == 'OFFSET_POWER_SLOPE'
     assert settings['offset'] == pytest.approx([1.02, 1.0, 0.97])  # Blender subtracts 1
     assert settings['power'] == pytest.approx([1 / 0.9, 1.0, 1 / 1.2])  # Blender inverts unless invert_power
-    back = cb.settings_to_grade(stored(settings), 'warm', 'srgb-sdr-display')
-    assert back['ops'][0] == {**WARM['ops'][0], 'saturation': 1.0}
+    back = cb.settings_to_grade(stored(settings), 'warm', 'srgb-sdr-display')['ops'][0]
+    # Slope and power come back as set; offsets as Blender applies them (stored as offset + 1 in float32).
+    assert back['slope'] == [1.1, 1.0, 0.9] and back['power'] == [0.9, 1.0, 1.2]
+    assert back['offset'] == [0.01999998, 0.0, -0.029999971]
 
 
 @pytest.mark.parametrize('change,reason', [
@@ -128,7 +130,7 @@ def test_offset_power_slope_equals_the_runtime_cdl_after_the_final_clamp():
         expected = runtime_evaluate(value, points)
         for p, e in zip(points, expected):
             got = [min(max(v, 0.0), 1.0) for v in cb.blender_reference(settings, p)]
-            assert got == pytest.approx(list(e), abs=1e-9)
+            assert got == pytest.approx(list(e), abs=1e-6)  # Blender stores and computes in float32
 
 
 @pytest.mark.parametrize('inverts', [(False, False, False), (True, True, True), (True, False, True)])
@@ -144,7 +146,7 @@ def test_lift_gamma_gain_reads_back_as_an_equivalent_cdl(inverts):
         value = cb.settings_to_grade(settings, 'lgg', 'bt709-sdr-display')
         expected = runtime_evaluate(value, points)
         for p, e in zip(points, expected):
-            assert blender_lgg(settings, p) == pytest.approx(list(e), abs=2e-5)  # read-back values are rounded to 1e-6
+            assert blender_lgg(settings, p) == pytest.approx(list(e), abs=1e-6)  # float32 storage
 
 
 # --- stub host: argument and state rules, not Blender behaviour ---------------------------
@@ -243,3 +245,50 @@ def test_cli_assignments_schema(tmp_path):
     path.write_text('{"schema": "x", "schema": "y"}')
     with pytest.raises(ValueError, match='DUPLICATE_JSON_KEY'):
         cb.read_assignments(path)
+
+
+def test_small_offsets_keep_their_effect_on_read():
+    """A tiny offset under a low power lifts black visibly; read-back must not round it away."""
+    settings = stored(cb.grade_to_settings(grade(slope=[1.0] * 3, offset=[0.0000004, 0.0, 0.0], power=[0.1, 1.0, 1.0])))
+    value = cb.settings_to_grade(settings, 'tiny', 'srgb-sdr-display')
+    # 1.0000004 is stored in float32 as 1 + 3.5762787e-07, which is the offset Blender applies.
+    assert value['ops'][0]['offset'] == [3.5762787e-07, 0.0, 0.0] and value['ops'][0]['power'] == [0.1, 1.0, 1.0]
+    black = cb.blender_reference(settings, [0.0, 0.0, 0.0])[0]
+    assert black * 255 == pytest.approx(57.8, abs=0.1)  # Blender lifts black to about 58/255
+    assert runtime_evaluate(value, [[0.0, 0.0, 0.0]])[0][0] == pytest.approx(black, abs=1e-6)
+
+
+def test_read_back_values_apply_again_to_the_same_effect():
+    """Slope and offset come back to the identical float32; power is stored as a reciprocal, so it may move one ulp."""
+    rng = random.Random(3)
+    for _ in range(200):
+        value = grade(slope=[round(rng.uniform(0.2, 2.5), rng.randint(1, 8)) for _ in range(3)],
+                      offset=[rng.uniform(-0.3, 0.3) * 10 ** -rng.randint(0, 7) for _ in range(3)],
+                      power=[round(rng.uniform(0.3, 3), rng.randint(1, 8)) for _ in range(3)])
+        first = stored(cb.grade_to_settings(value))
+        again = stored(cb.grade_to_settings(cb.settings_to_grade(first, 'g', 'srgb-sdr-display')))
+        before, after = cb.effective_cdl(first), cb.effective_cdl(again)
+        assert after[0] == before[0] and after[1] == before[1]
+        assert after[2] == pytest.approx(before[2], rel=2.4e-7)
+
+
+@pytest.mark.parametrize('strip_id,expected', [
+    ('one', 'blender-one'),
+    ('shot#1', None),  # '#' starts a comment in .cube titles
+    ('x' * 120, None),  # 'blender-' + 120 characters is over the 120-character limit
+    ('say "hi"', None),
+])
+def test_grade_ids_are_compilable_for_any_instance_id(strip_id, expected):
+    grade_id = cb.grade_id_for(strip_id)
+    assert cb.valid_id(grade_id) and (grade_id == expected if expected else len(grade_id) == len('blender-') + 16)
+    np = pytest.importorskip('numpy')  # noqa: F841 - color_grade_ops needs numpy
+    sys.path.insert(0, str(ROOT / 'runtime'))
+    import color_grade_ops
+    color_grade_ops.normalize({**WARM, 'id': grade_id})
+
+
+def test_stub_read_uses_safe_grade_ids(tmp_path):
+    bpy = host(strips=[Strip('shot#1'), Strip('two')])
+    cb.apply_grades(bpy, {'shot#1': WARM}, tmp_path / 'graded.blend')
+    row = cb.read_grades(bpy, 'srgb-sdr-display')['grades']['shot#1']
+    assert row['grade']['id'] == cb.grade_id_for('shot#1') and '#' not in row['grade']['id']
