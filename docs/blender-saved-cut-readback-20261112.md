@@ -47,7 +47,7 @@ python tools/editor-adapters/blender_cut_readback.py --host edited.blend --packa
 - 调色与剪切出自同一次加载的同一份宿主，调色文件记录 `saved_host_sha256` 和 `package_sha256`。launcher 发布前核对这两个摘要与解释，与本次读回不符报 `HOST_GRADES_IDENTITY_MISMATCH`。先发布 OTIO，再发布调色；调色发布失败时撤回刚发布的 OTIO，不留下只有剪切、没有调色的一半。
 - 回执多一项 `grades`：路径、摘要、解释和有调色的实例列表；没有要求调色时为 `null`。调色文件只是读出的观察，不会写入 Work，也不代表采纳。
 
-验证（2026-11-22）：PyPI 的 bpy 4.3.0 模块（桥固定 4.3.2，测试只对加载的模块放开版本固定）中，用 importer 导入真实小样包，Color Balance 桥加上暖色 CDL 后另存，再在进程内读回：
+验证（2026-11-22）：PyPI 的 bpy 4.3.0 模块（桥固定 4.3.2，测试只对加载的模块放开版本固定）中，用 importer 导入真实小样包，Color Balance 桥加上暖色 CDL 后另存，再经脚本在 Blender 内的入口（`host_main`，参数与 launcher 传入的相同）在进程内读回：
 
 - 不要求调色时拒绝且不留输出；
 - 要求调色时，OTIO 与未调色工程的读回逐字节相同，读出的 slope/offset/power 与写入值相差不超过 5e-8，调色文件的宿主与包摘要正确，宿主文件未变；

@@ -26,6 +26,17 @@ def test_host_arguments():
             a.host_arguments(bad)
 
 
+def test_host_main_passes_bpy_and_the_host_hash_in_place(monkeypatch):
+    calls = []
+    monkeypatch.setattr(a, 'export_snapshot', lambda *args, **kwargs: calls.append((args, kwargs)) or {})
+    bpy = object()
+    a.host_main(['blender', '-b', 'edited.blend', '--python', 'x.py', '--', 'pkg', 'new.otio', 'sha'], bpy)
+    a.host_main(['blender', '--', 'pkg', 'new.otio', 'sha', 'scope.json', 'ssha', '--color', 'srgb-sdr-display', 'g.json'], bpy)
+    assert calls == [(('pkg', 'new.otio', bpy, 'sha', None), {}),
+                     (('pkg', 'new.otio', bpy, 'sha', {'path': 'scope.json', 'sha256': 'ssha'}),
+                      {'interpretation': 'srgb-sdr-display', 'grades_output': 'g.json'})]
+
+
 def test_color_output_rules(tmp_path):
     root = tmp_path / 'package'; root.mkdir()
     out = tmp_path / 'cut.otio'

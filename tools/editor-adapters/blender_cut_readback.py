@@ -281,6 +281,12 @@ def host_arguments(args):
     return args[:3]+[{'path':args[3],'sha256':args[4]} if len(args)==5 else None],options
 
 
+def host_main(argv, bpy):
+    """In-Blender entry: Blender's argv up to '--', then the host arguments."""
+    (root,output,host_sha,reference),options=host_arguments(argv[argv.index('--')+1:])
+    return export_snapshot(root,output,bpy,host_sha,reference,**options)
+
+
 def atomic_new(output, raw):
     """Same-directory hard-link commit: no partial target and no overwrite."""
     output=Path(output)
@@ -361,5 +367,4 @@ if __name__=='__main__':
         print(json.dumps(launch(args.host,args.package,args.output,blender=args.blender,extension_reference=reference,
                                 grades_output=args.grades_output,interpretation=args.interpretation)))
     else:
-        args,options=host_arguments(sys.argv[sys.argv.index('--')+1:])
-        print(json.dumps(export_snapshot(*args[:3],bpy,*args[3:],**options)))
+        print(json.dumps(host_main(sys.argv,bpy)))

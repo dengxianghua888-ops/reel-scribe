@@ -4,7 +4,8 @@ Run with a Python that has bpy 4.3 (for example the bpy 4.3.0 wheel) and pytest:
     python -m pytest tests/editor_adapters/test_blender_cut_readback_host.py
 The bridge pins Blender 4.3.2; the PyPI module is 4.3.0, so these tests lift the pin for the module
 they load. They import a package with the cut importer, add Color Balance with the color bridge, and
-read the saved project back in-process (export_snapshot); the controlled launcher is not run here.
+read the saved project back in-process through the in-Blender entry (host_main) with the arguments
+the launcher passes; the launcher's own subprocess is not run here.
 """
 import hashlib
 import importlib.util
@@ -66,7 +67,7 @@ def save_variant(path, change):
 
 def test_graded_cut_reads_back_with_its_grades(cut):
     tmp, root, host = cut
-    base = readback.export_snapshot(root, tmp / 'base.otio', bpy, reopen(host))
+    base = readback.host_main(['blender', '--', str(root), str(tmp / 'base.otio'), reopen(host)], bpy)
     assert 'grades' not in base
     reopen(host)
     cb.apply_grades(bpy, {'one': WARM}, tmp / 'graded.blend')
@@ -74,8 +75,9 @@ def test_graded_cut_reads_back_with_its_grades(cut):
     with pytest.raises(ValueError, match=r'HOST_MODIFIER_UNSUPPORTED: one \(Color Balance needs a grades output\)'):
         readback.export_snapshot(root, tmp / 'plain.otio', bpy, graded)
     assert not (tmp / 'plain.otio').exists()
-    result = readback.export_snapshot(root, tmp / 'cut.otio', bpy, graded,
-                                      grades_output=tmp / 'grades.json', interpretation='srgb-sdr-display')
+    # Through the in-Blender entry point, with the arguments the launcher passes.
+    result = readback.host_main(['blender', '--', str(root), str(tmp / 'cut.otio'), graded,
+                                 '--color', 'srgb-sdr-display', str(tmp / 'grades.json')], bpy)
     assert (tmp / 'cut.otio').read_bytes() == (tmp / 'base.otio').read_bytes()  # the cut is unchanged by the grade
     assert result['grades']['graded_strips'] == ['one'] and result['grades']['sha256'] == digest(tmp / 'grades.json')
     grades = json.loads((tmp / 'grades.json').read_text())
