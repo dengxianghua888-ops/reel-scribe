@@ -258,13 +258,14 @@ def test_a_stalled_pipeline_is_killed_after_the_stall_timeout(tmp_path, monkeypa
     assert cancel.calls == [0, 1]
 
 
-def test_sample_aspect_ratio_survives_the_raw_frame_pipe(tmp_path):
-    # 128x96 with 16:15 pixels; rawvideo has no SAR, so the encoder must be told.
+@pytest.mark.parametrize('sar', ['16:15', '2024:2025'])  # 2024:2025: a 4096x2160 frame scaled to 1920x1012
+def test_sample_aspect_ratio_survives_the_raw_frame_pipe(tmp_path, sar):
+    # 128x96 with non-square pixels; rawvideo has no SAR, so the encoder must be told, exactly.
     video = derive(tmp_path, still(tmp_path, 'gray', (100, 100, 100)), 'anamorphic',
-                   ['-vf', 'setsar=16/15', '-c:v', 'libx264', '-qp', '0', '-preset', 'ultrafast'])
+                   ['-vf', 'setsar=r=%s:max=10000' % sar.replace(':', '/'), '-c:v', 'libx264', '-qp', '0', '-preset', 'ultrafast'])
     result = run(tmp_path, video, {'grain': GRAIN}, 'sar')['result']
     stream = next(s for s in rt.Tools().probe(result['video']['path'])['streams'] if s.get('codec_type') == 'video')
-    assert stream['sample_aspect_ratio'] == result['video']['sample_aspect_ratio'] == '16:15'
+    assert stream['sample_aspect_ratio'] == result['video']['sample_aspect_ratio'] == sar
 
 
 def test_a_slow_but_working_readback_decode_is_not_a_stall(tmp_path, monkeypatch):
