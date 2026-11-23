@@ -13,6 +13,8 @@ MAX_RANGES_PER_LAYER=512
 MAX_READBACK_FRAMES=96
 READBACK_WIDTH=256
 READBACK_MAX_MEDIAN_DE2000=3.0
+READBACK_PIXEL_BUDGET=1<<17  # predicted pixels per readback frame (tetrahedral numpy: about 0.2 s)
+MIN_READBACK_BLOCK=8  # noise averages over at least 8x8 pixels whatever the resolution
 
 
 def _layers(value,frames):
@@ -55,6 +57,31 @@ def _rgb_frames(path,indices,width,height,rng,tools):
     return [raw[k*size:(k+1)*size] for k in range(len(indices))]
 
 
+def _block_grid(width,height):
+    """Blocks of b x b pixels (b = width / READBACK_WIDTH rounded up, at least 8) on an even sub-grid within the pixel budget."""
+    block=max(1,min(max(MIN_READBACK_BLOCK,-(-width//READBACK_WIDTH)),width,height))
+    across,down=width//block,height//block
+    stride=max(1,math.ceil(math.sqrt(across*down*block*block/READBACK_PIXEL_BUDGET)))
+    return block,stride,list(range(stride//2,down,stride)),list(range(stride//2,across,stride))
+
+
+def _rgb_stream(path,indices,width,height,rng,tools,label):
+    """Decode exact frame numbers to full-resolution, full-range rgb24 arrays (height, width, 3), one at a time."""
+    from color_numerics import numpy
+    from texture_ops import stream_raw_frames
+    np=numpy()
+    picks='+'.join('eq(n,%d)'%i for i in indices)  # single quotes protect the commas
+    vf=f"select='{picks}',scale=in_color_matrix=bt709:in_range={rng}:out_range=pc,format=rgb24"
+    command=[tools.binary('ffmpeg'),'-nostdin','-v','error','-i',str(path),'-map','0:v:0','-vf',vf,
+             '-fps_mode','passthrough','-f','rawvideo','-pix_fmt','rgb24']
+    raws=stream_raw_frames(command,len(indices),width*height*3,label,('COLOR_READBACK_DECODE_FAILED','COLOR_READBACK_DECODE_INCOMPLETE'))
+    try:
+        for raw in raws:
+            yield np.frombuffer(raw,dtype=np.uint8).reshape(height,width,3)
+    finally:
+        raws.close()
+
+
 def _readback(source_path,output_path,layers,frames,video,color,method,tools):
     """Compare decoded output frames with the numpy prediction of the active layers on the source frame."""
     from editing_runtime import require
@@ -74,27 +101,43 @@ def _readback(source_path,output_path,layers,frames,video,color,method,tools):
         step=len(wanted)/(MAX_READBACK_FRAMES-len(gaps))
         wanted=sorted({wanted[int(k*step)] for k in range(MAX_READBACK_FRAMES-len(gaps))}|{wanted[0],wanted[-1]})
     indices=sorted(set(wanted)|set(gaps))
-    width=READBACK_WIDTH if video['width']>=READBACK_WIDTH else video['width']
-    height=max(2,round(width*video['height']/video['width']/2)*2)
+    width,height=int(video['width']),int(video['height'])
+    block,stride,down,across=_block_grid(width,height)
     rng='tv' if color['range']=='limited' else 'pc'
-    before=_rgb_frames(source_path,indices,width,height,rng,tools)
-    after=_rgb_frames(output_path,indices,width,height,'tv',tools)
     transfer=SPACE_EOTF[color['space']]
+
+    def tiles(frame):  # (blocks, block*block pixels, 3) code values in [0,1]
+        grid=frame[:(height//block)*block,:(width//block)*block].reshape(height//block,block,width//block,block,3)
+        return grid[down][:,:,across].transpose(0,2,1,3,4).reshape(-1,block*block,3)/255.0
+
+    # Each pixel is predicted (a nonlinear LUT does not commute with averaging); prediction and output are
+    # then compared as block means, so sensor noise that the output encode smooths is not counted.
+    sources=_rgb_stream(source_path,indices,width,height,rng,tools,'readback source decode')
+    outputs=_rgb_stream(output_path,indices,width,height,'tv',tools,'readback output decode')
     rows=[]
-    for f,src,out in zip(indices,before,after):
-        x=np.frombuffer(src,dtype=np.uint8).reshape(-1,3)/255.0
-        y=np.frombuffer(out,dtype=np.uint8).reshape(-1,3)/255.0
-        predicted=x
-        active=[li for li,layer in enumerate(layers) if any(a<=f<b for a,b in layer['ranges'])]
-        for li in active:  # the stored table already includes the layer strength
-            predicted=np.clip(interpolate(layers[li]['table'],predicted,method),0,1)
-        de=ciede2000(lab_from_rgb01(predicted,transfer)[0],lab_from_rgb01(y,transfer)[0])
-        median=float(np.median(de))
-        rows.append({'frame':f,'active_layers':active,'delta_e2000_median':round(median,3),
-                     'delta_e2000_p95':round(float(np.percentile(de,95)),3)})
-        require(median<=READBACK_MAX_MEDIAN_DE2000,'COLOR_LAYER_READBACK_MISMATCH: frame %d'%f)
-    return {'method':'point-sampled decoded output pixels vs numpy %s prediction of the active layers on the same source pixels'%method,
-            'analysis_size':[width,height],'max_median_delta_e2000':READBACK_MAX_MEDIAN_DE2000,'frames':rows,
+    try:
+        for f in indices:
+            x,y=tiles(next(sources)),tiles(next(outputs)).mean(axis=1)
+            predicted=x.reshape(-1,3)
+            active=[li for li,layer in enumerate(layers) if any(a<=f<b for a,b in layer['ranges'])]
+            for li in active:  # the stored table already includes the layer strength
+                predicted=np.clip(interpolate(layers[li]['table'],predicted,method),0,1)
+            predicted=predicted.reshape(x.shape).mean(axis=1)
+            de=ciede2000(lab_from_rgb01(predicted,transfer)[0],lab_from_rgb01(y,transfer)[0])
+            median=float(np.median(de))
+            rows.append({'frame':f,'active_layers':active,'delta_e2000_median':round(median,3),
+                         'delta_e2000_p95':round(float(np.percentile(de,95)),3)})
+            require(median<=READBACK_MAX_MEDIAN_DE2000,'COLOR_LAYER_READBACK_MISMATCH: frame %d'%f)
+        for stream in (sources,outputs):  # runs each decode's completion and exit-status checks
+            require(next(stream,None) is None,'COLOR_READBACK_DECODE_INCOMPLETE: extra frames')
+    finally:
+        sources.close();outputs.close()
+    return {'method':'numpy %s prediction of the active layers on every pixel of the sampled source blocks vs the decoded '
+                     'output, compared as %dx%d block means'%(method,block,block),
+            'block':block,'block_stride':stride,'blocks_per_frame':len(down)*len(across),
+            'max_median_delta_e2000':READBACK_MAX_MEDIAN_DE2000,'frames':rows,
+            'sampling':'full-resolution decode; every %d-th block in each direction, at most %d predicted pixels per frame'
+                       %(stride,READBACK_PIXEL_BUDGET),
             'coverage':'middle frame of each range (capped at %d) plus one frame outside every range'%MAX_READBACK_FRAMES}
 
 def validate_cube(path):

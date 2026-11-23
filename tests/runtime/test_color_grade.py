@@ -596,7 +596,49 @@ def test_readback_grades_unaveraged_pixels_of_wide_fine_detail(tmp_path):
     up.write_text(cn.cube_text(np.clip(cn.identity_table(33) ** 2.4 * 4, 0, 1) ** (1 / 2.4), 'up2'), encoding='utf-8')
     receipt = lut_apply(tmp_path, video, None, 'stripes', layers=[{'lut': ref(up), 'ranges': [[0, 25]]}])
     assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
-    assert receipt['result']['readback']['analysis_size'][0] == 256
+    readback = receipt['result']['readback']  # each pixel predicted, then 8x8 block means compared
+    assert readback['block'] == 8 and readback['block_stride'] == 1 and readback['blocks_per_frame'] == 64 * 8
+
+
+def _noisy_sdr(tmp_path, sigma=8, width=1024, height=288, frames=24):
+    """A warm gradient with per-pixel noise that changes every frame, like a low-light sensor's."""
+    import subprocess
+    rng = np.random.default_rng(3)
+    base = np.linspace(0.15, 0.85, width)[None, :, None] * np.ones((height, 1, 3)) * np.array([1.0, 0.9, 0.8])
+    raw = b''.join((np.clip(base + rng.normal(0, sigma / 255, base.shape), 0, 1) * 255 + 0.5).astype(np.uint8).tobytes()
+                   for _ in range(frames))
+    out = tmp_path / 'noisy.mp4'
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{width}x{height}', '-r', '24',
+                    '-i', '-', '-vf', 'scale=out_color_matrix=bt709:out_range=tv,format=yuv420p,'
+                    'setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv', '-c:v', 'libx264', '-crf', '12',
+                    '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709', '-color_range', 'tv', str(out)],
+                   input=raw, check=True, timeout=120)
+    return out
+
+
+def _warm_cube(tmp_path):
+    cube = tmp_path / 'warm.cube'
+    cube.write_text(cn.cube_text(np.clip(cn.identity_table(33) * np.array([1.08, 1.0, 0.9]) + [0.01, 0, -0.01], 0, 1), 'warm'),
+                    encoding='utf-8')
+    return cube
+
+
+@needs_media
+def test_layer_readback_compares_block_means_so_sensor_noise_is_not_counted(tmp_path):
+    receipt = lut_apply(tmp_path, _noisy_sdr(tmp_path), None, 'noisy', layers=[{'lut': ref(_warm_cube(tmp_path)), 'ranges': [[0, 12]]}])
+    assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
+    readback = receipt['result']['readback']
+    # Point-sampled single pixels measured above the gate of 3 here: the output encode smooths the noise.
+    assert readback['block'] == 8 and all(row['delta_e2000_median'] < 1.5 for row in readback['frames'])
+
+
+@needs_media
+def test_layer_readback_still_catches_a_wrong_render(tmp_path, monkeypatch):
+    import color_numerics
+    interpolate = color_numerics.interpolate
+    monkeypatch.setattr(color_numerics, 'interpolate', lambda *a, **k: interpolate(*a, **k) * 0.85)  # predict 15% darker
+    receipt = lut_apply(tmp_path, _noisy_sdr(tmp_path), None, 'wrong', layers=[{'lut': ref(_warm_cube(tmp_path)), 'ranges': [[0, 12]]}])
+    assert receipt['status'] == 'FAILED' and 'COLOR_LAYER_READBACK_MISMATCH' in receipt['error'], receipt.get('error')
 
 
 @pytest.mark.parametrize('change,error', [
