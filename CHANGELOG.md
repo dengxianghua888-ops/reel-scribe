@@ -42,6 +42,7 @@
   - 色彩层 C4c：作品 `color` 段新增可选 `texture`（胶片质感参数），`work-render` 在调色门禁之后、混音、叠层和字幕之前对整个画面施加，读回帧取至多 4 个片段的中间帧；所有片段须声明同一种色彩解释。新增范围键 `color_texture`，影响分析新增阶段 `film-texture` 与分类 `color-texture`，带质感时重新调色也会重做质感。时间线没有传递函数标签时，若所有片段声明了同一种解释，调色步骤按该解释套用并写入对应标签（此前一律按 BT.709）。
   - 色彩层 C4d：新原子 `color-log-transform`，按调用者声明的相机 Log 色彩空间、码值范围和 YUV 矩阵，经带版本号的 OpenColorIO 内置配置与显式选择的显示、视图转换为 BT.709 或 sRGB SDR，报告烘焙误差、读回误差和超出码值或显示范围的比例。依赖诊断新增 `opencolorio` 包，CI 安装 `opencolorio==2.6.0`。
   - `color-log-transform` 新增两种转换来源：按哈希绑定的 `.ocioz` 归档（配置与其 LUT 同在一个文件；普通 `.ocio` 文件仍拒绝），以及调用方提供的厂商 Log 转显示 3D `.cube`（不需要 OCIO，依赖诊断按模式去掉 `opencolorio`）。实现中发现 OCIO 在进程内按归档内路径缓存 LUT 文件，两个归档里同名而内容不同的 LUT 会共用先读到的数据；现在先把归档复制到私有目录并核对哈希，在锁内清空缓存后建立处理器。
+  - `color-lut-apply` 分层模式（作品渲染调色）的读回改为在全分辨率逐像素预测、按块平均后比较，块边长至少 8，每帧最多预测 131072 个像素；回执的 `analysis_size` 换成 `block`、`block_stride`、`blocks_per_frame`。原先逐点比较时，一层恒等 LUT 在噪声 σ 为 8/255 的画面上就会超过门禁、中止作品渲染；ARRI 相机片段的读回由 1.32–1.40 降为 0.57–0.60。`color-log-transform` 的块边长同样至少为 8。两处的解码改用同一个带看门狗的逐帧流式读取。
   - `color-log-transform` 的读回改为在全分辨率逐像素预测后按块平均比较（1080p 为 8×8），回执新增 `readback.block`。ARRI 相机写出的 Log C 片段在逐点比较下因传感器噪声被误判失败（2.2–3.0），改后为 0.45–0.52；整体偏暗 15% 的渲染仍被拒绝。真实内容记录新增第三部分：ARRI AMIRA ProRes 4444 Log C 样片，以及用 ARRI 官方 LUT 与相机自己的 Rec 709 输出的对照。
   - 相机 Log 真实内容记录新增第二部分：《Sparks》真实拍摄的 ACES 场景数据编码成 Apple Log 与 S-Log3 后转换，并记录视频范围文件误声明为全范围时回执无法发现的情况。
   - Blender 剪切读回新增 `--grades-output`、`--interpretation`：显式要求时，画面条带上的单个 Color Balance 按调色桥的读取规则读成调色文件，记录宿主与包摘要，与 OTIO 一起发布；默认仍拒绝任何修饰器，其他修饰器照旧拒绝。

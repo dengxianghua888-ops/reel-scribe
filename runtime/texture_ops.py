@@ -222,6 +222,39 @@ def _tail(log):
     return log.read().decode('utf-8', 'replace')[-2000:]
 
 
+def stream_raw_frames(command, count, frame_bytes, label, codes):
+    """Yield `count` raw frames of `frame_bytes` from an FFmpeg command writing rawvideo to stdout.
+
+    `command` ends before the output; the progress report and '-' are appended. The decode runs under
+    the watchdog (cancellation and progress), and frames are read as they arrive, so memory holds one
+    frame. After the last frame, a further next() checks that nothing follows and that FFmpeg succeeded.
+    `codes` is (failed, incomplete), the error codes to raise.
+    """
+    import subprocess
+    import tempfile
+    from editing_runtime import require
+    failed, incomplete = codes
+    with tempfile.TemporaryFile() as log, tempfile.NamedTemporaryFile(suffix='.progress') as progress:
+        process = _spawn(command + ['-progress', progress.name, '-'], log, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE)
+        watchdog = _Watchdog([process], label, activity=lambda: _size(progress.name))
+        try:
+            for _ in range(count):
+                raw = process.stdout.read(frame_bytes)
+                watchdog.check()
+                require(len(raw) == frame_bytes, '%s: %s' % (incomplete, label))
+                yield raw
+            require(not process.stdout.read(1), '%s: %s' % (incomplete, label))
+            process.wait()
+            watchdog.check()
+        finally:
+            watchdog.stop()
+            process.stdout.close()
+            if process.poll() is None:
+                _kill(process)
+                process.wait()
+        require(process.returncode == 0, '%s: %s' % (failed, _tail(log)))
+
+
 def _frames(path, indices, width, height, rng, tools, pix_fmt='rgb48le'):
     import subprocess
     import tempfile

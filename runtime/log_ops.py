@@ -27,6 +27,7 @@ LUT_SIZES = (33, 65)
 OUTPUT_FORMATS = ('yuv420p', 'yuv420p10le')
 MAX_SAMPLE_FRAMES = 8
 ANALYSIS_WIDTH = 256
+MIN_READBACK_BLOCK = 8  # noise averages over at least 8x8 pixels whatever the resolution
 BAKE_POINTS = 4096
 READBACK_MAX_MEDIAN_DE2000 = 2.0
 WARN_FRACTION = 0.01
@@ -148,37 +149,21 @@ def _stream_frames(path, frames, matrix, rng, width, height, tools, label):
     The decode runs under the texture pipeline's watchdog (cancellation and progress); frames are read
     from the pipe as they arrive, so memory holds one frame, not all of them.
     """
-    import subprocess
-    import tempfile
-    from editing_runtime import require
     from color_numerics import numpy
-    from texture_ops import _spawn, _Watchdog, _size, _tail
+    from texture_ops import stream_raw_frames
     np = numpy()
     picks = '+'.join('eq(n,%d)' % f for f in frames)
     vf = f"select='{picks}',zscale=matrixin={matrix}:rangein={rng}:range=full,format=gbrpf32le"
-    frame_bytes = width * height * 3 * 4
-    with tempfile.TemporaryFile() as log, tempfile.NamedTemporaryFile(suffix='.progress') as progress:
-        command = [tools.binary('ffmpeg'), '-nostdin', '-v', 'error', '-i', str(path), '-map', '0:v:0', '-vf', vf,
-                   '-fps_mode', 'passthrough', '-f', 'rawvideo', '-pix_fmt', 'gbrpf32le', '-progress', progress.name, '-']
-        process = _spawn(command, log, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE)
-        watchdog = _Watchdog([process], label, activity=lambda: _size(progress.name))
-        try:
-            for _ in frames:
-                raw = process.stdout.read(frame_bytes)
-                watchdog.check()
-                require(len(raw) == frame_bytes, 'COLOR_LOG_DECODE_INCOMPLETE: %s' % label)
-                g, b, r = np.frombuffer(raw, dtype='<f4').reshape(3, height, width)  # planar G, B, R
-                yield np.stack([r, g, b], axis=-1)
-            require(not process.stdout.read(1), 'COLOR_LOG_DECODE_INCOMPLETE: %s' % label)
-            process.wait()
-            watchdog.check()
-        finally:
-            watchdog.stop()
-            process.stdout.close()
-            if process.poll() is None:
-                process.kill()
-                process.wait()
-        require(process.returncode == 0, 'COLOR_LOG_DECODE_FAILED: ' + _tail(log))
+    command = [tools.binary('ffmpeg'), '-nostdin', '-v', 'error', '-i', str(path), '-map', '0:v:0', '-vf', vf,
+               '-fps_mode', 'passthrough', '-f', 'rawvideo', '-pix_fmt', 'gbrpf32le']
+    raws = stream_raw_frames(command, len(frames), width * height * 3 * 4, label,
+                             ('COLOR_LOG_DECODE_FAILED', 'COLOR_LOG_DECODE_INCOMPLETE'))
+    try:
+        for raw in raws:
+            g, b, r = np.frombuffer(raw, dtype='<f4').reshape(3, height, width)  # planar G, B, R
+            yield np.stack([r, g, b], axis=-1)
+    finally:
+        raws.close()
 
 
 def _block_means(rgb, block):
@@ -272,7 +257,7 @@ def transform(request, directory, tools):
     # that, not the transform. Each pixel is predicted at full resolution and the prediction and the output
     # are compared as block means. Source statistics use the block-centre pixels.
     full_w, full_h = int(video['width']), int(video['height'])
-    block = max(1, -(-full_w // ANALYSIS_WIDTH))
+    block = max(1, min(max(MIN_READBACK_BLOCK, -(-full_w // ANALYSIS_WIDTH)), full_w, full_h))
 
     def predict(values):
         values = np.clip(values, 0.0, 1.0)  # the cube's domain is [0,1]: the render saw clipped code values

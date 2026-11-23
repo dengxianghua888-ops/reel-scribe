@@ -382,8 +382,8 @@ def test_readback_compares_block_means_so_sensor_noise_is_not_counted(tmp_path):
     assert receipt['status'] == 'SUCCEEDED', receipt.get('error')
     readback = receipt['result']['readback']
     # Per-pixel comparison measured about 3.1 here (above the gate of 2): the output encode smooths the noise.
-    assert readback['block'] == 4 and readback['delta_e2000_median'] < 1.5
-    assert receipt['result']['measured_source']['basis'].endswith('the centre pixel of every 4x4 block')
+    assert readback['block'] == 8 and readback['delta_e2000_median'] < 1.5  # 1024 wide: the 8x8 minimum
+    assert receipt['result']['measured_source']['basis'].endswith('the centre pixel of every 8x8 block')
 
 
 def test_readback_still_catches_a_wrong_render(tmp_path, monkeypatch):
