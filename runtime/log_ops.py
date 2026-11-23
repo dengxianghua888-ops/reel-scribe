@@ -142,40 +142,49 @@ def _validate_stream(video, declared):
     return {'pix_fmt': pix_fmt, 'observed_tags': observed}, warnings
 
 
-def _run_raw(command, expected, label):
-    """Run an FFmpeg decode to stdout under the texture pipeline's watchdog (cancellation and progress)."""
+def _stream_frames(path, frames, matrix, rng, width, height, tools, label):
+    """Sampled frames as unclipped full-resolution float RGB (height, width, 3), one at a time.
+
+    The decode runs under the texture pipeline's watchdog (cancellation and progress); frames are read
+    from the pipe as they arrive, so memory holds one frame, not all of them.
+    """
     import subprocess
     import tempfile
     from editing_runtime import require
+    from color_numerics import numpy
     from texture_ops import _spawn, _Watchdog, _size, _tail
+    np = numpy()
+    picks = '+'.join('eq(n,%d)' % f for f in frames)
+    vf = f"select='{picks}',zscale=matrixin={matrix}:rangein={rng}:range=full,format=gbrpf32le"
+    frame_bytes = width * height * 3 * 4
     with tempfile.TemporaryFile() as log, tempfile.NamedTemporaryFile(suffix='.progress') as progress:
-        command = command[:-1] + ['-progress', progress.name, command[-1]]
+        command = [tools.binary('ffmpeg'), '-nostdin', '-v', 'error', '-i', str(path), '-map', '0:v:0', '-vf', vf,
+                   '-fps_mode', 'passthrough', '-f', 'rawvideo', '-pix_fmt', 'gbrpf32le', '-progress', progress.name, '-']
         process = _spawn(command, log, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE)
         watchdog = _Watchdog([process], label, activity=lambda: _size(progress.name))
         try:
-            raw = process.stdout.read()
+            for _ in frames:
+                raw = process.stdout.read(frame_bytes)
+                watchdog.check()
+                require(len(raw) == frame_bytes, 'COLOR_LOG_DECODE_INCOMPLETE: %s' % label)
+                g, b, r = np.frombuffer(raw, dtype='<f4').reshape(3, height, width)  # planar G, B, R
+                yield np.stack([r, g, b], axis=-1)
+            require(not process.stdout.read(1), 'COLOR_LOG_DECODE_INCOMPLETE: %s' % label)
             process.wait()
             watchdog.check()
         finally:
             watchdog.stop()
             process.stdout.close()
+            if process.poll() is None:
+                process.kill()
+                process.wait()
         require(process.returncode == 0, 'COLOR_LOG_DECODE_FAILED: ' + _tail(log))
-    require(len(raw) == expected, 'COLOR_LOG_DECODE_INCOMPLETE: %s' % label)
-    return raw
 
 
-def _frames(path, frames, matrix, rng, width, height, tools, label):
-    """Sampled frames as unclipped float RGB, converted at full resolution, then point-sampled."""
-    from color_numerics import numpy
-    np = numpy()
-    picks = '+'.join('eq(n,%d)' % f for f in frames)
-    vf = (f"select='{picks}',zscale=matrixin={matrix}:rangein={rng}:range=full,format=gbrpf32le,"
-          f"zscale=w={width}:h={height}:filter=point,format=gbrpf32le")
-    raw = _run_raw([tools.binary('ffmpeg'), '-nostdin', '-v', 'error', '-i', str(path), '-map', '0:v:0', '-vf', vf,
-                    '-fps_mode', 'passthrough', '-f', 'rawvideo', '-pix_fmt', 'gbrpf32le', '-'],
-                   width * height * 3 * 4 * len(frames), label)
-    planes = np.frombuffer(raw, dtype='<f4').reshape(len(frames), 3, width * height)  # planar G, B, R
-    return np.stack([planes[:, 2], planes[:, 0], planes[:, 1]], axis=-1).reshape(-1, 3).astype(np.float64)
+def _block_means(rgb, block):
+    """Mean over block x block tiles; a partial last row or column of tiles is dropped."""
+    h, w = (rgb.shape[0] // block) * block, (rgb.shape[1] // block) * block
+    return rgb[:h, :w].reshape(h // block, block, w // block, block, 3).mean(axis=(1, 3))
 
 
 def _bake(cpu, size, transfer):
@@ -259,22 +268,48 @@ def transform(request, directory, tools):
             'COLOR_LOG_OUTPUT_TAGS_UNEXPECTED: %s' % tags)
     out_frames = len(frame_clock(str(output), tools))
     require(out_frames == len(clock), 'COLOR_LOG_FRAME_COUNT_CHANGED: %d -> %d' % (len(clock), out_frames))
-    width = min(ANALYSIS_WIDTH, int(video['width']))
-    height = max(2, round(width * int(video['height']) / int(video['width']) / 2) * 2)
-    codes = _frames(asset['path'], frames, matrix, rng, width, height, tools, 'source readback decode')
-    decoded = _frames(str(output), frames, '709', 'limited', width, height, tools, 'output readback decode')
-    # The cube's domain is [0,1]: the rendered picture saw clipped code values, so the prediction does too.
-    if mode == 'ocio':
-        exact = apply_exact(cpu, np.clip(codes, 0.0, 1.0))
-    else:
+    # Real footage carries sensor noise that the output encode smooths; per-pixel comparison would measure
+    # that, not the transform. Each pixel is predicted at full resolution and the prediction and the output
+    # are compared as block means. Source statistics use the block-centre pixels.
+    full_w, full_h = int(video['width']), int(video['height'])
+    block = max(1, -(-full_w // ANALYSIS_WIDTH))
+
+    def predict(values):
+        values = np.clip(values, 0.0, 1.0)  # the cube's domain is [0,1]: the render saw clipped code values
+        if mode == 'ocio':
+            return apply_exact(cpu, values)
         from color_numerics import interpolate
-        exact = interpolate(vendor_table, np.clip(codes, 0.0, 1.0), 'tetrahedral')
-    predicted = np.clip(exact, 0.0, 1.0)
-    delta = ciede2000(lab_from_rgb01(predicted, transfer)[0], lab_from_rgb01(np.clip(decoded, 0.0, 1.0), transfer)[0])
+        return interpolate(vendor_table, values, 'tetrahedral')
+
+    band = block * max(1, (1 << 21) // (full_w * block))  # about 2M pixels per prediction band
+    samples, predicted_means, output_means = [], [], []
+    sources = _stream_frames(asset['path'], frames, matrix, rng, full_w, full_h, tools, 'source readback decode')
+    outputs = _stream_frames(str(output), frames, '709', 'limited', full_w, full_h, tools, 'output readback decode')
+    try:
+        for _ in frames:
+            src, out = next(sources), next(outputs)
+            rows = []
+            for top in range(0, (full_h // block) * block, band):
+                part = src[top:top + band, :(full_w // block) * block]
+                rows.append(_block_means(np.clip(predict(part.reshape(-1, 3)).reshape(part.shape), 0.0, 1.0), block))
+            predicted_means.append(np.concatenate(rows).reshape(-1, 3))
+            output_means.append(_block_means(np.clip(out, 0.0, 1.0), block).reshape(-1, 3))
+            samples.append(src[block // 2::block, block // 2::block].reshape(-1, 3).astype(np.float64))
+        for stream_ in (sources, outputs):  # runs each decode's completion and exit-status checks
+            require(next(stream_, None) is None, 'COLOR_LOG_DECODE_INCOMPLETE: extra frames')
+    finally:
+        sources.close()
+        outputs.close()
+    codes = np.concatenate(samples)
+    exact = predict(codes) if mode == 'ocio' else None
+    delta = ciede2000(lab_from_rgb01(np.concatenate(predicted_means), transfer)[0],
+                      lab_from_rgb01(np.concatenate(output_means), transfer)[0])
+    clipped = 0.0 if exact is None else np.mean((exact < -1e-4).any(axis=1) | (exact > 1 + 1e-4).any(axis=1))
     measured = {'code_values_outside_0_1_fraction': _r(np.mean((codes < -0.002).any(axis=1) | (codes > 1.002).any(axis=1)), 6),
                 'code_value_p001': _r(np.percentile(codes, 0.1)), 'code_value_p999': _r(np.percentile(codes, 99.9)),
-                'display_clipped_fraction': _r(np.mean((exact < -1e-4).any(axis=1) | (exact > 1 + 1e-4).any(axis=1)), 6),
-                'basis': 'sampled frames, decoded with the declared matrix and code values, point-sampled at %dx%d' % (width, height)}
+                'display_clipped_fraction': _r(clipped, 6),
+                'basis': 'sampled frames, decoded at full resolution with the declared matrix and code values; '
+                         'the centre pixel of every %dx%d block' % (block, block)}
     if measured['code_values_outside_0_1_fraction'] > WARN_FRACTION:
         warnings.append('%.2f%% of sampled code values fall outside [0,1]: check code_values (full or video)'
                         % (100 * measured['code_values_outside_0_1_fraction']))
@@ -282,9 +317,10 @@ def transform(request, directory, tools):
         warnings.append('%.2f%% of sampled pixels fall outside the display range for view %s and are clipped'
                         % (100 * measured['display_clipped_fraction'], request['ocio']['view']))  # never in lut mode
     readback = {'frames': frames, 'delta_e2000_median': _r(np.median(delta)), 'delta_e2000_p95': _r(np.percentile(delta, 95)),
-                'max_median_delta_e2000': READBACK_MAX_MEDIAN_DE2000,
+                'max_median_delta_e2000': READBACK_MAX_MEDIAN_DE2000, 'block': block,
                 'basis': ('exact OCIO processor' if mode == 'ocio' else 'tetrahedral interpolation of the vendor cube')
-                         + ' on the decoded source frames vs the decoded output, clipped to [0,1]'}
+                         + ' on every pixel of the decoded source frames, clipped to [0,1], vs the decoded output; '
+                         'compared as means of %dx%d blocks so encoder noise smoothing is not counted' % (block, block)}
     require(readback['delta_e2000_median'] <= READBACK_MAX_MEDIAN_DE2000, 'COLOR_LOG_READBACK_MISMATCH: %.3f' % readback['delta_e2000_median'])
     source(request['source'])  # bytes must still match after decoding
     cube = directory / 'log.cube'
