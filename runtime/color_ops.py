@@ -62,7 +62,8 @@ def _block_grid(width,height):
     block=max(1,min(max(MIN_READBACK_BLOCK,-(-width//READBACK_WIDTH)),width,height))
     across,down=width//block,height//block
     stride=max(1,math.ceil(math.sqrt(across*down*block*block/READBACK_PIXEL_BUDGET)))
-    return block,stride,list(range(stride//2,down,stride)),list(range(stride//2,across,stride))
+    # The offset centres the sub-grid but never skips every block on a short axis (e.g. 8192x32).
+    return block,stride,list(range(min(stride//2,down-1),down,stride)),list(range(min(stride//2,across-1),across,stride))
 
 
 def _rgb_stream(path,indices,width,height,rng,tools,label):

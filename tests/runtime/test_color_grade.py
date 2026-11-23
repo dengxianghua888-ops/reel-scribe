@@ -662,3 +662,11 @@ def test_layer_validation(tmp_path, change, error):
     change(request)
     receipt = rt.run(request, tmp_path / 'run', rt.Tools())
     assert receipt['status'] == 'FAILED' and error in receipt['error']
+
+
+@pytest.mark.parametrize('size', [(8192, 32), (4096, 16), (1920, 1080), (64, 8), (8, 8)])
+def test_readback_block_grid_is_never_empty(size):
+    import color_ops
+    block, stride, rows, cols = color_ops._block_grid(*size)
+    assert rows and cols and rows[-1] < size[1] // block and cols[-1] < size[0] // block
+    assert len(rows) * len(cols) * block * block <= max(color_ops.READBACK_PIXEL_BUDGET, block * block)
