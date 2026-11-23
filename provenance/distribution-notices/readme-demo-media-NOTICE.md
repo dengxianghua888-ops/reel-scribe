@@ -1,6 +1,6 @@
 # 首页演示素材来源
 
-`docs/assets/readme/` 中的演示图片与视频（`banner.jpg`、`workflow.jpg`、`grade.jpg`、`texture.jpg`、`log.jpg`、`look.jpg`、`captions.jpg`、`showcase.webp`、`showcase.mp4`）使用以下素材制作。
+`docs/assets/readme/` 中的演示图片与视频（`banner.jpg`、`workflow.jpg`、`grade.jpg`、`texture.jpg`、`log.jpg`、`look.jpg`、`captions.jpg`、`showcase.webp`、`showcase.mp4`）使用以下素材制作；`docs/assets/readme/en/` 中是同样内容的英文标注版本。
 
 ## 画面
 

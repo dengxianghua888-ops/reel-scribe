@@ -11,6 +11,8 @@
 [![MCP](https://img.shields.io/badge/MCP-stdio-6f42c1)](docs/local-setup.md)
 [![M8ven Score](https://m8ven.ai/badge/mcp/dengxianghua888-ops-douyin-film-recap-vpiziq?v=cba82ac0fa1d95c3c8c2b6d37a6390ec)](https://m8ven.ai/mcp/dengxianghua888-ops-douyin-film-recap-vpiziq?s=readme)
 
+**简体中文** · [English](README.en.md)
+
 [快速开始](#-快速开始) · [效果展示](#-效果展示) · [场景工作流](#-覆盖的剪辑场景) · [能力一览](#-能力一览) · [影视解说](workflows/raven-film-recap/SKILL.md)
 
 ![演示：中文字幕、一句话调色、胶片质感、相机 Log 还原、统一影调](https://raw.githubusercontent.com/dengxianghua888-ops/reel-scribe/main/docs/assets/readme/showcase.webp)
