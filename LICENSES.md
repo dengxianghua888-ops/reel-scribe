@@ -11,6 +11,7 @@
 - [AISHELL 材料](provenance/distribution-notices/aishell4-NOTICE.md)：对应材料按 CC BY-SA 4.0 处理，不能扩大到整库。
 - [W12 材料](provenance/distribution-notices/w12-source-use-20260926-NOTICE.md)与[中文节奏材料](provenance/distribution-notices/w12-chinese-pacing-NOTICE.md)。
 - [历史代码摘录的 MIT 全文](provenance/distribution-notices/coscup-planetoid-MIT.txt)，仅覆盖相应来源范围。
+- [首页演示素材](provenance/distribution-notices/readme-demo-media-NOTICE.md)：基于 Netflix《Sparks》（CC BY 4.0）制作，含署名与改动说明。
 
 来源通知包含历史成员信息；未分发的媒体、上游全文、字体或代码不因存在通知而进入本次仓库。作者、来源、固定版本、适用许可与改动说明保留在 `provenance/`。个人归档路径经过处理，原历史覆盖哈希不充当公开文档的新字节证明。
 

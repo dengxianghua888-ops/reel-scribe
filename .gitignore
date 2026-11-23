@@ -13,5 +13,7 @@ outputs/
 dist/
 build/
 *.mp4
+!docs/assets/readme/showcase.mp4
+!docs/assets/readme/en/showcase.mp4
 *.wav
 *.mp3

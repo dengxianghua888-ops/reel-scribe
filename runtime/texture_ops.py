@@ -318,7 +318,8 @@ def texture(request, directory, tools):
     require(width % 2 == 0 and height % 2 == 0, 'TEXTURE_EVEN_DIMENSIONS_REQUIRED')
     # Raw frames carry no sample aspect ratio; the encoder gets it back explicitly.
     sar = _sar(video.get('sample_aspect_ratio'))
-    setsar = f'setsar={sar.numerator}/{sar.denominator},' if sar is not None else ''
+    # setsar reduces the ratio to terms <= 100 by default (2024:2025 became 1:1); keep it exact.
+    setsar = f'setsar=r={sar.numerator}/{sar.denominator}:max={max(sar.numerator, sar.denominator)},' if sar is not None else ''
     output = directory / 'textured.mp4'
     decode_command = [tools.binary('ffmpeg'), '-nostdin', '-v', 'error', '-i', asset['path'], '-map', '0:v:0', '-vf',
                       f'scale=in_color_matrix=bt709:in_range=tv:out_range=pc:flags={SWS_FLAGS},format=rgb48le',
