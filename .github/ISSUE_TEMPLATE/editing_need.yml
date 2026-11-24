@@ -1,0 +1,21 @@
+name: 剪辑需求或新功能 / Editing need or feature
+description: 想让 Agent 剪出某种效果，或希望支持新的场景、相机、编辑器 / Something you'd like your agent to edit, or a scenario, camera or editor to support
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: 你想做什么 / What you want to make
+      description: 素材类型、目标平台和时长、想要的效果 / Footage, target platform and length, the result you want
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: 现在卡在哪里 / Where it falls short today
+      description: 现有工作流或操作缺了什么 / What the current workflows or operations are missing
+  - type: textarea
+    id: example
+    attributes:
+      label: 参考或示例 / References
+      description: 参考视频、截图或你会怎么对 Agent 说 / Reference videos, screenshots, or how you'd phrase it to the agent

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 本地接入说明 / Local setup
+    url: https://github.com/dengxianghua888-ops/reel-scribe/blob/main/docs/local-setup.md
+    about: 安装依赖、配置 MCP 和本地执行器 / Dependencies, MCP and the local executor
+  - name: English homepage
+    url: https://github.com/dengxianghua888-ops/reel-scribe/blob/main/README.en.md
+    about: Overview, demos and quick start in English
