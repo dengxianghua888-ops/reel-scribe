@@ -1,23 +1,24 @@
 {
   "name": "editing-skill-library",
   "version": "0.1.0",
-  "description": "实验性源码预览：供 AI Agent 使用的通用视频剪辑工作流与可选本地工具接口，客户端安装及完整作品链尚未验收。",
+  "description": "影述 Reel Scribe：给 AI Agent 的视频剪辑技能库。17 条场景工作流与 52 个原子操作，覆盖素材理解、剪辑方案、调色、字幕、声音和局部修改。",
   "author": {
     "name": "Editing Skill Library Project"
   },
   "skills": "./skills/",
   "interface": {
-    "displayName": "剪辑技能库",
-    "shortDescription": "实验性剪辑工作流与本地工具接口",
-    "longDescription": "提供口播、影视解说、教程、访谈与 Vlog 等工作流定义；运行 Agent 选择工具和模型。可选本地 stdio MCP 只列举技能、诊断依赖及执行明确的原子请求，不自动完成全部工作流。客户端安装、编辑器兼容与完整作品修改链尚未验收；依赖限制见 docs/local-setup.md。",
-    "developerName": "剪辑技能库项目",
+    "displayName": "影述 · 剪辑技能库",
+    "shortDescription": "让 AI Agent 像剪辑师一样剪视频",
+    "longDescription": "口播、影视解说、教程、访谈、Vlog 等 17 条场景工作流，告诉 Agent 每类内容该怎么剪；52 个原子操作负责素材检查、字幕、声音、调色（一句话调色、胶片质感、相机 Log 与 HDR 转换）和作品版本。本地 stdio MCP 提供 list_skills、diagnose_installation 和 run_operation：列出技能、检查依赖、执行单次原子操作，由 Agent 按工作流编排。依赖与配置见 docs/local-setup.md。",
+    "developerName": "影述 Reel Scribe",
     "category": "Productivity",
     "capabilities": [
       "Interactive",
       "Write"
     ],
     "defaultPrompt": [
-      "根据我的素材和目标，选择适合的剪辑 Skill 并制定方案。",
+      "根据我的素材和目标，选择适合的剪辑工作流并给出方案。",
+      "把这段素材调暖一点、加上中文字幕，最后一个镜头别动。",
       "检查当前任务所需的本地剪辑工具与依赖。"
     ]
   },

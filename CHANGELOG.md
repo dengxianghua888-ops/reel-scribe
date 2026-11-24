@@ -4,6 +4,8 @@
 
 组件版本（含义见[构建与验证](docs/packaging.md#版本号的含义)）：runtime `0.17.0-dev`、MCP/插件 `0.1.0`、影视包 `0.3.0`。
 
+- 首页改版：中文首页重写，新增[英文首页](README.en.md)、20 秒演示（动图与高清 MP4）、“说一句话 Agent 就干活”示意图，以及一句话调色、胶片质感、相机 Log、统一影调和中文字幕的前后对比。演示画面由本库原子操作在 Netflix《Sparks》（CC BY 4.0）上生成，[署名与改动说明](provenance/distribution-notices/readme-demo-media-NOTICE.md)。另新增 Issue 模板和社交预览图，Codex 插件说明同步更新。
+- 修复 `film-texture-apply` 遇到 2024:2025 这类像素宽高比时把输出写成 1:1、继而拒绝自己的输出：`setsar` 默认把比值约简到 100 以内的分子分母。
 - 新增实验性[剧情创作与制作交接](workflows/raven-drama-production/SKILL.md)工作流，复杂工作流增至 17 条。
 - 影视解说子集新增 OTIO 受限导出与回读、局部旁白修订、受保护修订与 `render-current`、可选增量渲染缓存、只读 HTML 证据报告，以及离线对齐导入与固定本地 CTC 执行。
 - 运行时与 MCP 新增协作取消与进度，并在请求封装、生成任务与文本 Provider 账本、Work／批量／候选字节绑定上持续收紧为失败即关闭。

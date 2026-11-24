@@ -1,0 +1,41 @@
+name: 问题反馈 / Bug report
+description: 某个工作流或原子操作没有按预期工作 / A workflow or operation did not behave as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！请尽量附上能复现问题的信息。不要上传你没有权利分享的素材。
+        Thanks for reporting! Please include what's needed to reproduce it, and don't upload footage you can't share.
+  - type: input
+    id: area
+    attributes:
+      label: 涉及的工作流或操作 / Workflow or operation
+      placeholder: 例如 color-lut-apply、raven-film-recap / e.g. color-lut-apply, raven-film-recap
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么 / What happened
+      description: 期望的结果和实际结果 / What you expected and what you got
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤 / Steps to reproduce
+      description: 请求 JSON、命令或对 Agent 说的话 / Request JSON, command or what you asked the agent
+      render: text
+  - type: textarea
+    id: receipt
+    attributes:
+      label: 回执或错误信息 / Receipt or error
+      description: receipt.json 中的 status 与 error，或终端输出 / status and error from receipt.json, or terminal output
+      render: text
+  - type: textarea
+    id: env
+    attributes:
+      label: 环境 / Environment
+      description: 操作系统、Python、FFmpeg 版本，以及使用的 Agent / OS, Python and FFmpeg versions, and which agent
+      placeholder: python3 scripts/install_doctor.py --root "$PWD" 的输出可以直接贴在这里
