@@ -18,6 +18,7 @@ pytestmark = pytest.mark.skipif(not cm.available(), reason='FFmpeg/ffprobe requi
 @pytest.mark.parametrize(('when', 'layered'), [
     ('unchanged', False), ('after_probe', False), ('at_encode', False), ('after_encode', False),
     ('unchanged', True), ('after_probe', True), ('at_encode', True), ('after_encode', True),
+    ('after_encode_same_frames', True),
 ])
 def test_source_identity_checked_before_success(tmp_path, when, layered):
     red = cm.image(tmp_path / 'red.png', [((220, 20, 20), 1.0)])
@@ -44,6 +45,11 @@ def test_source_identity_checked_before_success(tmp_path, when, layered):
                 result = super().ff(args, **kwargs)
                 if when == 'after_encode':
                     shutil.copyfile(replacement, source)
+                elif when == 'after_encode_same_frames':
+                    # A valid MP4 free-space box changes file identity without
+                    # changing coded frames or clocks; visual readback still passes.
+                    with source.open('ab') as video:
+                        video.write(b'\x00\x00\x00\x0cfreedemo')
                 return result
             return super().ff(args, **kwargs)
 
@@ -67,6 +73,8 @@ def test_source_identity_checked_before_success(tmp_path, when, layered):
         assert receipt['status'] == stored['status'] == 'FAILED'
         expected = ('COLOR_SOURCE_CHANGED_', 'COLOR_LAYER_READBACK_MISMATCH') if layered and when == 'after_encode' else ('COLOR_SOURCE_CHANGED_',)
         assert any(code in receipt['error'] for code in expected)
+        if when == 'after_encode_same_frames':
+            assert receipt['error'] == 'COLOR_SOURCE_CHANGED_DURING_RENDER'
         assert 'result' not in stored
         assert not (out / 'color-lut-map.json').exists()
         assert rt.sha256(source) != digest
