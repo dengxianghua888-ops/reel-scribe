@@ -235,6 +235,7 @@ def apply_lut(request,directory,tools):
     rng='tv' if color['range']=='limited' else 'pc'
     filters=f'scale=in_color_matrix=bt709:in_range={rng}:out_range=pc,format={working},{lut_stage},scale=out_color_matrix=bt709:in_range=pc:out_range=tv,format={out_fmt},setparams=colorspace=bt709:color_primaries=bt709:color_trc={trc}:range=tv'
     output=directory/'graded.mp4'
+    require(sha256(asset['path'])==asset['sha256'],'COLOR_SOURCE_CHANGED_BEFORE_RENDER')
     tools.ff(['-i',asset['path'],'-vf',filters,'-map','0:v:0','-map','0:a?','-r',str(fps),'-fps_mode','cfr',
               '-c:v','libx264','-crf','18','-preset','medium','-c:a','copy','-colorspace','bt709','-color_trc',trc,'-color_primaries','bt709','-color_range','tv','-movflags','+faststart','graded.mp4'],cwd=directory)
     after=tools.probe(output);av=next(s for s in after['streams'] if s['codec_type']=='video');out_times=frame_clock(output,tools)
@@ -280,4 +281,6 @@ def apply_lut(request,directory,tools):
     if strength is not None:
         result['strength']={'value':strength,'derivation':'identity + strength * (lut - identity) on the source cube grid, rounded to 6 decimals',
                             'applied_cube':{'path':str(directory/'selected.cube'),'sha256':sha256(directory/'selected.cube')}}
+    # Detect persistent changes; a swap-and-restore requires a stable input snapshot.
+    require(sha256(asset['path'])==asset['sha256'],'COLOR_SOURCE_CHANGED_DURING_RENDER')
     write_json(directory/'color-lut-map.json',result);return result
