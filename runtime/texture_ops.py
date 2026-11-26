@@ -421,7 +421,6 @@ def texture(request, directory, tools):
                 row['corner_to_center_luma'] = {'without_vignette': ratio(without), 'predicted': ratio(full), 'output': ratio(out)}
         rows.append(row)
         require(row['delta_e2000_median'] <= READBACK_MAX_MEDIAN_DE2000, 'TEXTURE_READBACK_MISMATCH: frame %d' % f)
-    source(request['source'])
     result = {'schema': SCHEMA, 'source': asset, 'stream': stream, 'input_color': request['input_color'],
               'effects': effects, 'order': [e for e in EFFECTS if e in effects],
               'video': {'path': str(output), 'sha256': sha256(output), 'frames': out_frames, 'pix_fmt': 'yuv420p',
@@ -436,5 +435,7 @@ def texture(request, directory, tools):
                          'Grain in rgb mode loses most chroma detail in 4:2:0 output; luma grain survives better.',
                          'Readback covers the listed frames only.',
                          'Radii and grain size are in coded pixels; with non-square pixels they are not round on screen.']}
+    # Check the source after hashing the derived media, before publishing the result.
+    source(request['source'])
     write_json(directory / 'film-texture.json', result)
     return result
