@@ -1,0 +1,51 @@
+{
+  "schema": "style-facet/1",
+  "kind": "design-system",
+  "id": "tech-redblack",
+  "name": "技术看板·黑底红行",
+  "version": "0.1.0",
+  "status": "authored-unvalidated",
+  "provenance": {"type": "original-synthesis", "source_ids": ["chatcut-design-style-families"], "notes": "按“技术图解与数据看板”视觉语言原创，不复制任何第三方设计文件。"},
+  "vector": {"tempo": 0.6, "density": 0.55, "ornament": 0.25, "warmth": 0.2, "contrast": 0.85, "formality": 0.7, "motion": 0.45},
+  "body": {
+    "visual_family": "tech-dashboard",
+    "colors": {
+      "bg": {"rgb": "0E0E10", "use": "组件底"},
+      "surface": {"rgb": "1C1C20", "use": "非活动行"},
+      "ink": {"rgb": "F2F2F2", "use": "正文与数值"},
+      "ink-muted": {"rgb": "7A7A80", "use": "非活动行文字"},
+      "accent": {"rgb": "E3262F", "max_area_ratio": 0.08, "use": "只给正在讲的那一行"},
+      "highlight": {"rgb": "FFFFFF", "use": "活动数值"}
+    },
+    "typography": {
+      "families": {
+        "mono": {"name": "等宽数字字体（待选，按哈希绑定）", "license": "待确认可商用"},
+        "sans": {"name": "中文黑体（待选，按哈希绑定）", "license": "待确认可商用"}
+      },
+      "levels": {
+        "title": {"family": "sans", "min_px": 40, "weight": 700},
+        "value": {"family": "mono", "min_px": 56, "weight": 700},
+        "label": {"family": "sans", "min_px": 30, "weight": 500},
+        "body": {"family": "sans", "min_px": 34, "weight": 400}
+      },
+      "cjk": {"max_chars_per_line": 12, "kinsoku": true, "keep_number_with_unit": true, "vertical_allowed": false}
+    },
+    "layout": {
+      "16:9": {
+        "beside-subject-right": {"x": 0.58, "y": 0.18, "w": 0.36, "h": 0.6},
+        "beside-subject-left": {"x": 0.06, "y": 0.18, "w": 0.36, "h": 0.6},
+        "lower-third": {"x": 0.06, "y": 0.74, "w": 0.5, "h": 0.14},
+        "fullscreen": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}
+      },
+      "9:16": {
+        "upper-band": {"x": 0.06, "y": 0.08, "w": 0.88, "h": 0.28},
+        "lower-third": {"x": 0.06, "y": 0.66, "w": 0.88, "h": 0.12},
+        "fullscreen": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}
+      }
+    },
+    "motion": {"enter_ms": 220, "exit_ms": 180, "easing": "cubic-bezier(0.2, 0.8, 0.2, 1)", "allowed": ["slide", "wipe", "type-on", "none"], "max_hold_ms": 9000},
+    "texture": {"paper": false, "grain": 0.05, "stroke": false, "shadow": false},
+    "dos": ["数值与单位同行显示", "活动行之外全部降为 ink-muted"],
+    "donts": ["同屏两个 accent 区域", "把规格表盖在人脸上", "为没有数值的句子出表格"]
+  }
+}

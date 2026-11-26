@@ -1,0 +1,86 @@
+{
+  "schema": "style-route-result/1",
+  "inputs": {
+    "profile_sha256": "demo-not-a-real-digest",
+    "registry_sha256": "demo-not-a-real-digest",
+    "intent": {"raw": "做得专业一点，别太花", "parsed": {"bias": ["formality+"], "density_cap": "medium"}, "source": "原话"},
+    "capabilities": ["media-inspect", "transcript-import", "speech-plan-compile", "content-signal-extract", "subject-safe-zone-detect", "style-pack-compile", "mg-component-render", "work-render"],
+    "route": "EDIT",
+    "mode": "recommend"
+  },
+  "params": {
+    "weights": {"fit": 0.4, "goal": 0.15, "intent": 0.1, "brand": 0.1, "series": 0.1, "tier": 0.1, "cost": -0.1},
+    "fit_floor": 0.35,
+    "k": 3,
+    "max_pairwise_similarity": 0.8
+  },
+  "evaluations": [
+    {
+      "pack": "speech-spec-redline@0.1.0",
+      "eligibility": "eligible",
+      "scores": {"fit": 0.84, "goal": 0.9, "intent": 0.8, "brand": 0.5, "series": 0.5, "tier": 0.2, "cost": 0.2, "cliche_penalty": 0, "signature": 0.7, "total": 0.78},
+      "predicate_hits": [
+        {"signal": "derived.numeric_density_per_min", "observed": 1.83, "weight": 0.35, "evidence": ["w412-w1180"]},
+        {"signal": "signals.spec_pair", "observed": 9, "weight": 0.3, "evidence": ["sig-014", "sig-021"]},
+        {"signal": "derived.free_side", "observed": "right", "weight": 0.1, "evidence": ["face track 0–492000 ms"]}
+      ],
+      "vector": {"tempo": 0.6, "density": 0.55, "ornament": 0.25, "warmth": 0.2, "contrast": 0.85, "formality": 0.7, "motion": 0.45}
+    },
+    {
+      "pack": "speech-bold-statement@0.1.0",
+      "eligibility": "eligible",
+      "scores": {"fit": 0.66, "goal": 0.8, "intent": 0.5, "brand": 0.5, "series": 0.5, "tier": 0.2, "cost": 0.2, "cliche_penalty": 0, "signature": 0.85, "total": 0.71},
+      "vector": {"tempo": 0.85, "density": 0.5, "ornament": 0.3, "warmth": 0.5, "contrast": 0.9, "formality": 0.45, "motion": 0.7}
+    },
+    {
+      "pack": "speech-notebook-companion@0.1.0",
+      "eligibility": "eligible",
+      "scores": {"fit": 0.52, "goal": 0.7, "intent": 0.4, "brand": 0.5, "series": 0.5, "tier": 0.2, "cost": 0.2, "cliche_penalty": 0, "signature": 0.75, "total": 0.58},
+      "vector": {"tempo": 0.3, "density": 0.25, "ornament": 0.55, "warmth": 0.8, "contrast": 0.35, "formality": 0.25, "motion": 0.2}
+    },
+    {
+      "pack": "speech-editorial-magazine@0.1.0",
+      "eligibility": "eligible-degraded",
+      "reasons": ["subject-matte 不可用"],
+      "degrades": ["整帧黑白，人像不保留原色；签名手法失效"],
+      "scores": {"fit": 0.61, "goal": 0.6, "intent": 0.7, "brand": 0.5, "series": 0.5, "tier": 0.2, "cost": 0.5, "cliche_penalty": 0, "signature": 0.3, "total": 0.55}
+    },
+    {
+      "pack": "speech-wireframe-object@0.1.0",
+      "eligibility": "ineligible",
+      "reasons": ["必需能力 object-track 不可用"]
+    }
+  ],
+  "selected": [
+    {
+      "role": "safe",
+      "pack": "speech-spec-redline@0.1.0",
+      "explanation": "02:10–05:40 连续讲了 9 个参数；讲到参数时点亮规格表对应行，观众听到数字的同时看清单位。人脸在左，表放右侧。",
+      "evidence": ["w412-w1180", "sig-014", "sig-021"],
+      "cost": "开头 40 秒没有参数，降为字幕强调；无生成",
+      "changes_vs_others": "用表格强调数据；B 用大字强调观点"
+    },
+    {
+      "role": "signature",
+      "pack": "speech-bold-statement@0.1.0",
+      "explanation": "有 3 处可独立成立且保留限定的主张（如“它终于不烫手了”）；每处占满一拍画面。",
+      "evidence": ["sig-023"],
+      "cost": "成片约缩到 4:30；开头个人感受段被压缩到 12 秒",
+      "changes_vs_others": "节奏最快、对比最强"
+    },
+    {
+      "role": "contrast",
+      "pack": "speech-notebook-companion@0.1.0",
+      "explanation": "说话人语气聊天式、受众是第一次买旗舰机的用户；把参数清单改成写给朋友的笔记，只保留 4 个与日常体验相关的数字。",
+      "contrast_rationale": "测评通常默认做成数据堆叠；对新手受众，降低信息密度反而提高可理解度",
+      "evidence": ["audio.pause_ratio=0.12", "context.audience"],
+      "cost": "11 个参数不会出现在画面上，需用户确认",
+      "changes_vs_others": "最舒缓、最暖、包装最少"
+    }
+  ],
+  "pairwise_similarity": {"safe~signature": 0.48, "safe~contrast": 0.36, "signature~contrast": 0.36},
+  "agent_override": {"changed": false},
+  "status": "RECOMMENDED",
+  "preview": "NOT_RUN",
+  "applied_to_work": false
+}

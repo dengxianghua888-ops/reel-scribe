@@ -1,0 +1,47 @@
+{
+  "schema": "style-facet/1",
+  "kind": "design-system",
+  "id": "paper-highlighter",
+  "name": "纸感荧光·暖白纸底",
+  "version": "0.1.0",
+  "status": "authored-unvalidated",
+  "provenance": {"type": "original-synthesis", "source_ids": ["chatcut-design-style-families"], "notes": "按“手写、笔记与批注”视觉语言原创。"},
+  "vector": {"tempo": 0.3, "density": 0.3, "ornament": 0.55, "warmth": 0.8, "contrast": 0.35, "formality": 0.25, "motion": 0.25},
+  "body": {
+    "visual_family": "handwritten-notes",
+    "colors": {
+      "bg": {"rgb": "F6F1E7", "use": "便签与页边底"},
+      "ink": {"rgb": "2B2724", "use": "手写批注"},
+      "accent": {"rgb": "F7E25C", "max_area_ratio": 0.06, "use": "荧光划线，只划一处"},
+      "ink-muted": {"rgb": "8A8176", "use": "辅助说明"}
+    },
+    "typography": {
+      "families": {
+        "hand": {"name": "中文手写体（待选，按哈希绑定）", "license": "待确认可商用"},
+        "serif": {"name": "中文宋体（待选，按哈希绑定）", "license": "待确认可商用"}
+      },
+      "levels": {
+        "title": {"family": "serif", "min_px": 40, "weight": 600},
+        "value": {"family": "hand", "min_px": 48, "weight": 400},
+        "label": {"family": "hand", "min_px": 32, "weight": 400},
+        "body": {"family": "serif", "min_px": 34, "weight": 400}
+      },
+      "cjk": {"max_chars_per_line": 14, "kinsoku": true, "keep_number_with_unit": true, "vertical_allowed": true}
+    },
+    "layout": {
+      "16:9": {
+        "margin-note-right": {"x": 0.7, "y": 0.2, "w": 0.24, "h": 0.4},
+        "margin-note-left": {"x": 0.06, "y": 0.2, "w": 0.24, "h": 0.4},
+        "lower-third": {"x": 0.08, "y": 0.76, "w": 0.6, "h": 0.12}
+      },
+      "9:16": {
+        "upper-band": {"x": 0.08, "y": 0.1, "w": 0.84, "h": 0.22},
+        "lower-third": {"x": 0.08, "y": 0.68, "w": 0.84, "h": 0.12}
+      }
+    },
+    "motion": {"enter_ms": 400, "exit_ms": 300, "easing": "ease-out", "allowed": ["stroke-draw", "fade", "none"], "max_hold_ms": 6000},
+    "texture": {"paper": true, "grain": 0.12, "stroke": true, "shadow": false},
+    "dos": ["划线跟随说到的词逐字出现", "批注像朋友顺手写下的，不超过 8 个字"],
+    "donts": ["弹出、缩放类动画", "一屏两道划线"]
+  }
+}

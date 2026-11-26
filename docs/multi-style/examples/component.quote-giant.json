@@ -1,0 +1,23 @@
+{
+  "schema": "style-facet/1",
+  "kind": "component",
+  "id": "quote-giant",
+  "name": "巨幅引语",
+  "version": "0.1.0",
+  "status": "authored-unvalidated",
+  "provenance": {"type": "original"},
+  "body": {
+    "category": "quote",
+    "engine": "html",
+    "template": {"path": "facets/components/quote-giant/template.html", "engine_version": "headless-chromium@pinned"},
+    "design_tokens_used": ["bg", "ink", "accent", "title"],
+    "props": {
+      "text": {"type": "string", "editable": true, "max_chars": 16},
+      "emphasis_range": {"type": "array", "editable": true, "items": {"start": "integer", "end": "integer"}},
+      "dim_subject": {"type": "boolean", "editable": true, "default": true}
+    },
+    "timing": {"anchor": "signal-span", "lead_ms": 0, "min_hold_ms": 1200, "exit": "end-of-sentence"},
+    "placement": {"slots": ["fullscreen", "upper-band"], "avoid": ["caption-band"]},
+    "outputs": ["alpha-mov", "png-seq"]
+  }
+}

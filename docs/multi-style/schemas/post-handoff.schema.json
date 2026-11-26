@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "reel-scribe/multi-style/drama-post-handoff/1",
+  "title": "drama-post-handoff/1 生成侧 → 剪辑侧交接（草案）",
+  "description": "精品短剧 Skill 交给影述的已选候选、粗剪、音轨、字幕、保护项与后期刻面。影述据此建 Work，并可用 W17 绑定 drama-content。",
+  "type": "object",
+  "required": ["schema", "project", "episode", "revision", "bible_ref", "takes", "timeline", "protections", "post_facets", "deliverables"],
+  "properties": {
+    "schema": {"const": "drama-post-handoff/1"},
+    "project": {"type": "string"},
+    "episode": {"type": "string"},
+    "revision": {"type": "string"},
+    "drama_content_ref": {"$ref": "#/$defs/file"},
+    "bible_ref": {
+      "type": "object",
+      "required": ["path", "sha256", "version", "direction_id"],
+      "properties": {"path": {"type": "string"}, "sha256": {"type": "string"}, "version": {"type": "string"}, "direction_id": {"type": "string"}}
+    },
+    "takes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["take_id", "shot_id", "asset", "fps", "usable_ranges"],
+        "properties": {
+          "take_id": {"type": "string"},
+          "shot_id": {"type": "string"},
+          "generation_task_id": {"type": "string"},
+          "model": {"type": "string"},
+          "asset": {"$ref": "#/$defs/file"},
+          "fps": {"type": "string"},
+          "usable_ranges": {"type": "array", "items": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2}, "description": "源帧半开区间"},
+          "defects": {"type": "array", "items": {"type": "object", "properties": {"frame": {"type": "integer"}, "note": {"type": "string"}}}},
+          "cost": {"type": "object", "properties": {"credits": {"type": "number"}, "currency": {"type": "string"}}}
+        }
+      }
+    },
+    "timeline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["order", "shot_id", "take_id", "source_in", "source_out", "timeline_in", "timeline_out"],
+        "properties": {
+          "order": {"type": "integer"},
+          "shot_id": {"type": "string"},
+          "take_id": {"type": "string"},
+          "source_in": {"type": "integer"},
+          "source_out": {"type": "integer"},
+          "timeline_in": {"type": "integer"},
+          "timeline_out": {"type": "integer"},
+          "cut_reason": {"type": "string"}
+        }
+      }
+    },
+    "audio_stems": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["role", "asset"],
+        "properties": {"role": {"enum": ["dialogue", "ambience", "foley", "music", "voiceover"]}, "speaker_id": {"type": "string"}, "asset": {"$ref": "#/$defs/file"}, "offset_ms": {"type": "integer"}}
+      }
+    },
+    "captions": {
+      "type": "array",
+      "items": {"type": "object", "required": ["start_ms", "end_ms", "text"], "properties": {"speaker_id": {"type": "string"}, "start_ms": {"type": "integer"}, "end_ms": {"type": "integer"}, "text": {"type": "string"}, "burn_allowed": {"type": "boolean"}}}
+    },
+    "protections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind"],
+        "properties": {
+          "id": {"type": "string"},
+          "kind": {"enum": ["dialogue-text", "evidence-shot", "reveal-order", "sound-first-entry", "character-state", "duration-floor"]},
+          "ref": {"type": "string"},
+          "note": {"type": "string"}
+        }
+      }
+    },
+    "post_facets": {
+      "type": "object",
+      "properties": {
+        "look": {"type": "object", "properties": {"facet": {"type": "string"}, "style_frames": {"type": "array", "items": {"$ref": "#/$defs/file"}}, "intent": {"type": "string"}}},
+        "texture": {"type": "object"},
+        "caption_style": {"type": "string"},
+        "title_design": {"type": "string"},
+        "sound": {"type": "string"},
+        "rhythm": {"type": "string"}
+      }
+    },
+    "deliverables": {
+      "type": "array",
+      "items": {"type": "object", "required": ["id", "aspect"], "properties": {"id": {"type": "string"}, "aspect": {"type": "string"}, "duration_s": {"type": "number"}, "burned_captions": {"type": "boolean"}, "post_pack": {"type": "string"}}}
+    },
+    "known_issues": {"type": "array", "items": {"type": "object", "properties": {"timecode": {"type": "string"}, "note": {"type": "string"}, "owner": {"enum": ["generation", "edit", "sound", "script"]}}}}
+  },
+  "$defs": {
+    "file": {
+      "type": "object",
+      "required": ["path"],
+      "properties": {"path": {"type": "string"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "bytes": {"type": "integer"}, "host_asset_id": {"type": "string"}}
+    }
+  }
+}

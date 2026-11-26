@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "reel-scribe/multi-style/style-plan/1",
+  "title": "style-plan/1 风格计划（草案）",
+  "description": "本次素材 × 风格包的逐项具体决定。由 style-pack-compile 产出并编译为 work-candidate/1；审阅、比较与局部修改都针对它。",
+  "type": "object",
+  "required": ["schema", "work", "pack", "facet_digests", "resolved_tokens_sha256", "events", "captions", "look", "sound", "degrades", "status"],
+  "properties": {
+    "schema": {"const": "style-plan/1"},
+    "work": {
+      "type": "object",
+      "required": ["work_id", "base_version", "expected_document_sha256"],
+      "properties": {"work_id": {"type": "string"}, "base_version": {"type": "string"}, "expected_document_sha256": {"type": "string"}}
+    },
+    "pack": {"type": "string", "description": "id@version"},
+    "pack_sha256": {"type": "string"},
+    "facet_digests": {"type": "object", "additionalProperties": {"type": "string"}},
+    "word_plan_ref": {"type": "object", "properties": {"path": {"type": "string"}, "sha256": {"type": "string"}}},
+    "profile_sha256": {"type": "string"},
+    "resolved_tokens_sha256": {"type": "string"},
+    "aspect": {"type": "string"},
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["event_id", "rule_id", "signal_id", "component", "instance_id", "output_range_ms", "props", "placement", "status"],
+        "properties": {
+          "event_id": {"type": "string"},
+          "rule_id": {"type": "string"},
+          "signal_id": {"type": "string"},
+          "component": {"type": "string", "description": "cmp/<id>@version"},
+          "instance_id": {"type": "string"},
+          "anchor_word_ids": {"type": "array", "items": {"type": "string"}},
+          "source_range_ms": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2},
+          "output_range_ms": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2},
+          "props": {"type": "object"},
+          "placement": {"type": "object", "properties": {"slot": {"type": "string"}, "rect_px": {"type": "object"}}},
+          "z": {"type": "integer"},
+          "status": {"enum": ["SCHEDULED", "FALLBACK", "DROPPED"]},
+          "reason": {"type": "string"}
+        }
+      }
+    },
+    "captions": {
+      "type": "object",
+      "properties": {
+        "style": {"type": "string"},
+        "emphasis_word_ids": {"type": "array", "items": {"type": "string"}},
+        "suppressed_ranges_ms": {"type": "array", "items": {"type": "array"}, "description": "由组件承担文字、字幕让位的区间"},
+        "layout_constraints_ref": {"type": "string"}
+      }
+    },
+    "look": {"type": "object", "properties": {"grade_ids": {"type": "array", "items": {"type": "string"}}, "texture": {"type": "object"}}},
+    "sound": {
+      "type": "object",
+      "properties": {
+        "music": {"type": "object"},
+        "sfx_events": {"type": "array", "items": {"type": "object", "properties": {"event_id": {"type": "string"}, "asset": {"type": "string"}, "t_ms": {"type": "integer"}, "gain_db": {"type": "number"}}}},
+        "envelopes": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "signature_occurrences": {"type": "integer"},
+    "intensity_profile": {"type": "array", "items": {"type": "number"}, "description": "每 10 秒窗口的包装事件数"},
+    "degrades": {"type": "array", "items": {"type": "object", "properties": {"facet": {"type": "string"}, "missing": {"type": "string"}, "fallback": {"type": "string"}}}},
+    "protections_read": {"type": "array", "items": {"type": "string"}, "description": "编译时读取的保护项 ID；只读"},
+    "status": {"const": "CANDIDATE_COMPILED"},
+    "render": {"const": "NOT_RUN"},
+    "style_effect": {"const": "NOT_VERIFIED"},
+    "applied_to_work": {"const": false}
+  }
+}

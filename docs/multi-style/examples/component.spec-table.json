@@ -1,0 +1,25 @@
+{
+  "schema": "style-facet/1",
+  "kind": "component",
+  "id": "spec-table",
+  "name": "规格表（逐行点亮）",
+  "version": "0.1.0",
+  "status": "authored-unvalidated",
+  "provenance": {"type": "original", "notes": "验收例：同一组件放两次，只把第二处 500 g 改为 0.5 kg。"},
+  "body": {
+    "category": "data",
+    "engine": "html",
+    "template": {"path": "facets/components/spec-table/template.html", "engine_version": "headless-chromium@pinned"},
+    "design_tokens_used": ["bg", "surface", "ink", "ink-muted", "accent", "highlight", "value", "label"],
+    "props": {
+      "title": {"type": "string", "editable": true, "max_chars": 12, "default": ""},
+      "rows": {"type": "array", "editable": true, "items": {"label": "string", "value": "string", "unit": "string"}},
+      "active_row": {"type": "integer", "editable": true, "min": 0},
+      "side": {"type": "enum", "editable": true, "values": ["left", "right"], "default": "right"},
+      "show_inactive": {"type": "boolean", "editable": true, "default": true}
+    },
+    "timing": {"anchor": "word-span", "lead_ms": 120, "min_hold_ms": 1800, "exit": "on-topic-change"},
+    "placement": {"slots": ["beside-subject-right", "beside-subject-left", "upper-band"], "avoid": ["face", "caption-band"]},
+    "outputs": ["alpha-mov", "png-seq", "host-instance"]
+  }
+}

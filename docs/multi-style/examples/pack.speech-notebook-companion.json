@@ -1,0 +1,67 @@
+{
+  "schema": "style-pack/1",
+  "id": "speech-notebook-companion",
+  "name": "陪伴手记",
+  "version": "0.1.0",
+  "status": "authored-unvalidated",
+  "extends": "speech-packaging-base@0.1.0",
+  "cost_tier": "skin",
+  "routes": ["EDIT"],
+  "workflow": "raven-speech-edit",
+  "facets": {
+    "method": "method/speech/conversational-company@0.1.0",
+    "rhythm": "rhythm/unhurried@0.1.0",
+    "design_system": "ds/paper-highlighter@0.1.0",
+    "components": ["cmp/highlighter-stroke@0.1.0", "cmp/margin-note@0.1.0"],
+    "caption_style": "cap/sentence-hand@0.1.0",
+    "look": "look/warm-soft-grain@0.1.0",
+    "sound": "snd/lofi-bed-quiet@0.1.0"
+  },
+  "fit": {
+    "signals": [
+      {"signal": "audio.pause_ratio", "op": ">=", "value": 0.08, "weight": 0.2, "why": "说话人有自然停顿可保留"},
+      {"signal": "context.goal", "op": "in", "value": ["accompany", "explain", "teach"], "weight": 0.25},
+      {"signal": "signals.emphasis_word", "op": "count>=", "value": 5, "weight": 0.2},
+      {"signal": "derived.humor_density_per_min", "op": ">=", "value": 0.2, "weight": 0.1}
+    ],
+    "anti": [
+      {"signal": "context.goal", "op": "==", "value": "sell", "weight": -0.2},
+      {"signal": "derived.numeric_density_per_min", "op": ">=", "value": 3, "weight": -0.25, "why": "参数过多时手写批注显得零碎"}
+    ],
+    "goals": ["accompany", "explain", "teach"]
+  },
+  "decision_slots": [
+    {"id": "design_system", "mode": "locked"},
+    {"id": "which_numbers_get_notes", "mode": "runtime", "owner": "agent-semantic", "rule": "只给与日常体验直接相关的数字写批注，全片不超过 4 个"},
+    {"id": "music", "mode": "user", "default": "lofi-bed-quiet"}
+  ],
+  "binding_rules": [
+    {
+      "id": "highlight-phrase",
+      "on": {"signal": "emphasis_word", "min_confidence": 0.7},
+      "do": {"component": "cmp/highlighter-stroke@0.1.0", "props": {"target_word_ids": "$signal.evidence.word_ids"}},
+      "timing": {"anchor": "word-span", "lead_ms": 0, "min_hold_ms": 1500, "exit": "end-of-sentence"},
+      "placement": {"prefer": ["caption-line"], "avoid": []},
+      "density": {"max_per_min": 2, "min_gap_ms": 8000},
+      "priority": 60,
+      "fallback": "drop"
+    },
+    {
+      "id": "margin-number",
+      "on": {"signal": "numeric", "min_confidence": 0.9},
+      "do": {"component": "cmp/margin-note@0.1.0", "props": {"text": "$signal.fields.value $signal.fields.unit"}},
+      "timing": {"anchor": "word-span", "lead_ms": 200, "min_hold_ms": 2500, "exit": "end-of-sentence"},
+      "placement": {"prefer": ["margin-note-opposite"], "avoid": ["face"]},
+      "density": {"max_total": 4, "min_gap_ms": 20000},
+      "priority": 55,
+      "fallback": "drop"
+    }
+  ],
+  "signature": {"device": "全片只给 4 个数字写手写批注", "strength": 0.75, "min_occurrences": 3},
+  "restraint": ["不用任何弹出或缩放动画", "保留思考停顿，不为紧凑删气口"],
+  "cliche_blocklist": ["emoji-sprinkle", "random-sfx", "every-line-popup", "bgm-wall"],
+  "checks": ["protection-untouched", "pause-kept", "density-budget", "face-occlusion", "token-compliance"],
+  "vector": {"tempo": 0.3, "density": 0.25, "ornament": 0.55, "warmth": 0.8, "contrast": 0.35, "formality": 0.25, "motion": 0.2},
+  "editability": {"rework_units": ["cut", "caption-line", "component-instance", "design-system", "grade-layer", "audio-track"]},
+  "provenance": {"type": "original-synthesis", "inspired_by": ["手写、笔记与批注类视觉语言"]}
+}

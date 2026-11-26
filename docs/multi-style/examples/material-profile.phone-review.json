@@ -1,0 +1,57 @@
+{
+  "schema": "material-profile/1",
+  "work": {"work_id": "demo-phone-review", "version": "v1"},
+  "sources": [
+    {
+      "source_id": "src-main",
+      "kind": "video",
+      "identity": {"host_asset_id": "demo-asset-001", "host_revision": "r1", "bytes_hash_unknown": true},
+      "spec": {"duration_ms": 492000, "width": 1920, "height": 1080, "fps": "30000/1001", "transfer": "sdr", "audio_channels": 2}
+    },
+    {
+      "source_id": "src-broll",
+      "kind": "video",
+      "identity": {"host_asset_id": "demo-asset-002", "host_revision": "r1", "bytes_hash_unknown": true},
+      "spec": {"duration_ms": 90000, "width": 1920, "height": 1080, "fps": "30000/1001", "transfer": "sdr", "audio_channels": 2}
+    }
+  ],
+  "transcript_ref": {"path": "demo/transcript.json", "revision": "t1", "timing": "model-aligned"},
+  "signals": [
+    {"id": "sig-001", "type": "story_beat", "text": "我用了三周", "evidence": {"source_id": "src-main", "word_ids": ["w12", "w13", "w14"], "source_range_ms": [3100, 4200]}, "source": "model", "model_identity": "demo-model", "confidence": 0.82},
+    {"id": "sig-014", "type": "spec_pair", "text": "重量 187 克", "fields": {"label": "重量", "value": "187", "unit": "g", "index": 0}, "evidence": {"source_id": "src-main", "word_ids": ["w412", "w413", "w414"], "source_range_ms": [130500, 132100]}, "source": "rule", "confidence": 0.98, "protected": true},
+    {"id": "sig-021", "type": "spec_pair", "text": "续航从 8 小时提升到 12 小时", "fields": {"label": "续航", "value": "8 → 12", "unit": "h", "index": 3}, "evidence": {"source_id": "src-main", "word_ids": ["w620", "w621", "w622", "w623", "w624", "w625"], "source_range_ms": [221200, 224300]}, "source": "rule", "confidence": 0.96, "protected": true},
+    {"id": "sig-022", "type": "turn", "text": "但我觉得更重要的是", "evidence": {"source_id": "src-main", "word_ids": ["w626", "w627", "w628", "w629"], "source_range_ms": [224300, 225900]}, "source": "model", "model_identity": "demo-model", "confidence": 0.77},
+    {"id": "sig-023", "type": "claim", "text": "它终于不烫手了", "evidence": {"source_id": "src-main", "word_ids": ["w630", "w631", "w632", "w633"], "source_range_ms": [225900, 227900]}, "source": "model", "model_identity": "demo-model", "confidence": 0.8},
+    {"id": "sig-040", "type": "chapter_boundary", "text": "说说拍照", "evidence": {"source_id": "src-main", "word_ids": ["w800", "w801"], "source_range_ms": [290000, 291000]}, "source": "model", "model_identity": "demo-model", "confidence": 0.71}
+  ],
+  "visual": {
+    "subject_tracks": [
+      {"source_id": "src-main", "range_ms": [0, 492000], "kind": "face", "boxes": [{"t_ms": 0, "x": 420, "y": 180, "width": 360, "height": 420}], "confidence": 0.93}
+    ],
+    "free_regions": [{"side": "right", "ratio_of_time": 0.62}],
+    "shot_scale_distribution": {"medium-close": 0.81, "close": 0.19},
+    "color_profile_ref": "demo/color-profile.json"
+  },
+  "audio": {"speech_rate_cps": 4.6, "pause_ratio": 0.12, "music_present": false, "noise_floor_db": -58},
+  "derived": {
+    "numeric_density_per_min": 1.83,
+    "story_ratio": 0.22,
+    "argument_ratio": 0.35,
+    "step_count": 0,
+    "quote_count": 3,
+    "emotion_arousal_mean": 0.41,
+    "emotion_arousal_peak": 0.72,
+    "humor_density_per_min": 0.3,
+    "face_center_ratio": 0.12,
+    "free_side": "right",
+    "broll_minutes": 1.5
+  },
+  "context": {
+    "platforms": ["douyin", "bilibili"],
+    "aspect_ratios": ["9:16", "16:9"],
+    "audience": "第一次买旗舰机的普通用户",
+    "goal": "explain",
+    "series": {"series_id": "new", "episode_index": 1},
+    "exclusions": []
+  }
+}

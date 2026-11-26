@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "reel-scribe/multi-style/style-route-result/1",
+  "title": "style-route-result/1 风格路由结果（草案）",
+  "description": "资格、分项分数、多样性选取与解释。可由同一输入复算；输入或包变化后失效。结果是建议，不自动采用。",
+  "type": "object",
+  "required": ["schema", "inputs", "params", "evaluations", "selected", "status"],
+  "properties": {
+    "schema": {"const": "style-route-result/1"},
+    "inputs": {
+      "type": "object",
+      "required": ["profile_sha256", "registry_sha256", "route"],
+      "properties": {
+        "profile_sha256": {"type": "string"},
+        "registry_sha256": {"type": "string"},
+        "intent": {"type": "object"},
+        "capabilities": {"type": "array", "items": {"type": "string"}},
+        "memory_sha256": {"type": "string"},
+        "route": {"enum": ["EDIT", "GENERATE", "HYBRID", "PLAN"]},
+        "mode": {"enum": ["recommend", "named", "series", "reference", "batch-variants"]}
+      }
+    },
+    "params": {
+      "type": "object",
+      "properties": {
+        "weights": {"type": "object", "additionalProperties": {"type": "number"}},
+        "fit_floor": {"type": "number"},
+        "k": {"type": "integer"},
+        "max_pairwise_similarity": {"type": "number"}
+      }
+    },
+    "evaluations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["pack", "eligibility"],
+        "properties": {
+          "pack": {"type": "string", "description": "id@version"},
+          "pack_sha256": {"type": "string"},
+          "eligibility": {"enum": ["eligible", "eligible-degraded", "ineligible"]},
+          "reasons": {"type": "array", "items": {"type": "string"}},
+          "degrades": {"type": "array", "items": {"type": "string"}},
+          "scores": {
+            "type": "object",
+            "properties": {
+              "fit": {"type": "number"}, "goal": {"type": "number"}, "intent": {"type": "number"}, "brand": {"type": "number"},
+              "series": {"type": "number"}, "tier": {"type": "number"}, "cost": {"type": "number"}, "cliche_penalty": {"type": "number"},
+              "signature": {"type": "number"}, "total": {"type": "number"}
+            }
+          },
+          "predicate_hits": {
+            "type": "array",
+            "items": {"type": "object", "properties": {"signal": {"type": "string"}, "observed": {}, "weight": {"type": "number"}, "evidence": {"type": "array", "items": {"type": "string"}}}}
+          },
+          "vector": {"type": "object"}
+        }
+      }
+    },
+    "selected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["role", "pack", "explanation", "evidence", "cost"],
+        "properties": {
+          "role": {"enum": ["safe", "signature", "contrast", "named", "series", "adhoc"]},
+          "pack": {"type": "string"},
+          "explanation": {"type": "string"},
+          "contrast_rationale": {"type": "string"},
+          "evidence": {"type": "array", "items": {"type": "string"}, "description": "词 ID、时间区间或帧号"},
+          "cost": {"type": "string"},
+          "changes_vs_others": {"type": "string"}
+        }
+      }
+    },
+    "pairwise_similarity": {"type": "object", "additionalProperties": {"type": "number"}},
+    "agent_override": {
+      "type": "object",
+      "properties": {"changed": {"type": "boolean"}, "reason": {"type": "string"}}
+    },
+    "status": {"enum": ["RECOMMENDED", "NO_ELIGIBLE_PACK", "NARROW_CHOICE", "ADHOC_COMPOSED"]},
+    "preview": {"const": "NOT_RUN"},
+    "applied_to_work": {"const": false}
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "schema": "style-plan/1",
+  "work": {"work_id": "demo-phone-review", "base_version": "v1", "expected_document_sha256": "demo-not-a-real-digest"},
+  "pack": "speech-spec-redline@0.1.0",
+  "facet_digests": {
+    "ds/tech-redblack@0.1.0": "demo",
+    "cmp/spec-table@0.1.0": "demo",
+    "method/speech/evidence-led@0.1.0": "demo"
+  },
+  "word_plan_ref": {"path": "demo/word-plan.json", "sha256": "demo"},
+  "profile_sha256": "demo",
+  "resolved_tokens_sha256": "demo",
+  "aspect": "16:9",
+  "events": [
+    {
+      "event_id": "ev-001",
+      "rule_id": "spec-row",
+      "signal_id": "sig-014",
+      "component": "cmp/spec-table@0.1.0",
+      "instance_id": "inst-spec-1",
+      "anchor_word_ids": ["w412", "w413", "w414"],
+      "source_range_ms": [130500, 132100],
+      "output_range_ms": [104380, 108200],
+      "props": {"title": "参数", "rows": [{"label": "重量", "value": "187", "unit": "g"}, {"label": "屏幕", "value": "6.3", "unit": "英寸"}, {"label": "电池", "value": "5000", "unit": "mAh"}, {"label": "续航", "value": "8 → 12", "unit": "h"}], "active_row": 0, "side": "right"},
+      "placement": {"slot": "beside-subject-right", "rect_px": {"x": 1114, "y": 194, "width": 691, "height": 648}},
+      "z": 10,
+      "status": "SCHEDULED"
+    },
+    {
+      "event_id": "ev-009",
+      "rule_id": "spec-row",
+      "signal_id": "sig-021",
+      "component": "cmp/spec-table@0.1.0",
+      "instance_id": "inst-spec-2",
+      "anchor_word_ids": ["w620", "w621", "w622", "w623", "w624", "w625"],
+      "source_range_ms": [221200, 224300],
+      "output_range_ms": [176900, 181400],
+      "props": {"title": "参数", "rows": [{"label": "重量", "value": "187", "unit": "g"}, {"label": "屏幕", "value": "6.3", "unit": "英寸"}, {"label": "电池", "value": "5000", "unit": "mAh"}, {"label": "续航", "value": "8 → 12", "unit": "h"}], "active_row": 3, "side": "right"},
+      "placement": {"slot": "beside-subject-right", "rect_px": {"x": 1114, "y": 194, "width": 691, "height": 648}},
+      "z": 10,
+      "status": "SCHEDULED",
+      "reason": "第二个实例；局部修改例可只改本实例的某一行"
+    },
+    {
+      "event_id": "ev-010",
+      "rule_id": "single-value",
+      "signal_id": "sig-030",
+      "component": "cmp/value-callout@0.1.0",
+      "instance_id": "inst-val-1",
+      "output_range_ms": [182100, 183300],
+      "props": {"value": "40", "unit": "℃"},
+      "placement": {"slot": "lower-third"},
+      "status": "DROPPED",
+      "reason": "距 ev-009 退出不足 4000 ms，违反最小间隔"
+    }
+  ],
+  "captions": {
+    "style": "cap/keyword-accent@0.1.0",
+    "emphasis_word_ids": ["w630", "w631", "w632", "w633"],
+    "suppressed_ranges_ms": [],
+    "layout_constraints_ref": "demo/caption-layout.json"
+  },
+  "look": {"grade_ids": ["grade-neutral-crisp"], "texture": {"grain": 0.05}},
+  "sound": {
+    "music": {"mode": "none"},
+    "sfx_events": [{"event_id": "ev-001", "asset": "snd/tick-soft", "t_ms": 104380, "gain_db": -18}, {"event_id": "ev-009", "asset": "snd/tick-soft", "t_ms": 176900, "gain_db": -18}]
+  },
+  "signature_occurrences": 7,
+  "intensity_profile": [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 2, 1, 2, 1, 1, 2, 1, 2, 0, 1],
+  "degrades": [],
+  "protections_read": ["prot-unit-weight", "prot-unit-battery"],
+  "status": "CANDIDATE_COMPILED",
+  "render": "NOT_RUN",
+  "style_effect": "NOT_VERIFIED",
+  "applied_to_work": false
+}

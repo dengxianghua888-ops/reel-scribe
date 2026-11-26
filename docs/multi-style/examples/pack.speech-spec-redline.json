@@ -1,0 +1,78 @@
+{
+  "schema": "style-pack/1",
+  "id": "speech-spec-redline",
+  "name": "红黑参数看板",
+  "version": "0.1.0",
+  "status": "authored-unvalidated",
+  "extends": "speech-packaging-base@0.1.0",
+  "cost_tier": "skin",
+  "routes": ["EDIT"],
+  "workflow": "raven-speech-edit",
+  "facets": {
+    "method": "method/speech/evidence-led@0.1.0",
+    "rhythm": "rhythm/tight-explainer@0.1.0",
+    "design_system": "ds/tech-redblack@0.1.0",
+    "components": ["cmp/spec-table@0.1.0", "cmp/value-callout@0.1.0"],
+    "caption_style": "cap/keyword-accent@0.1.0",
+    "look": "look/neutral-crisp@0.1.0",
+    "sound": "snd/minimal-ticks@0.1.0"
+  },
+  "fit": {
+    "signals": [
+      {"signal": "derived.numeric_density_per_min", "op": ">=", "value": 1.5, "weight": 0.35, "why": "参数足够多，看板才有内容可亮"},
+      {"signal": "signals.spec_pair", "op": "count>=", "value": 4, "weight": 0.3, "why": "至少四个规格对能构成一张表"},
+      {"signal": "context.goal", "op": "in", "value": ["explain", "persuade", "sell"], "weight": 0.15},
+      {"signal": "derived.free_side", "op": "in", "value": ["left", "right", "both"], "weight": 0.1, "why": "有空侧可放表"}
+    ],
+    "anti": [
+      {"signal": "derived.story_ratio", "op": ">=", "value": 0.5, "weight": -0.35, "why": "以个人经历为主时规格表会抢走情绪"},
+      {"signal": "derived.emotion_arousal_mean", "op": ">=", "value": 0.7, "weight": -0.2}
+    ],
+    "requires_signals": ["spec_pair"],
+    "goals": ["explain", "persuade", "sell"]
+  },
+  "decision_slots": [
+    {"id": "design_system", "mode": "locked"},
+    {"id": "which_values_to_show", "mode": "runtime", "owner": "agent-semantic", "rule": "只展示与当前论点有关的规格；同一数值多次出现只在首次完整讲述处展示"},
+    {"id": "table_side", "mode": "runtime", "owner": "deterministic", "rule": "人脸对侧"},
+    {"id": "music", "mode": "user", "default": "none"}
+  ],
+  "binding_rules": [
+    {
+      "id": "spec-row",
+      "on": {"signal": "spec_pair", "min_confidence": 0.8},
+      "do": {"component": "cmp/spec-table@0.1.0", "props": {"rows": "$group.spec_pairs", "active_row": "$signal.fields.index"}},
+      "timing": {"anchor": "value_words", "lead_ms": 120, "min_hold_ms": 1800, "exit": "on-topic-change"},
+      "placement": {"prefer": ["beside-subject-opposite"], "avoid": ["face", "caption-band"]},
+      "density": {"max_per_min": 4, "min_gap_ms": 2500},
+      "priority": 80,
+      "fallback": "caption-emphasis"
+    },
+    {
+      "id": "single-value",
+      "on": {"signal": "numeric", "where": "not part_of(spec_pair)", "min_confidence": 0.9},
+      "do": {"component": "cmp/value-callout@0.1.0", "props": {"value": "$signal.fields.value", "unit": "$signal.fields.unit"}},
+      "timing": {"anchor": "value_words", "lead_ms": 80, "min_hold_ms": 1200, "exit": "end-of-sentence"},
+      "placement": {"prefer": ["beside-subject-opposite", "lower-third"], "avoid": ["face"]},
+      "density": {"max_per_min": 2, "min_gap_ms": 4000},
+      "priority": 50,
+      "fallback": "drop"
+    }
+  ],
+  "signature": {"device": "只点亮正在讲的那一行，其余行保持暗灰", "strength": 0.7, "min_occurrences": 3},
+  "restraint": ["观点句不加图形，交给字幕强调", "同一时刻画面最多一个图形组件"],
+  "cliche_blocklist": ["every-line-popup", "random-sfx", "zoom-every-number", "whoosh-every-cut"],
+  "checks": ["protection-untouched", "value-word-sync", "face-occlusion", "density-budget", "unit-integrity", "caption-band", "token-compliance"],
+  "knobs": {
+    "intensity": {"range": [0, 1], "default": 0.6, "maps": {"binding_rules.spec-row.density.max_per_min": [2, 6], "design_system.motion.enter_ms": [320, 160]}}
+  },
+  "editability": {"rework_units": ["cut", "caption-line", "component-instance", "design-system", "grade-layer", "audio-track"], "notes": "规格表每次出现是独立实例，可单独改某一行的数值与单位"},
+  "vector": {"tempo": 0.6, "density": 0.55, "ornament": 0.25, "warmth": 0.2, "contrast": 0.85, "formality": 0.7, "motion": 0.45},
+  "entry": {
+    "title": "参数看板",
+    "one_liner": "讲到参数时，表格只点亮那一行",
+    "input_roles": [{"role": "recording", "label": "本人录好的讲解", "min": 1, "max": 20}],
+    "deliverable": "可编辑时间线：剪点、字幕、规格表实例、调色层分别可改"
+  },
+  "provenance": {"type": "original-synthesis", "inspired_by": ["ChatCut Redline Tech 的“讲到规格点亮对应行”机制"], "notes": "不复制其设计文件与文本；视觉与规则为本库原创"}
+}

@@ -1,0 +1,53 @@
+{
+  "schema": "style-pack/1",
+  "id": "speech-packaging-base",
+  "name": "口播包装基础流水线",
+  "version": "0.1.0",
+  "status": "authored-unvalidated",
+  "abstract": true,
+  "cost_tier": "base",
+  "routes": ["EDIT"],
+  "workflow": "raven-speech-edit",
+  "facets": {
+    "method": "method/speech/faithful-clean@0.1.0",
+    "rhythm": "rhythm/natural-explainer@0.1.0",
+    "caption_style": "cap/phrase-plain@0.1.0",
+    "look": "look/neutral@0.1.0",
+    "sound": "snd/voice-only@0.1.0"
+  },
+  "fit": {
+    "requires_signals": [],
+    "goals": ["explain", "teach", "persuade", "accompany"]
+  },
+  "capability_requirements": {
+    "required": ["media-inspect", "transcript-import", "speech-plan-compile", "content-signal-extract", "style-pack-compile", "work-render"],
+    "optional": [
+      {"capability": "subject-safe-zone-detect", "degrade": "使用调用方声明的保护区；无声明时只用全屏切出版位"},
+      {"capability": "mg-component-render", "degrade": "visual-layer-render 静态 PNG 叠层"},
+      {"capability": "caption-animate", "degrade": "静态 caption-burn，强调改颜色"}
+    ]
+  },
+  "pipeline": [
+    {"stage": "source-and-transcript", "ops": ["media-inspect", "transcript-import"], "owner": "deterministic"},
+    {"stage": "profile", "ops": ["content-signal-extract", "subject-safe-zone-detect", "material-profile-build"], "owner": "deterministic"},
+    {"stage": "clean-and-select", "ops": ["speech-plan-compile"], "owner": "agent-semantic"},
+    {"stage": "remap-signals", "ops": ["style-pack-compile"], "owner": "deterministic"},
+    {"stage": "place-components", "ops": ["design-token-resolve", "mg-component-render"], "owner": "deterministic"},
+    {"stage": "captions", "ops": ["caption-map", "caption-animate", "caption-burn"], "owner": "deterministic"},
+    {"stage": "look", "ops": ["color-grade-compile", "film-texture-apply"], "owner": "deterministic"},
+    {"stage": "sound", "ops": ["sound-event-place", "audio-mix", "audio-envelope"], "owner": "deterministic"},
+    {"stage": "render-and-check", "ops": ["work-render", "media-qc", "style-conformance-check", "taste-review"], "owner": "deterministic"},
+    {"stage": "adopt", "ops": ["work-version"], "owner": "user"}
+  ],
+  "decision_slots": [
+    {"id": "retake_choice", "mode": "runtime", "owner": "agent-semantic", "rule": "按方法刻面与保护项选择完整的一遍"},
+    {"id": "deletions", "mode": "runtime", "owner": "agent-semantic"},
+    {"id": "component_side", "mode": "runtime", "owner": "deterministic", "rule": "人脸对侧；两侧都不空则改全屏切出或降级"},
+    {"id": "music", "mode": "user", "default": "none"},
+    {"id": "target_duration", "mode": "user"}
+  ],
+  "segment_policy": {"invariants": ["design_system", "caption_style", "look", "sound"], "transition": "章节边界处切换方法与组件"},
+  "checks": ["protection-untouched", "value-word-sync", "face-occlusion", "density-budget", "unit-integrity", "caption-band"],
+  "editability": {"rework_units": ["cut", "caption-line", "component-instance", "design-system", "grade-layer", "audio-track"]},
+  "provenance": {"type": "original-synthesis", "inspired_by": ["ChatCut 11 张口播包装中 8 张共用同一流程的观察"]}
+}

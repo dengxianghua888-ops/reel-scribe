@@ -1,0 +1,287 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "reel-scribe/multi-style/facets/1",
+  "title": "style-facet/1 风格刻面（草案）",
+  "description": "八类刻面共用的头部与各自正文。method 刻面沿用 styles/*/catalog.json 现有卡片，这里只定义可选的结构化扩展字段。",
+  "type": "object",
+  "required": ["schema", "kind", "id", "version", "status", "provenance"],
+  "properties": {
+    "schema": {"const": "style-facet/1"},
+    "kind": {"enum": ["method-ext", "rhythm", "design-system", "component", "caption-style", "look", "sound", "generation"]},
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "name": {"type": "string"},
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "status": {"$ref": "#/$defs/status"},
+    "provenance": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {"enum": ["original-synthesis", "original", "licensed", "derived-from-reference"]},
+        "source_ids": {"type": "array", "items": {"type": "string"}},
+        "notes": {"type": "string"}
+      }
+    },
+    "vector": {"$ref": "#/$defs/vector"}
+  },
+  "allOf": [
+    {"if": {"properties": {"kind": {"const": "method-ext"}}}, "then": {"properties": {"body": {"$ref": "#/$defs/method_ext"}}, "required": ["body"]}},
+    {"if": {"properties": {"kind": {"const": "rhythm"}}}, "then": {"properties": {"body": {"$ref": "#/$defs/rhythm"}}, "required": ["body"]}},
+    {"if": {"properties": {"kind": {"const": "design-system"}}}, "then": {"properties": {"body": {"$ref": "#/$defs/design_system"}}, "required": ["body"]}},
+    {"if": {"properties": {"kind": {"const": "component"}}}, "then": {"properties": {"body": {"$ref": "#/$defs/component"}}, "required": ["body"]}},
+    {"if": {"properties": {"kind": {"const": "caption-style"}}}, "then": {"properties": {"body": {"$ref": "#/$defs/caption_style"}}, "required": ["body"]}},
+    {"if": {"properties": {"kind": {"const": "look"}}}, "then": {"properties": {"body": {"$ref": "#/$defs/look"}}, "required": ["body"]}},
+    {"if": {"properties": {"kind": {"const": "sound"}}}, "then": {"properties": {"body": {"$ref": "#/$defs/sound"}}, "required": ["body"]}},
+    {"if": {"properties": {"kind": {"const": "generation"}}}, "then": {"properties": {"body": {"$ref": "#/$defs/generation"}}, "required": ["body"]}}
+  ],
+  "$defs": {
+    "status": {"enum": ["authored", "authored-unvalidated", "authored-adhoc", "compiled", "previewed", "limited-trial", "validated", "deprecated"]},
+    "unit": {"type": "number", "minimum": 0, "maximum": 1},
+    "vector": {
+      "type": "object",
+      "description": "7 轴风格向量，用于多样性选取。",
+      "properties": {
+        "tempo": {"$ref": "#/$defs/unit"},
+        "density": {"$ref": "#/$defs/unit"},
+        "ornament": {"$ref": "#/$defs/unit"},
+        "warmth": {"$ref": "#/$defs/unit"},
+        "contrast": {"$ref": "#/$defs/unit"},
+        "formality": {"$ref": "#/$defs/unit"},
+        "motion": {"$ref": "#/$defs/unit"}
+      },
+      "additionalProperties": false
+    },
+    "predicate": {
+      "type": "object",
+      "required": ["signal", "op", "value", "weight"],
+      "properties": {
+        "signal": {"type": "string", "description": "derived.* / signals.<type> / context.* / visual.*"},
+        "op": {"enum": [">=", "<=", "==", "!=", "in", "count>=", "count<=", "exists"]},
+        "value": {},
+        "weight": {"type": "number", "minimum": -1, "maximum": 1},
+        "why": {"type": "string"}
+      }
+    },
+    "rgb": {"type": "string", "pattern": "^[0-9A-Fa-f]{6}$"},
+    "rect_norm": {
+      "type": "object",
+      "description": "相对画布的归一化矩形 0–1",
+      "required": ["x", "y", "w", "h"],
+      "properties": {"x": {"$ref": "#/$defs/unit"}, "y": {"$ref": "#/$defs/unit"}, "w": {"$ref": "#/$defs/unit"}, "h": {"$ref": "#/$defs/unit"}}
+    },
+    "method_ext": {
+      "type": "object",
+      "required": ["card_ref"],
+      "properties": {
+        "card_ref": {"type": "string", "description": "styles/<domain>/<id>"},
+        "fit_signals": {"type": "array", "items": {"$ref": "#/$defs/predicate"}},
+        "anti_signals": {"type": "array", "items": {"$ref": "#/$defs/predicate"}},
+        "requires_signals": {"type": "array", "items": {"type": "string"}},
+        "signature": {"type": "string"}
+      }
+    },
+    "rhythm": {
+      "type": "object",
+      "properties": {
+        "target_duration_ratio": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+        "hook_window_ms": {"type": "integer"},
+        "pause_keep_min_ms": {"type": "integer", "description": "不短于该时长的有意停顿保留"},
+        "max_shot_ms": {"type": "integer"},
+        "broll_cadence_ms": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2},
+        "absorb_after_value_ms": {"type": "integer", "description": "数值出现后的吸收时间"},
+        "chapter_breath_ms": {"type": "integer"},
+        "beat_align": {"enum": ["none", "downbeat", "phrase"]},
+        "intensity_curve": {"enum": ["flat", "follow-signals", "build", "arc"]}
+      }
+    },
+    "design_system": {
+      "type": "object",
+      "required": ["visual_family", "colors", "typography", "layout", "motion"],
+      "properties": {
+        "visual_family": {"enum": ["handwritten-notes", "paper-collage-print", "editorial-magazine", "bold-type", "tech-dashboard", "geometric-whitespace", "gradient-material-light"]},
+        "colors": {
+          "type": "object",
+          "required": ["bg", "ink", "accent"],
+          "additionalProperties": {
+            "type": "object",
+            "required": ["rgb"],
+            "properties": {"rgb": {"$ref": "#/$defs/rgb"}, "max_area_ratio": {"$ref": "#/$defs/unit"}, "use": {"type": "string"}}
+          }
+        },
+        "typography": {
+          "type": "object",
+          "required": ["families", "levels"],
+          "properties": {
+            "families": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {"name": {"type": "string"}, "file_sha256": {"type": "string"}, "license": {"type": "string"}}
+              }
+            },
+            "levels": {
+              "type": "object",
+              "description": "title/value/label/body 四级，字号以 1080 短边像素计",
+              "additionalProperties": {
+                "type": "object",
+                "required": ["family", "min_px"],
+                "properties": {"family": {"type": "string"}, "min_px": {"type": "integer"}, "weight": {"type": "integer"}, "tracking": {"type": "number"}}
+              }
+            },
+            "cjk": {
+              "type": "object",
+              "properties": {
+                "max_chars_per_line": {"type": "integer"},
+                "kinsoku": {"type": "boolean"},
+                "keep_number_with_unit": {"type": "boolean"},
+                "vertical_allowed": {"type": "boolean"}
+              }
+            }
+          }
+        },
+        "layout": {
+          "type": "object",
+          "description": "按画幅定义版位",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {"$ref": "#/$defs/rect_norm"}
+          }
+        },
+        "motion": {
+          "type": "object",
+          "properties": {
+            "enter_ms": {"type": "integer"},
+            "exit_ms": {"type": "integer"},
+            "easing": {"type": "string"},
+            "allowed": {"type": "array", "items": {"enum": ["fade", "slide", "wipe", "type-on", "stroke-draw", "scale", "none"]}},
+            "max_hold_ms": {"type": "integer"}
+          }
+        },
+        "texture": {
+          "type": "object",
+          "properties": {"paper": {"type": "boolean"}, "grain": {"$ref": "#/$defs/unit"}, "stroke": {"type": "boolean"}, "shadow": {"type": "boolean"}}
+        },
+        "dos": {"type": "array", "items": {"type": "string"}},
+        "donts": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "component": {
+      "type": "object",
+      "required": ["engine", "template", "props", "timing", "placement"],
+      "properties": {
+        "category": {"enum": ["data", "quote", "list", "label", "chapter", "annotation", "lower-third", "transition", "title"]},
+        "engine": {"enum": ["html", "ass", "ffmpeg-filter", "lottie", "host-native"]},
+        "template": {
+          "type": "object",
+          "required": ["path"],
+          "properties": {"path": {"type": "string"}, "sha256": {"type": "string"}, "engine_version": {"type": "string"}}
+        },
+        "design_tokens_used": {"type": "array", "items": {"type": "string"}},
+        "props": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["type", "editable"],
+            "properties": {
+              "type": {"enum": ["string", "integer", "number", "boolean", "enum", "array", "color-role"]},
+              "editable": {"type": "boolean"},
+              "default": {},
+              "min": {"type": "number"},
+              "max": {"type": "number"},
+              "max_chars": {"type": "integer"},
+              "values": {"type": "array"},
+              "items": {"type": "object"}
+            }
+          }
+        },
+        "timing": {
+          "type": "object",
+          "required": ["anchor"],
+          "properties": {
+            "anchor": {"enum": ["word-span", "signal-span", "chapter", "fixed"]},
+            "lead_ms": {"type": "integer"},
+            "min_hold_ms": {"type": "integer"},
+            "exit": {"enum": ["on-topic-change", "fixed", "next-trigger", "end-of-sentence"]}
+          }
+        },
+        "placement": {
+          "type": "object",
+          "properties": {
+            "slots": {"type": "array", "items": {"type": "string"}},
+            "avoid": {"type": "array", "items": {"enum": ["face", "subject", "caption-band", "product", "ui"]}}
+          }
+        },
+        "outputs": {"type": "array", "items": {"enum": ["alpha-mov", "png-seq", "ass", "host-instance"]}}
+      }
+    },
+    "caption_style": {
+      "type": "object",
+      "required": ["grouping"],
+      "properties": {
+        "grouping": {"enum": ["sentence", "phrase", "word", "none-when-component"]},
+        "emphasis": {"enum": ["none", "keyword-color", "keyword-weight", "highlight-box", "word-karaoke"]},
+        "emphasis_color_role": {"type": "string"},
+        "font_level": {"type": "string"},
+        "band": {"type": "object", "additionalProperties": {"$ref": "#/$defs/rect_norm"}},
+        "animation": {"enum": ["none", "fade", "pop", "type-on", "karaoke"]},
+        "max_lines": {"type": "integer"}
+      }
+    },
+    "look": {
+      "type": "object",
+      "properties": {
+        "grade_layers": {"type": "array", "items": {"type": "object"}, "description": "work-color-contract 的调色层定义"},
+        "lut": {"type": "object", "properties": {"path": {"type": "string"}, "sha256": {"type": "string"}, "strength": {"$ref": "#/$defs/unit"}}},
+        "texture": {"type": "object", "description": "film-texture-apply 参数：grain/halation/vignette"},
+        "reference_frames": {"type": "array", "items": {"type": "string"}, "description": "供 color-reference-fit 拟合的风格帧"},
+        "protect": {"type": "object", "description": "保护色相范围，如肤色"}
+      }
+    },
+    "sound": {
+      "type": "object",
+      "properties": {
+        "music": {
+          "type": "object",
+          "properties": {
+            "mode": {"enum": ["none", "bed", "intro-and-transitions", "drive"]},
+            "genre": {"type": "string"},
+            "bpm_range": {"type": "array", "items": {"type": "number"}},
+            "energy": {"$ref": "#/$defs/unit"},
+            "license_required": {"type": "string"}
+          }
+        },
+        "sfx": {
+          "type": "array",
+          "items": {"type": "object", "required": ["trigger", "asset"], "properties": {"trigger": {"type": "string"}, "asset": {"type": "string"}, "gain_db": {"type": "number"}}}
+        },
+        "ducking": {"type": "object", "properties": {"depth_db": {"type": "number"}, "attack_ms": {"type": "integer"}, "release_ms": {"type": "integer"}}},
+        "ambience": {"enum": ["keep", "reduce", "replace", "none"]},
+        "loudness_lufs": {"type": "number"}
+      }
+    },
+    "generation": {
+      "type": "object",
+      "required": ["treatment", "reference_slots"],
+      "properties": {
+        "treatment": {"type": "string", "description": "视觉处理 ID，由短剧仓库维护"},
+        "reference_slots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["role", "controls"],
+            "properties": {
+              "role": {"enum": ["identity", "product", "packaging", "scene", "motion", "style", "prop", "audio"]},
+              "controls": {"type": "string", "description": "这一参考只负责什么"},
+              "required": {"type": "boolean"}
+            }
+          }
+        },
+        "prompt_modules": {"type": "object", "additionalProperties": {"type": "string"}},
+        "negative_modules": {"type": "array", "items": {"type": "string"}},
+        "model_capabilities": {"type": "array", "items": {"enum": ["text-to-video", "first-last-frame", "multimodal-reference", "video-edit", "extend", "image-gen"]}},
+        "default_duration_s": {"type": "number"},
+        "aspect": {"type": "string"}
+      }
+    }
+  }
+}

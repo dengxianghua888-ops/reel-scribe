@@ -1,0 +1,71 @@
+{
+  "schema": "style-pack/1",
+  "id": "speech-editorial-magazine",
+  "name": "黑白杂志专访",
+  "version": "0.1.0",
+  "status": "authored-unvalidated",
+  "extends": "speech-packaging-base@0.1.0",
+  "cost_tier": "mechanism",
+  "routes": ["EDIT"],
+  "workflow": "raven-speech-edit",
+  "facets": {
+    "method": "method/speech/personal-story@0.1.0",
+    "rhythm": "rhythm/chaptered@0.1.0",
+    "design_system": "ds/mono-editorial@0.1.0",
+    "components": ["cmp/chapter-page@0.1.0", "cmp/data-page@0.1.0", "cmp/name-strip@0.1.0"],
+    "caption_style": "cap/serif-lower-third@0.1.0",
+    "look": "look/mono-with-subject-color@0.1.0",
+    "sound": "snd/ambience-only@0.1.0"
+  },
+  "fit": {
+    "signals": [
+      {"signal": "signals.chapter_boundary", "op": "count>=", "value": 3, "weight": 0.3},
+      {"signal": "derived.story_ratio", "op": ">=", "value": 0.2, "weight": 0.25},
+      {"signal": "context.goal", "op": "in", "value": ["record", "explain", "accompany"], "weight": 0.15}
+    ],
+    "anti": [
+      {"signal": "context.goal", "op": "==", "value": "sell", "weight": -0.3}
+    ],
+    "requires_signals": ["chapter_boundary"],
+    "requires_assets": ["subject-matte"],
+    "goals": ["record", "explain", "accompany"]
+  },
+  "capability_requirements": {
+    "required": ["layer-compose"],
+    "optional": [{"capability": "subject-matte", "degrade": "整帧黑白，不保留人像原色；签名手法失效，状态降为 eligible-degraded"}]
+  },
+  "decision_slots": [
+    {"id": "design_system", "mode": "locked"},
+    {"id": "chapter_titles", "mode": "runtime", "owner": "agent-semantic", "rule": "章名取自说话人原话中的短语"},
+    {"id": "music", "mode": "locked", "default": "none"}
+  ],
+  "binding_rules": [
+    {
+      "id": "chapter",
+      "on": {"signal": "chapter_boundary"},
+      "do": {"component": "cmp/chapter-page@0.1.0", "props": {"title": "$signal.text"}},
+      "timing": {"anchor": "chapter", "lead_ms": 0, "min_hold_ms": 1000, "exit": "fixed"},
+      "placement": {"prefer": ["fullscreen"], "avoid": []},
+      "density": {"max_total": 6, "min_gap_ms": 45000},
+      "priority": 90,
+      "fallback": "drop"
+    },
+    {
+      "id": "data-group",
+      "on": {"signal": "numeric", "where": "grouped_by(chapter) and group_size >= 2"},
+      "do": {"component": "cmp/data-page@0.1.0", "props": {"items": "$group.numerics"}},
+      "timing": {"anchor": "chapter", "lead_ms": 0, "min_hold_ms": 2500, "exit": "fixed"},
+      "placement": {"prefer": ["fullscreen"], "avoid": []},
+      "density": {"max_total": 3, "min_gap_ms": 60000},
+      "priority": 70,
+      "fallback": "drop"
+    }
+  ],
+  "signature": {"device": "黑白底版中只有人物保留原色，每章一张静止人物页", "strength": 0.9, "min_occurrences": 3},
+  "restraint": ["数据页不超过 3 张", "不加音乐"],
+  "cliche_blocklist": ["template-intro", "glitch-transition", "bgm-wall"],
+  "checks": ["protection-untouched", "matte-edge-quality", "density-budget", "token-compliance", "look-consistency"],
+  "vector": {"tempo": 0.45, "density": 0.3, "ornament": 0.5, "warmth": 0.35, "contrast": 0.8, "formality": 0.8, "motion": 0.2},
+  "editability": {"rework_units": ["cut", "caption-line", "component-instance", "design-system", "grade-layer", "audio-track"], "notes": "人像遮罩错误需重跑 subject-matte 的对应区间"},
+  "provenance": {"type": "original-synthesis", "inspired_by": ["人物、新闻与杂志版式类视觉语言", "ChatCut Monochrome Magazine 属于机制包的观察"]}
+}

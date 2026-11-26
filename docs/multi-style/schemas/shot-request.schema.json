@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "reel-scribe/multi-style/shot-request/1",
+  "title": "shot-request/1 剪辑侧 → 生成侧补镜请求（草案）",
+  "description": "影述在剪辑中发现缺镜时发给生成侧。生成侧按风格圣经写成一镜并生成，结果以 generation-return/1 交回。",
+  "type": "object",
+  "required": ["schema", "request_id", "work", "slot", "purpose", "continuity", "bible_ref", "acceptance"],
+  "properties": {
+    "schema": {"const": "shot-request/1"},
+    "request_id": {"type": "string"},
+    "work": {"type": "object", "required": ["work_id", "version"], "properties": {"work_id": {"type": "string"}, "version": {"type": "string"}}},
+    "route": {"enum": ["GENERATE", "HYBRID"]},
+    "slot": {
+      "type": "object",
+      "required": ["after_clip_id", "duration_ms"],
+      "properties": {"after_clip_id": {"type": "string"}, "before_clip_id": {"type": "string"}, "duration_ms": {"type": "integer"}, "duration_tolerance_ms": {"type": "integer"}}
+    },
+    "purpose": {"type": "string", "description": "观众此刻要新知道什么，或哪个关系发生变化"},
+    "continuity": {
+      "type": "object",
+      "properties": {
+        "prev_end_frame": {"type": "object", "properties": {"asset": {"type": "string"}, "frame": {"type": "integer"}}},
+        "next_start_frame": {"type": "object", "properties": {"asset": {"type": "string"}, "frame": {"type": "integer"}}},
+        "states": {"type": "array", "items": {"type": "string"}, "description": "要继承的人物、道具、光线状态"}
+      }
+    },
+    "bible_ref": {"type": "object", "required": ["path", "sha256", "direction_id"], "properties": {"path": {"type": "string"}, "sha256": {"type": "string"}, "direction_id": {"type": "string"}}},
+    "reference_roles": {
+      "type": "array",
+      "items": {"type": "object", "required": ["role", "asset"], "properties": {"role": {"enum": ["identity", "product", "packaging", "scene", "motion", "style", "prop", "audio"]}, "asset": {"type": "string"}, "controls": {"type": "string"}}}
+    },
+    "constraints": {"type": "array", "items": {"type": "string"}, "description": "例如：不得引入新事实；不得改变人物所知；演绎画面不作功效证据"},
+    "acceptance": {"type": "array", "items": {"type": "string"}, "description": "什么样的候选算可用"},
+    "budget": {"type": "object", "properties": {"max_candidates": {"type": "integer"}, "max_credits": {"type": "number"}}}
+  },
+  "$defs": {
+    "generation_return": {
+      "description": "generation-return/1：生成侧回收候选",
+      "type": "object",
+      "required": ["schema", "request_id", "candidates"],
+      "properties": {
+        "schema": {"const": "generation-return/1"},
+        "request_id": {"type": "string"},
+        "candidates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["take_id", "task_id", "status"],
+            "properties": {
+              "take_id": {"type": "string"},
+              "task_id": {"type": "string"},
+              "status": {"enum": ["SUCCEEDED", "FAILED", "UNKNOWN"]},
+              "asset": {"type": "object", "properties": {"path": {"type": "string"}, "sha256": {"type": "string"}}},
+              "spec": {"type": "object"},
+              "usable_ranges": {"type": "array"},
+              "defects": {"type": "array"},
+              "cost": {"type": "object"},
+              "agent_pick": {"type": "boolean"},
+              "pick_reason": {"type": "string"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

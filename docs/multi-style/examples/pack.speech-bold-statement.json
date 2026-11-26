@@ -1,0 +1,68 @@
+{
+  "schema": "style-pack/1",
+  "id": "speech-bold-statement",
+  "name": "观点大字",
+  "version": "0.1.0",
+  "status": "authored-unvalidated",
+  "extends": "speech-packaging-base@0.1.0",
+  "cost_tier": "skin",
+  "routes": ["EDIT"],
+  "workflow": "raven-speech-edit",
+  "facets": {
+    "method": "method/speech/crisp-argument@0.1.0",
+    "rhythm": "rhythm/fast-claim-first@0.1.0",
+    "design_system": "ds/bold-type-yellow@0.1.0",
+    "components": ["cmp/quote-giant@0.1.0", "cmp/numbered-point@0.1.0", "cmp/number-impact@0.1.0"],
+    "caption_style": "cap/none-when-component@0.1.0",
+    "look": "look/punchy@0.1.0",
+    "sound": "snd/statement-hits@0.1.0"
+  },
+  "fit": {
+    "signals": [
+      {"signal": "signals.claim", "op": "count>=", "value": 3, "weight": 0.35, "why": "有可以独立成句的主张"},
+      {"signal": "signals.turn", "op": "count>=", "value": 2, "weight": 0.2},
+      {"signal": "derived.argument_ratio", "op": ">=", "value": 0.3, "weight": 0.25},
+      {"signal": "context.goal", "op": "in", "value": ["persuade", "explain"], "weight": 0.1}
+    ],
+    "anti": [
+      {"signal": "derived.story_ratio", "op": ">=", "value": 0.6, "weight": -0.3},
+      {"signal": "context.goal", "op": "==", "value": "record", "weight": -0.5, "why": "留档类不能把原话压成口号"}
+    ],
+    "requires_signals": ["claim"],
+    "goals": ["persuade", "explain"]
+  },
+  "decision_slots": [
+    {"id": "design_system", "mode": "locked"},
+    {"id": "which_claims_go_giant", "mode": "runtime", "owner": "agent-semantic", "rule": "只选不依赖上下文仍成立、且保留了限定的主张"},
+    {"id": "music", "mode": "user", "default": "none"}
+  ],
+  "binding_rules": [
+    {
+      "id": "giant-claim",
+      "on": {"signal": "claim", "where": "length_chars <= 16 and keeps_qualifiers", "min_confidence": 0.75},
+      "do": {"component": "cmp/quote-giant@0.1.0", "props": {"text": "$signal.text"}},
+      "timing": {"anchor": "signal-span", "lead_ms": 0, "min_hold_ms": 1200, "exit": "end-of-sentence"},
+      "placement": {"prefer": ["fullscreen"], "avoid": ["caption-band"]},
+      "density": {"max_per_min": 2, "min_gap_ms": 12000},
+      "priority": 85,
+      "fallback": "caption-emphasis"
+    },
+    {
+      "id": "numbered-list",
+      "on": {"signal": "list_item"},
+      "do": {"component": "cmp/numbered-point@0.1.0", "props": {"n": "$signal.fields.index", "label": "$signal.text"}},
+      "timing": {"anchor": "signal-span", "lead_ms": 100, "min_hold_ms": 1500, "exit": "next-trigger"},
+      "placement": {"prefer": ["beside-subject-opposite", "upper-band"], "avoid": ["face"]},
+      "density": {"max_per_min": 4, "min_gap_ms": 3000},
+      "priority": 60,
+      "fallback": "caption-emphasis"
+    }
+  ],
+  "signature": {"device": "一句话占满一拍画面，人物退到暗处", "strength": 0.85, "min_occurrences": 3},
+  "restraint": ["同一分钟最多 2 次大字", "大字只用原话，不改写成口号"],
+  "cliche_blocklist": ["every-line-popup", "rainbow-keywords", "constant-punch-in", "bgm-wall"],
+  "checks": ["protection-untouched", "qualifier-kept", "density-budget", "face-occlusion", "token-compliance"],
+  "vector": {"tempo": 0.85, "density": 0.5, "ornament": 0.3, "warmth": 0.5, "contrast": 0.9, "formality": 0.45, "motion": 0.7},
+  "editability": {"rework_units": ["cut", "caption-line", "component-instance", "design-system", "grade-layer", "audio-track"]},
+  "provenance": {"type": "original-synthesis", "inspired_by": ["大字引言与字形动画类视觉语言"]}
+}

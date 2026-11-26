@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "reel-scribe/multi-style/material-profile/1",
+  "title": "material-profile/1 素材画像（草案）",
+  "description": "带证据的素材特征。每个观察都标明来源与置信度；模型观察只是候选，不等于已听检或已看检。",
+  "type": "object",
+  "required": ["schema", "work", "sources", "signals", "derived", "context"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {"const": "material-profile/1"},
+    "work": {
+      "type": "object",
+      "required": ["work_id", "version"],
+      "properties": {
+        "work_id": {"type": "string"},
+        "version": {"type": "string"},
+        "document_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["source_id", "kind", "identity"],
+        "properties": {
+          "source_id": {"type": "string"},
+          "kind": {"enum": ["video", "audio", "image", "transcript", "script", "product-sheet", "reference"]},
+          "identity": {
+            "type": "object",
+            "description": "字节 SHA-256，或宿主稳定资产 ID 加项目修订（此时注明字节哈希未知）。",
+            "properties": {
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "host_asset_id": {"type": "string"},
+              "host_revision": {"type": "string"},
+              "bytes_hash_unknown": {"type": "boolean"}
+            }
+          },
+          "spec": {
+            "type": "object",
+            "properties": {
+              "duration_ms": {"type": "integer", "minimum": 0},
+              "width": {"type": "integer"},
+              "height": {"type": "integer"},
+              "fps": {"type": "string"},
+              "transfer": {"enum": ["sdr", "hlg", "pq", "log", "unknown"]},
+              "audio_channels": {"type": "integer"}
+            }
+          }
+        }
+      }
+    },
+    "transcript_ref": {
+      "type": "object",
+      "properties": {
+        "path": {"type": "string"},
+        "sha256": {"type": "string"},
+        "revision": {"type": "string"},
+        "timing": {"enum": ["manual", "model-aligned", "model-observed", "none"]}
+      }
+    },
+    "signals": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/signal"}
+    },
+    "visual": {
+      "type": "object",
+      "properties": {
+        "subject_tracks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["source_id", "range_ms", "boxes"],
+            "properties": {
+              "source_id": {"type": "string"},
+              "range_ms": {"$ref": "#/$defs/range"},
+              "kind": {"enum": ["face", "person", "product", "object"]},
+              "boxes": {"type": "array", "items": {"$ref": "#/$defs/rect"}},
+              "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+            }
+          }
+        },
+        "free_regions": {"type": "array", "items": {"type": "object"}},
+        "shot_scale_distribution": {"type": "object", "additionalProperties": {"type": "number"}},
+        "color_profile_ref": {"type": "string", "description": "color-profile-scan 结果路径"}
+      }
+    },
+    "audio": {
+      "type": "object",
+      "properties": {
+        "speech_rate_cps": {"type": "number"},
+        "pause_ratio": {"type": "number"},
+        "music_present": {"type": "boolean"},
+        "noise_floor_db": {"type": "number"},
+        "beats_ref": {"type": "string"}
+      }
+    },
+    "derived": {
+      "type": "object",
+      "description": "路由直接使用的派生指标，均可由 signals/visual/audio 复算。",
+      "additionalProperties": {"type": ["number", "string", "boolean"]},
+      "properties": {
+        "numeric_density_per_min": {"type": "number"},
+        "story_ratio": {"type": "number"},
+        "argument_ratio": {"type": "number"},
+        "step_count": {"type": "integer"},
+        "quote_count": {"type": "integer"},
+        "emotion_arousal_mean": {"type": "number"},
+        "emotion_arousal_peak": {"type": "number"},
+        "humor_density_per_min": {"type": "number"},
+        "face_center_ratio": {"type": "number"},
+        "free_side": {"enum": ["left", "right", "none", "both"]},
+        "broll_minutes": {"type": "number"}
+      }
+    },
+    "context": {
+      "type": "object",
+      "properties": {
+        "platforms": {"type": "array", "items": {"type": "string"}},
+        "aspect_ratios": {"type": "array", "items": {"enum": ["16:9", "9:16", "1:1", "4:5", "21:9"]}},
+        "audience": {"type": "string"},
+        "goal": {"enum": ["teach", "persuade", "accompany", "sell", "record", "entertain", "explain"]},
+        "brand": {
+          "type": "object",
+          "properties": {
+            "palette": {"type": "array", "items": {"type": "string", "pattern": "^[0-9A-Fa-f]{6}$"}},
+            "fonts": {"type": "array", "items": {"type": "string"}},
+            "locked_pack": {"type": "string"}
+          }
+        },
+        "series": {
+          "type": "object",
+          "properties": {
+            "series_id": {"type": "string"},
+            "locked_pack": {"type": "string"},
+            "episode_index": {"type": "integer"}
+          }
+        },
+        "exclusions": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  },
+  "$defs": {
+    "range": {
+      "type": "array",
+      "prefixItems": [{"type": "integer", "minimum": 0}, {"type": "integer", "minimum": 0}],
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "半开区间 [start, end)，毫秒"
+    },
+    "rect": {
+      "type": "object",
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "t_ms": {"type": "integer"},
+        "x": {"type": "integer"},
+        "y": {"type": "integer"},
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1}
+      }
+    },
+    "signal": {
+      "type": "object",
+      "required": ["id", "type", "evidence", "source", "confidence"],
+      "properties": {
+        "id": {"type": "string"},
+        "type": {
+          "enum": ["numeric", "spec_pair", "list_item", "step", "quote", "comparison", "turn", "question", "claim", "example", "story_beat", "emotion_peak", "humor", "product_mention", "chapter_boundary", "emphasis_word", "limitation", "price_offer"]
+        },
+        "text": {"type": "string"},
+        "fields": {
+          "type": "object",
+          "description": "类型相关的结构化字段，例如 numeric 的 value/unit/label/approximate。"
+        },
+        "evidence": {
+          "type": "object",
+          "required": ["source_id"],
+          "properties": {
+            "source_id": {"type": "string"},
+            "word_ids": {"type": "array", "items": {"type": "string"}},
+            "source_range_ms": {"$ref": "#/$defs/range"},
+            "frames": {"type": "array", "items": {"type": "integer"}}
+          }
+        },
+        "source": {"enum": ["rule", "model", "user-declared"]},
+        "model_identity": {"type": "string"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "protected": {"type": "boolean", "description": "信号所在词是否为已登记保护项；保护信号只读。"}
+      }
+    }
+  }
+}
