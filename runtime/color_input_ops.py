@@ -148,7 +148,6 @@ def transform(request, directory, tools):
             'COLOR_INPUT_OUTPUT_TAGS_UNEXPECTED: %s' % tags)
     out_frames = len(frame_clock(str(output), tools))
     require(out_frames == len(clock), 'COLOR_INPUT_FRAME_COUNT_CHANGED: %d -> %d' % (len(clock), out_frames))
-    source(request['source'])  # bytes must still match after decoding
     result = {'schema': SCHEMA, 'source': asset, 'stream': stream, 'input': request['input'],
               'nominal_peak_nits': npl, 'tonemap': tonemap, 'filter': vf,
               'video': {'path': str(output), 'sha256': sha256(output), 'pix_fmt': out_video.get('pix_fmt'),
@@ -160,5 +159,7 @@ def transform(request, directory, tools):
                          'Measurements cover the sampled frames only.',
                          'Dolby Vision RPU and HDR10+ dynamic metadata are not read; only the base layer is converted.',
                          'Colors outside BT.709 are clipped after conversion; outside_bt709_gamut_fraction reports how many.']}
+    # Check the source after hashing the derived media, before publishing the result.
+    source(request['source'])
     write_json(directory / 'color-input-transform.json', result)
     return result
