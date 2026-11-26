@@ -105,3 +105,25 @@
 | [AcademySoftwareFoundation/OpenColorIO](https://github.com/AcademySoftwareFoundation/OpenColorIO/tree/22dd9c4faa0d1b7cfb3d64d1a6e9cb454acc6cfd) | `22dd9c4faa0d` | BSD-3-Clause | 色彩管理，影述 Log 转换已使用 | 影调刻面的色彩空间基础 | — |
 | [cyangraphics/clut](https://github.com/cyangraphics/clut/tree/af7b50d4caf6244fb6895a647f5b6a84efe7931a) | `af7b50d4caf6` | CC BY-SA 4.0（README 声明） | HaldCLUT 预设集合 | 影调参照 | 直接随包分发（相同方式共享） |
 
+## K 开放评估补充：对齐、合规、声音、偏好与多语种（见 12 章）（17）
+
+| 仓库 | 提交 | 许可 | 它提供什么 | 我们借鉴 | 不借鉴 |
+|---|---|---|---|---|---|
+| [QwenLM/Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR/tree/7c6daf77a2421100f5fb066495372c00129d39ff) | `7c6daf77a242` | Apache-2.0 | 52 种语言与方言识别；Qwen3-ForcedAligner-0.6B 支持 11 种语言、5 分钟内任意单位的时间戳 | 识别与对齐候选；影述已有逐窗实测（chinese-alignment.md） | 把结构合法的时间当作可剪边界 |
+| [FireRedTeam/FireRedASR](https://github.com/FireRedTeam/FireRedASR/tree/834635e4cf277ed8ca92049fc375b17c3dc20748) | `834635e4cf27` | Apache-2.0 | 中文识别模型与流水线 | 识别对照 | — |
+| [QwenLM/Qwen3-VL](https://github.com/QwenLM/Qwen3-VL/tree/96588727e44c78b25ba03ea03b8e12f7e64fd0da) | `96588727e44c` | Apache-2.0 | 视觉语言模型 | 风格指纹 L3 的候选标签（装饰度、设计语言族、字幕样式） | 不经人工确认直接定标签 |
+| [google-research/frame-interpolation](https://github.com/google-research/frame-interpolation/tree/69f8708f08e62c2edf46a27616a4bfcf083e2076) | `69f8708f08e6` | Apache-2.0 | FILM 大位移帧插值 | 跳切的帧插值遮挡（≤ 6 帧、头部位移小） | 长间隔补帧 |
+| [hzwer/ECCV2022-RIFE](https://github.com/hzwer/ECCV2022-RIFE/tree/5d8adbdd40e12c2c8f91930eff838aebe561c086) | `5d8adbdd40e1` | MIT | 实时帧插值 | 帧插值遮跳的快速路径 | — |
+| [contentauth/c2pa-rs](https://github.com/contentauth/c2pa-rs/tree/bf30cc5ed8785165a42e17845ffe9eb2be4d4f4e) | `bf30cc5ed878` | Apache-2.0 | C2PA 内容凭证读写 | 出海版本的隐式标识与读回检查 | 宣称转码后仍可追溯 |
+| [CodeGoat24/UnifiedReward](https://github.com/CodeGoat24/UnifiedReward/tree/ff6f520247a2d36e2aff7b2ba53a935afd437f66) | `ff6f520247a2` | MIT | 统一的多模态理解与生成奖励模型，支持成对排序与打分 | 自有风格奖励模型的底座 | — |
+| [THUDM/VisionReward](https://github.com/THUDM/VisionReward/tree/511960d61a777b2008cd486a85a090ba96792a32) | `511960d61a77` | 代码 Apache-2.0；视频权重指向 CogVLM2 许可 | 分层、可解释的图像与视频偏好评分 | 可解释维度加权的做法 | 未核对权重许可前商用 |
+| [westlake-repl/MicroLens](https://github.com/westlake-repl/MicroLens/tree/0fc876066987fb3b920df2765cfbac2763c515eb) | `0fc876066987` | 无 LICENSE 文件 | 百万级短视频推荐数据集 | 互动预测的研究参照 | 用于训练 |
+| [hkchengrex/MMAudio](https://github.com/hkchengrex/MMAudio/tree/974010a026c731054592d8f777218bd9d85a6c24) | `974010a026c7` | 代码 MIT；权重 CC-BY-NC 4.0 | 视频到音频生成 | 拟音效果参照 | 进入商用链路 |
+| [Tencent-Hunyuan/HunyuanVideo-Foley](https://github.com/Tencent-Hunyuan/HunyuanVideo-Foley/tree/df7b005b5023df2a9b73e1d66dd51d452799884e) | `df7b005b5023` | 腾讯混元社区许可：不适用于欧盟、英国、韩国；月活超 1 亿须另行申请 | 视频拟音生成 | 国内版本拟音候选，须法务确认 | 海外版本 |
+| [FunAudioLLM/ThinkSound](https://github.com/FunAudioLLM/ThinkSound/tree/4e2cfd57efaaf40c90460d8111b6a3c1e7dfb2f0) | `4e2cfd57efaa` | 无 LICENSE 文件；README 写明不允许商用 | 链式推理的视频配音效 | — | 使用 |
+| [ace-step/ACE-Step](https://github.com/ace-step/ACE-Step/tree/1bee4c9f5b43e30995f8d4d33b3919197ce1bd68) | `1bee4c9f5b43` | Apache-2.0 | 音乐生成基础模型 | 纯音乐床 | 中文歌词（罗马化处理，效果未证实） |
+| [FunAudioLLM/CosyVoice](https://github.com/FunAudioLLM/CosyVoice/tree/074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc) | `074ca6dc9e80` | Apache-2.0 | 多语种语音合成 | 多语种配音 | — |
+| [index-tts/index-tts](https://github.com/index-tts/index-tts/tree/d9e41aac89fd00b3d71497fddb287b7f24613712) | `d9e41aac89fd` | bilibili 模型使用协议：月活超 1 亿或年营收超 10 亿元须另行授权；不得用于改进其他模型 | 可控情绪与时长的语音合成 | 配音候选，须评估协议 | 未评估前商用 |
+| [bytedance/LatentSync](https://github.com/bytedance/LatentSync/tree/a229c3948406bc2cf6eaf4873e662e70c6a04746) | `a229c3948406` | Apache-2.0 | 扩散式口型同步 | 译配版口型（质量优先） | — |
+| [TMElyralab/MuseTalk](https://github.com/TMElyralab/MuseTalk/tree/2536eaf06b85f775d8e04b7fd81bf6699155a58d) | `2536eaf06b85` | 代码 MIT；依赖模型各自许可 | 实时口型同步 | 译配版口型（速度优先） | 未核对依赖许可前商用 |
+

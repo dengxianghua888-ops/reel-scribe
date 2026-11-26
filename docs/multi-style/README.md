@@ -16,7 +16,7 @@
 | 字幕样式 / 影调 / 声音 / 节奏 | 30 / 25 / 16 / 14 |
 | 动效组件 | 126 个，16 类 |
 | 渲染实现方式 | 14 种 |
-| 公开调研来源 | 53 个，均固定提交并核对许可 |
+| 公开调研来源 | 70 个（十类 53 个，开放评估补充 17 个），均固定提交并核对许可 |
 | 基线 | 4 级：B0 行业技术、B1 默认（硬门槛）、B2 开源最佳、B3 人工专业 |
 
 全部为设计条目（`catalog-draft`），数量不代表已验证的风格。
@@ -37,14 +37,15 @@
 | [09 基线、评测集与优质样本](09-baseline-eval.md) | 默认基线的精确定义、评测集、优质样本库、评审协议、放行门槛 |
 | [10 路线图](10-roadmap.md) | 三期建设、放行条件、风险、需要拍板的决定 |
 | [11 对外接口](11-interfaces.md) | 与剪辑 Agent、与生成侧的接口 |
+| [12 开放评估](12-open-evaluation.md) | 需求之外还值得做深的十个方向、打分，以及排在前面的方向的设计与验收：中文口播接点、合规门、风格指纹、中文排版、审片—修复闭环 |
 
 ## 机器可读部分
 
 | 路径 | 内容 |
 |---|---|
 | [catalog/](catalog/) | 风格包、场景、刻面库、组件、调研表、覆盖统计（JSON 与 Markdown） |
-| [tools/](tools/) | 目录数据与构建检查脚本：`python3 docs/multi-style/tools/build_catalog.py` |
-| [schemas/](schemas/) | JSON Schema 草案：素材画像、刻面、风格包、路由结果、风格计划、交接、补镜、优质样本卡 |
+| [tools/](tools/) | 目录数据与构建检查脚本：`python3 docs/multi-style/tools/build_catalog.py`；风格指纹测量原型：`python3 docs/multi-style/tools/measure_fingerprint.py VIDEO` |
+| [schemas/](schemas/) | JSON Schema 草案：素材画像、刻面、风格包、路由结果、风格计划、交接、补镜、优质样本卡、风格指纹 |
 | [examples/](examples/) | 可执行风格包、设计系统、组件、路由结果与风格计划的完整样例；`python3 docs/multi-style/validate_examples.py` |
 
 ## 与现有资产的关系

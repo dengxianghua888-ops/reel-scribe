@@ -16,6 +16,7 @@ CATEGORIES = {
     "H": "质量与评测",
     "I": "摄影语言",
     "J": "影调",
+    "K": "开放评估补充：对齐、合规、声音、偏好与多语种（见 12 章）",
 }
 
 SOURCES = [
@@ -72,6 +73,23 @@ SOURCES = [
     ("I", "sy77777en/CameraBench", "CC BY 4.0", "约 3,000 段视频的相机运动分类（平移、旋转、变焦、环绕、稳定性、跟随），三种参照系", "运镜词表与画面运动组件命名", "—"),
     ("J", "AcademySoftwareFoundation/OpenColorIO", "BSD-3-Clause", "色彩管理，影述 Log 转换已使用", "影调刻面的色彩空间基础", "—"),
     ("J", "cyangraphics/clut", "CC BY-SA 4.0（README 声明）", "HaldCLUT 预设集合", "影调参照", "直接随包分发（相同方式共享）"),
+    ("K", "QwenLM/Qwen3-ASR", "Apache-2.0", "52 种语言与方言识别；Qwen3-ForcedAligner-0.6B 支持 11 种语言、5 分钟内任意单位的时间戳", "识别与对齐候选；影述已有逐窗实测（chinese-alignment.md）", "把结构合法的时间当作可剪边界"),
+    ("K", "FireRedTeam/FireRedASR", "Apache-2.0", "中文识别模型与流水线", "识别对照", "—"),
+    ("K", "QwenLM/Qwen3-VL", "Apache-2.0", "视觉语言模型", "风格指纹 L3 的候选标签（装饰度、设计语言族、字幕样式）", "不经人工确认直接定标签"),
+    ("K", "google-research/frame-interpolation", "Apache-2.0", "FILM 大位移帧插值", "跳切的帧插值遮挡（≤ 6 帧、头部位移小）", "长间隔补帧"),
+    ("K", "hzwer/ECCV2022-RIFE", "MIT", "实时帧插值", "帧插值遮跳的快速路径", "—"),
+    ("K", "contentauth/c2pa-rs", "Apache-2.0", "C2PA 内容凭证读写", "出海版本的隐式标识与读回检查", "宣称转码后仍可追溯"),
+    ("K", "CodeGoat24/UnifiedReward", "MIT", "统一的多模态理解与生成奖励模型，支持成对排序与打分", "自有风格奖励模型的底座", "—"),
+    ("K", "THUDM/VisionReward", "代码 Apache-2.0；视频权重指向 CogVLM2 许可", "分层、可解释的图像与视频偏好评分", "可解释维度加权的做法", "未核对权重许可前商用"),
+    ("K", "westlake-repl/MicroLens", "无 LICENSE 文件", "百万级短视频推荐数据集", "互动预测的研究参照", "用于训练"),
+    ("K", "hkchengrex/MMAudio", "代码 MIT；权重 CC-BY-NC 4.0", "视频到音频生成", "拟音效果参照", "进入商用链路"),
+    ("K", "Tencent-Hunyuan/HunyuanVideo-Foley", "腾讯混元社区许可：不适用于欧盟、英国、韩国；月活超 1 亿须另行申请", "视频拟音生成", "国内版本拟音候选，须法务确认", "海外版本"),
+    ("K", "FunAudioLLM/ThinkSound", "无 LICENSE 文件；README 写明不允许商用", "链式推理的视频配音效", "—", "使用"),
+    ("K", "ace-step/ACE-Step", "Apache-2.0", "音乐生成基础模型", "纯音乐床", "中文歌词（罗马化处理，效果未证实）"),
+    ("K", "FunAudioLLM/CosyVoice", "Apache-2.0", "多语种语音合成", "多语种配音", "—"),
+    ("K", "index-tts/index-tts", "bilibili 模型使用协议：月活超 1 亿或年营收超 10 亿元须另行授权；不得用于改进其他模型", "可控情绪与时长的语音合成", "配音候选，须评估协议", "未评估前商用"),
+    ("K", "bytedance/LatentSync", "Apache-2.0", "扩散式口型同步", "译配版口型（质量优先）", "—"),
+    ("K", "TMElyralab/MuseTalk", "代码 MIT；依赖模型各自许可", "实时口型同步", "译配版口型（速度优先）", "未核对依赖许可前商用"),
 ]
 
 # HEAD commits resolved with `git ls-remote` on 2026-11-26.
@@ -129,4 +147,21 @@ PINS = {
     "tkarabela/pysubs2": "6371ae8bc2f9fed19aeb51a8e09d920e8bb86ce5",
     "tnfe/FFCreator": "abbbb1104f484278cc61c3be65408f2a6c7cc3a7",
     "transitive-bullshit/ffmpeg-gl-transition": "3639b521aafb30b185de281f94560f298a22d420",
+    "QwenLM/Qwen3-ASR": "7c6daf77a2421100f5fb066495372c00129d39ff",
+    "FireRedTeam/FireRedASR": "834635e4cf277ed8ca92049fc375b17c3dc20748",
+    "QwenLM/Qwen3-VL": "96588727e44c78b25ba03ea03b8e12f7e64fd0da",
+    "google-research/frame-interpolation": "69f8708f08e62c2edf46a27616a4bfcf083e2076",
+    "hzwer/ECCV2022-RIFE": "5d8adbdd40e12c2c8f91930eff838aebe561c086",
+    "contentauth/c2pa-rs": "bf30cc5ed8785165a42e17845ffe9eb2be4d4f4e",
+    "CodeGoat24/UnifiedReward": "ff6f520247a2d36e2aff7b2ba53a935afd437f66",
+    "THUDM/VisionReward": "511960d61a777b2008cd486a85a090ba96792a32",
+    "westlake-repl/MicroLens": "0fc876066987fb3b920df2765cfbac2763c515eb",
+    "hkchengrex/MMAudio": "974010a026c731054592d8f777218bd9d85a6c24",
+    "Tencent-Hunyuan/HunyuanVideo-Foley": "df7b005b5023df2a9b73e1d66dd51d452799884e",
+    "FunAudioLLM/ThinkSound": "4e2cfd57efaaf40c90460d8111b6a3c1e7dfb2f0",
+    "ace-step/ACE-Step": "1bee4c9f5b43e30995f8d4d33b3919197ce1bd68",
+    "FunAudioLLM/CosyVoice": "074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc",
+    "index-tts/index-tts": "d9e41aac89fd00b3d71497fddb287b7f24613712",
+    "bytedance/LatentSync": "a229c3948406bc2cf6eaf4873e662e70c6a04746",
+    "TMElyralab/MuseTalk": "2536eaf06b85f775d8e04b7fd81bf6699155a58d",
 }

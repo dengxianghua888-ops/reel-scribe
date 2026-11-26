@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "reel-scribe/multi-style/style-fingerprint/1",
+  "title": "style-fingerprint/1 成片风格指纹（草案）",
+  "description": "tools/measure_fingerprint.py 的输出：从一条成片测得的剪辑节奏、响度与色彩，加上只在可测轴上计算的最近风格包。供优质样本卡的 fingerprint 字段与风格蒸馏（12 章 R2）使用；不是路由结论。",
+  "type": "object",
+  "required": ["schema", "source", "exemplar_fingerprint", "measurements", "style_vector_partial", "nearest_packs", "ranked_on_axes", "discrimination", "limits"],
+  "properties": {
+    "schema": {"const": "style-fingerprint/1"},
+    "source": {
+      "type": "object",
+      "required": ["path", "duration_s", "width", "height", "fps", "has_audio"],
+      "properties": {
+        "path": {"type": "string"},
+        "duration_s": {"type": "number", "exclusiveMinimum": 0},
+        "width": {"type": "integer"},
+        "height": {"type": "integer"},
+        "fps": {"type": "number"},
+        "has_audio": {"type": "boolean"}
+      }
+    },
+    "exemplar_fingerprint": {
+      "description": "与 exemplar-card/1 的 fingerprint 字段同名同义，可直接拷入样本卡",
+      "type": "object",
+      "required": ["avg_shot_s", "cuts_per_min", "measured_with"],
+      "properties": {
+        "avg_shot_s": {"type": "number"},
+        "cuts_per_min": {"type": "number"},
+        "loudness_lufs": {"type": ["number", "null"]},
+        "measured_with": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "measurements": {
+      "type": "object",
+      "required": ["shots", "cut_times_s", "luma_mean", "luma_std", "warmth_rb", "saturation_mean", "palette", "palette_share"],
+      "properties": {
+        "shots": {"type": "integer", "minimum": 1},
+        "cut_times_s": {"type": "array", "items": {"type": "number"}},
+        "true_peak_dbfs": {"type": ["number", "null"]},
+        "motion_energy": {"type": "number"},
+        "frames_sampled": {"type": "integer"},
+        "luma_mean": {"type": "number"},
+        "luma_std": {"type": "number"},
+        "warmth_rb": {"type": "number"},
+        "saturation_mean": {"type": "number"},
+        "palette": {"type": "array", "items": {"type": "string", "pattern": "^[0-9A-F]{6}$"}},
+        "palette_share": {"type": "array", "items": {"type": "number"}}
+      }
+    },
+    "style_vector_partial": {
+      "description": "七轴风格向量中可测的部分，未测的轴为 null",
+      "type": "object",
+      "required": ["tempo", "density", "ornament", "warmth", "contrast", "formality", "motion"],
+      "additionalProperties": false,
+      "patternProperties": {"^.*$": {"type": ["number", "null"], "minimum": 0, "maximum": 1}}
+    },
+    "nearest_packs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["similarity", "pack", "name", "scenario"],
+        "properties": {
+          "similarity": {"type": "number"},
+          "pack": {"type": "string"},
+          "name": {"type": "string"},
+          "scenario": {"type": "string"}
+        }
+      }
+    },
+    "ranked_on_axes": {"type": "array", "items": {"enum": ["tempo", "density", "ornament", "warmth", "contrast", "formality", "motion"]}},
+    "discrimination": {
+      "description": "可测轴能否区分风格包：top-1 与 top-10 的相似度差低于 0.03 记为 low，此时只能当作区域提示",
+      "type": "object",
+      "required": ["top1", "top10", "margin_top1_top10", "verdict"],
+      "properties": {
+        "top1": {"type": "number"},
+        "top10": {"type": "number"},
+        "margin_top1_top10": {"type": "number"},
+        "verdict": {"enum": ["low", "usable"]},
+        "scenario_votes_top20": {"type": "object", "additionalProperties": {"type": "integer"}}
+      }
+    },
+    "limits": {"type": "array", "items": {"type": "string"}}
+  }
+}

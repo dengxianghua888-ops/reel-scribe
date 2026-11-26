@@ -478,6 +478,159 @@
    "take": "影调参照",
    "skip": "直接随包分发（相同方式共享）",
    "commit": "af7b50d4caf6244fb6895a647f5b6a84efe7931a"
+  },
+  {
+   "category": "K",
+   "repo": "QwenLM/Qwen3-ASR",
+   "license": "Apache-2.0",
+   "shows": "52 种语言与方言识别；Qwen3-ForcedAligner-0.6B 支持 11 种语言、5 分钟内任意单位的时间戳",
+   "take": "识别与对齐候选；影述已有逐窗实测（chinese-alignment.md）",
+   "skip": "把结构合法的时间当作可剪边界",
+   "commit": "7c6daf77a2421100f5fb066495372c00129d39ff"
+  },
+  {
+   "category": "K",
+   "repo": "FireRedTeam/FireRedASR",
+   "license": "Apache-2.0",
+   "shows": "中文识别模型与流水线",
+   "take": "识别对照",
+   "skip": "—",
+   "commit": "834635e4cf277ed8ca92049fc375b17c3dc20748"
+  },
+  {
+   "category": "K",
+   "repo": "QwenLM/Qwen3-VL",
+   "license": "Apache-2.0",
+   "shows": "视觉语言模型",
+   "take": "风格指纹 L3 的候选标签（装饰度、设计语言族、字幕样式）",
+   "skip": "不经人工确认直接定标签",
+   "commit": "96588727e44c78b25ba03ea03b8e12f7e64fd0da"
+  },
+  {
+   "category": "K",
+   "repo": "google-research/frame-interpolation",
+   "license": "Apache-2.0",
+   "shows": "FILM 大位移帧插值",
+   "take": "跳切的帧插值遮挡（≤ 6 帧、头部位移小）",
+   "skip": "长间隔补帧",
+   "commit": "69f8708f08e62c2edf46a27616a4bfcf083e2076"
+  },
+  {
+   "category": "K",
+   "repo": "hzwer/ECCV2022-RIFE",
+   "license": "MIT",
+   "shows": "实时帧插值",
+   "take": "帧插值遮跳的快速路径",
+   "skip": "—",
+   "commit": "5d8adbdd40e12c2c8f91930eff838aebe561c086"
+  },
+  {
+   "category": "K",
+   "repo": "contentauth/c2pa-rs",
+   "license": "Apache-2.0",
+   "shows": "C2PA 内容凭证读写",
+   "take": "出海版本的隐式标识与读回检查",
+   "skip": "宣称转码后仍可追溯",
+   "commit": "bf30cc5ed8785165a42e17845ffe9eb2be4d4f4e"
+  },
+  {
+   "category": "K",
+   "repo": "CodeGoat24/UnifiedReward",
+   "license": "MIT",
+   "shows": "统一的多模态理解与生成奖励模型，支持成对排序与打分",
+   "take": "自有风格奖励模型的底座",
+   "skip": "—",
+   "commit": "ff6f520247a2d36e2aff7b2ba53a935afd437f66"
+  },
+  {
+   "category": "K",
+   "repo": "THUDM/VisionReward",
+   "license": "代码 Apache-2.0；视频权重指向 CogVLM2 许可",
+   "shows": "分层、可解释的图像与视频偏好评分",
+   "take": "可解释维度加权的做法",
+   "skip": "未核对权重许可前商用",
+   "commit": "511960d61a777b2008cd486a85a090ba96792a32"
+  },
+  {
+   "category": "K",
+   "repo": "westlake-repl/MicroLens",
+   "license": "无 LICENSE 文件",
+   "shows": "百万级短视频推荐数据集",
+   "take": "互动预测的研究参照",
+   "skip": "用于训练",
+   "commit": "0fc876066987fb3b920df2765cfbac2763c515eb"
+  },
+  {
+   "category": "K",
+   "repo": "hkchengrex/MMAudio",
+   "license": "代码 MIT；权重 CC-BY-NC 4.0",
+   "shows": "视频到音频生成",
+   "take": "拟音效果参照",
+   "skip": "进入商用链路",
+   "commit": "974010a026c731054592d8f777218bd9d85a6c24"
+  },
+  {
+   "category": "K",
+   "repo": "Tencent-Hunyuan/HunyuanVideo-Foley",
+   "license": "腾讯混元社区许可：不适用于欧盟、英国、韩国；月活超 1 亿须另行申请",
+   "shows": "视频拟音生成",
+   "take": "国内版本拟音候选，须法务确认",
+   "skip": "海外版本",
+   "commit": "df7b005b5023df2a9b73e1d66dd51d452799884e"
+  },
+  {
+   "category": "K",
+   "repo": "FunAudioLLM/ThinkSound",
+   "license": "无 LICENSE 文件；README 写明不允许商用",
+   "shows": "链式推理的视频配音效",
+   "take": "—",
+   "skip": "使用",
+   "commit": "4e2cfd57efaaf40c90460d8111b6a3c1e7dfb2f0"
+  },
+  {
+   "category": "K",
+   "repo": "ace-step/ACE-Step",
+   "license": "Apache-2.0",
+   "shows": "音乐生成基础模型",
+   "take": "纯音乐床",
+   "skip": "中文歌词（罗马化处理，效果未证实）",
+   "commit": "1bee4c9f5b43e30995f8d4d33b3919197ce1bd68"
+  },
+  {
+   "category": "K",
+   "repo": "FunAudioLLM/CosyVoice",
+   "license": "Apache-2.0",
+   "shows": "多语种语音合成",
+   "take": "多语种配音",
+   "skip": "—",
+   "commit": "074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc"
+  },
+  {
+   "category": "K",
+   "repo": "index-tts/index-tts",
+   "license": "bilibili 模型使用协议：月活超 1 亿或年营收超 10 亿元须另行授权；不得用于改进其他模型",
+   "shows": "可控情绪与时长的语音合成",
+   "take": "配音候选，须评估协议",
+   "skip": "未评估前商用",
+   "commit": "d9e41aac89fd00b3d71497fddb287b7f24613712"
+  },
+  {
+   "category": "K",
+   "repo": "bytedance/LatentSync",
+   "license": "Apache-2.0",
+   "shows": "扩散式口型同步",
+   "take": "译配版口型（质量优先）",
+   "skip": "—",
+   "commit": "a229c3948406bc2cf6eaf4873e662e70c6a04746"
+  },
+  {
+   "category": "K",
+   "repo": "TMElyralab/MuseTalk",
+   "license": "代码 MIT；依赖模型各自许可",
+   "shows": "实时口型同步",
+   "take": "译配版口型（速度优先）",
+   "skip": "未核对依赖许可前商用",
+   "commit": "2536eaf06b85f775d8e04b7fd81bf6699155a58d"
   }
  ]
 }

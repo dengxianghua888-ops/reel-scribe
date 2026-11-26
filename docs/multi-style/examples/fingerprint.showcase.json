@@ -1,0 +1,122 @@
+{
+ "schema": "style-fingerprint/1",
+ "source": {
+  "path": "showcase.mp4",
+  "duration_s": 19.6,
+  "width": 1280,
+  "height": 674,
+  "fps": 30.0,
+  "has_audio": false
+ },
+ "exemplar_fingerprint": {
+  "avg_shot_s": 2.178,
+  "cuts_per_min": 24.49,
+  "loudness_lufs": null,
+  "measured_with": [
+   "ffmpeg scene score >= 0.3",
+   "ffmpeg ebur128",
+   "rgb sampling 2 fps"
+  ]
+ },
+ "measurements": {
+  "shots": 9,
+  "cut_times_s": [
+   0.5,
+   3.5,
+   7.0,
+   7.5,
+   10.5,
+   13.9,
+   14.467,
+   17.4
+  ],
+  "true_peak_dbfs": null,
+  "motion_energy": 0.0032,
+  "frames_sampled": 39,
+  "luma_mean": 0.2944350242614746,
+  "luma_std": 0.20831364393234253,
+  "warmth_rb": 0.020189495757222176,
+  "saturation_mean": 0.16921855509281158,
+  "palette": [
+   "171718",
+   "403A37",
+   "67645F",
+   "949590",
+   "C6C0B8"
+  ],
+  "palette_share": [
+   0.321,
+   0.309,
+   0.176,
+   0.129,
+   0.065
+  ]
+ },
+ "style_vector_partial": {
+  "tempo": 0.612,
+  "density": null,
+  "ornament": null,
+  "warmth": 0.55,
+  "contrast": 0.694,
+  "formality": null,
+  "motion": 0.026
+ },
+ "nearest_packs": [
+  {
+   "similarity": 0.867,
+   "pack": "fr-causal",
+   "name": "因果主线",
+   "scenario": "影视解说"
+  },
+  {
+   "similarity": 0.867,
+   "pack": "ex-premium-keynote",
+   "name": "发布会高端",
+   "scenario": "企业发言与正式讲话"
+  },
+  {
+   "similarity": 0.862,
+   "pack": "ft-progress",
+   "name": "进步日记",
+   "scenario": "健身与运动教学"
+  },
+  {
+   "similarity": 0.859,
+   "pack": "rv-light-board",
+   "name": "浅色对比看板",
+   "scenario": "数码家电测评"
+  },
+  {
+   "similarity": 0.859,
+   "pack": "pr-action-proof",
+   "name": "操作作证",
+   "scenario": "实拍种草与推荐"
+  }
+ ],
+ "ranked_on_axes": [
+  "tempo",
+  "warmth",
+  "contrast",
+  "motion"
+ ],
+ "discrimination": {
+  "top1": 0.867,
+  "top10": 0.858,
+  "margin_top1_top10": 0.009,
+  "verdict": "low",
+  "scenario_votes_top20": {
+   "体育高光": 2,
+   "人物纪录": 2,
+   "影视解说": 1,
+   "企业发言与正式讲话": 1,
+   "健身与运动教学": 1,
+   "数码家电测评": 1
+  }
+ },
+ "limits": [
+  "字幕密度、图形密度、装饰度与正式度需要 OCR 或人工标注，未测",
+  "切点阈值对快速运动与闪光敏感，需人工抽检",
+  "最近包只在可测的轴上比较，是路由与人工的起点，不是结论",
+  "运动能量的换算系数尚未用标注样本校准"
+ ]
+}

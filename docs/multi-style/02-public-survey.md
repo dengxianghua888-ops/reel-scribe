@@ -1,6 +1,6 @@
 # 02 公开仓库调研：别人怎样组织风格、组件与评测
 
-2026 年 11 月 26 日调研。完整清单（53 个来源，提交号、许可、借鉴与不借鉴）见 [catalog/public-survey.md](catalog/public-survey.md)，机器可读版见 [catalog/public-survey.json](catalog/public-survey.json)。研究库已有的 65 个剪辑器与 Agent 项目（OpenCut、CutVoke、Cutline、Concat、OpenStoryline 等），以及短剧仓库已有的 39 个导演与生成项目，本章不重复。
+2026 年 11 月 26 日调研。完整清单（十类 53 个来源，另有 [12 章](12-open-evaluation.md)补充的 17 个，共 70 个；提交号、许可、借鉴与不借鉴）见 [catalog/public-survey.md](catalog/public-survey.md)，机器可读版见 [catalog/public-survey.json](catalog/public-survey.json)。研究库已有的 65 个剪辑器与 Agent 项目（OpenCut、CutVoke、Cutline、Concat、OpenStoryline 等），以及短剧仓库已有的 39 个导演与生成项目，本章不重复。
 
 ## 一、十类来源与各自的结论
 

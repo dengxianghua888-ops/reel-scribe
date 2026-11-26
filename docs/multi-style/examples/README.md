@@ -1,6 +1,6 @@
 # 样例说明
 
-全部为 `authored-unvalidated` 的结构样例，数值与摘要为示意（`demo-*`），没有对应的真实素材、渲染或评审。用途是让 Schema、继承规则与相似度规则可以被程序检查。
+除 `fingerprint.showcase.json` 为实测输出外，全部为 `authored-unvalidated` 的结构样例，数值与摘要为示意（`demo-*`），没有对应的真实素材、渲染或评审。用途是让 Schema、继承规则与相似度规则可以被程序检查。
 
 | 文件 | 对象 |
 |---|---|
@@ -16,6 +16,7 @@
 | [pack.speech-editorial-magazine.json](pack.speech-editorial-magazine.json) | 机制包：黑白杂志专访（依赖主体遮罩） |
 | [style-route-result.phone-review.json](style-route-result.phone-review.json) | 路由结果：稳妥 / 特色 / 反差三个方向 |
 | [style-plan.phone-review.spec-redline.json](style-plan.phone-review.spec-redline.json) | 风格计划摘录：两个规格表实例与一个因间隔被丢弃的事件 |
+| [fingerprint.showcase.json](fingerprint.showcase.json) | **实测**风格指纹：用 `tools/measure_fingerprint.py` 量本仓库 README 的演示片（19.6 秒、9 个镜头）。可测四轴区分不出风格包（`discrimination.verdict = low`），见 12 章 R2 |
 
 检查：`python3 docs/multi-style/validate_examples.py`（需要 `jsonschema`）。它校验 Schema、皮肤包只覆写允许字段、皮肤包不新增必需能力、同基础包皮肤相似度 < 0.85。
 

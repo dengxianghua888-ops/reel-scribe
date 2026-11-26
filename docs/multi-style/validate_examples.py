@@ -21,6 +21,7 @@ SCHEMAS = {
     "style-plan/1": "style-plan.schema.json",
     "drama-post-handoff/1": "post-handoff.schema.json",
     "shot-request/1": "shot-request.schema.json",
+    "style-fingerprint/1": "style-fingerprint.schema.json",
 }
 SKIN_OVERRIDABLE = {"design_system", "caption_style", "look", "sound", "components", "method", "rhythm"}
 AXES = ("tempo", "density", "ornament", "warmth", "contrast", "formality", "motion")
