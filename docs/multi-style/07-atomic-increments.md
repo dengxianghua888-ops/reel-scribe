@@ -1,6 +1,6 @@
 # 05 原子能力与协议增量（剪辑侧）
 
-原则：新原子与现有原子同一口径——宿主中立、显式输入、证据输出、不自动采用；需要判断的部分留在复杂层。优先级 P0 / P1 / P2 对应 [08 路线图](08-taste-eval-roadmap.md) 的三期。
+原则：新原子与现有原子同一口径——宿主中立、显式输入、证据输出、不自动采用；需要判断的部分留在复杂层。优先级 P0 / P1 / P2 对应 [10 路线图](10-roadmap.md) 的三期。
 
 ## 一、新增原子总表
 
@@ -80,9 +80,9 @@
 | [证据合同](../../contracts/evidence-contract.md) | 声明绑定规则对保护项只读；组件显示的数值若来自保护词，须与保护项一致 | 增量 |
 | [能力交接合同](../../contracts/capability-handoff.md) | 能力名新增 `component-instance-write`、`caption-animation`、`subject-detect`、`signal-extract` | 增量 |
 | `registry/skills.json` | 新原子以 `status: planned` 登记，实现后改为实际状态 | 结构检查需同步 |
-| [router.md](../../registry/router.md) | 新增“风格选择与多风格对照”一节（见 03 章 §十） | 文档 |
+| [router.md](../../registry/router.md) | 新增“风格选择与多风格对照”一节（见 05 章 §十） | 文档 |
 | 风格卡 `catalog.json` | 可选新字段：`fit_signals`、`anti_signals`、`requires_signals`、`vector`（7 轴）、`signature`；先补口播 21 张与商品 57 张 | 可选字段不影响 `verify_library.py` 现有必填检查 |
-| `scripts/verify_library.py` | 新增包与刻面结构检查（见 04 章 §六） | 新增检查项 |
+| `scripts/verify_library.py` | 新增包与刻面结构检查（见 06 章 §六） | 新增检查项 |
 
 ## 四、方法卡结构化示例
 

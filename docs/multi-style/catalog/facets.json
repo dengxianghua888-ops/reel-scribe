@@ -1,0 +1,2489 @@
+{
+ "schema": "facet-library/1",
+ "status_note": "catalog-draft：结构化设计条目，未渲染、未评测；数量不代表已验证风格。",
+ "engines": {
+  "ass": {
+   "name": "ASS/libass 字幕引擎",
+   "best_for": "字幕、卡拉OK、逐词强调、简单文字动画",
+   "strengths": "最快，与 caption-burn 同链，确定性高",
+   "limits": "图形与复杂排版弱；中文排版需自控断行",
+   "determinism": "确定",
+   "license_note": "libass ISC"
+  },
+  "ffmpeg": {
+   "name": "FFmpeg 滤镜图",
+   "best_for": "变换、裁切推近、调色、xfade 转场、色键、马赛克、静态叠加",
+   "strengths": "无额外运行时，速度最快",
+   "limits": "动画曲线与排版能力有限",
+   "determinism": "确定",
+   "license_note": "LGPL/GPL 按构建"
+  },
+  "html": {
+   "name": "HTML/CSS/JS 逐帧渲染",
+   "best_for": "信息卡、数据图、中文排版、UI 与社媒卡片、文字动画",
+   "strengths": "排版与设计 token 最强，可用 GSAP/WAAPI/anime.js，可 seek",
+   "limits": "需固定版本无头浏览器；渲染中速",
+   "determinism": "固定浏览器与种子后确定",
+   "license_note": "Hyperframes Apache-2.0 可作参照"
+  },
+  "react": {
+   "name": "React 组件渲染（Remotion 类）",
+   "best_for": "复杂状态组件、模板生态",
+   "strengths": "组件化与生态成熟",
+   "limits": "Remotion 公司规模超限需商业授权",
+   "determinism": "确定",
+   "license_note": "Remotion 源码可见许可"
+  },
+  "canvas": {
+   "name": "程序化矢量动画（Motion Canvas/Revideo）",
+   "best_for": "图解、流程、代码动画、教学示意",
+   "strengths": "生成器式时间控制，适合讲解",
+   "limits": "不擅长照片级与实拍合成",
+   "determinism": "确定",
+   "license_note": "MIT"
+  },
+  "lottie": {
+   "name": "Lottie 渲染（rlottie/lotio/lottie-web）",
+   "best_for": "设计师 AE 资产、图标与角色小动画、手写笔顺",
+   "strengths": "复用设计资产，体积小",
+   "limits": "可编辑属性有限（文本层、颜色、时间）；表达式支持不全",
+   "determinism": "确定",
+   "license_note": "lottie-web MIT，rlottie MIT"
+  },
+  "glsl": {
+   "name": "WebGL/GLSL 着色器",
+   "best_for": "转场、风格化、光效、背景",
+   "strengths": "效果上限高，gl-transitions 有 387 个现成转场",
+   "limits": "需 GPU 或软件 GL；参数语义需自建",
+   "determinism": "确定",
+   "license_note": "gl-transitions MIT"
+  },
+  "three": {
+   "name": "Three.js/WebGPU 3D",
+   "best_for": "3D 立体字、产品转台、空间卡片、2.5D 视差",
+   "strengths": "真实空间感",
+   "limits": "建模与光照成本高",
+   "determinism": "固定种子后确定",
+   "license_note": "MIT"
+  },
+  "manim": {
+   "name": "Manim",
+   "best_for": "公式推导、数学与物理示意",
+   "strengths": "数学排版与变换最佳",
+   "limits": "风格单一，需定制主题",
+   "determinism": "确定",
+   "license_note": "MIT"
+  },
+  "blender": {
+   "name": "Blender Python",
+   "best_for": "高品质 3D、实拍合成、物理模拟",
+   "strengths": "上限最高",
+   "limits": "最慢，资产与渲染农场成本",
+   "determinism": "确定（固定版本）",
+   "license_note": "GPL（输出不受限）"
+  },
+  "vision": {
+   "name": "视觉分析模型",
+   "best_for": "主体遮罩、人像抠像、跟踪、切点与主体框",
+   "strengths": "为合成与跟踪提供数据",
+   "limits": "本身不画图；需 GPU 或慢速 CPU；边缘与闪烁需检查",
+   "determinism": "模型版本固定后可复现",
+   "license_note": "SAM2 Apache-2.0；RVM GPL-3.0；CoTracker CC BY-NC 与 MatAnyone S-Lab 仅限非商业，商用需另选"
+  },
+  "stylize": {
+   "name": "风格迁移与转绘",
+   "best_for": "真人转手绘、素描、绘本化窗口",
+   "strengths": "能做实拍无法得到的质感",
+   "limits": "跨帧稳定性与身份保持是难点",
+   "determinism": "依模型",
+   "license_note": "EbSynth 公有领域；扩散模型按模型许可"
+  },
+  "host": {
+   "name": "宿主原生（剪辑 Agent 时间线）",
+   "best_for": "可编辑字幕、MG 实例、关键帧、变速、音量包络",
+   "strengths": "可编辑性最好，用户可直接改",
+   "limits": "效果受宿主组件库限制",
+   "determinism": "宿主决定",
+   "license_note": "—"
+  },
+  "gen": {
+   "name": "生成模型",
+   "best_for": "补镜、产品演示、背景与素材生成",
+   "strengths": "得到实拍没有的画面",
+   "limits": "片内修改需重生成；费用；事实不能作证据",
+   "determinism": "不确定",
+   "license_note": "按服务条款"
+  }
+ },
+ "component_categories": {
+  "text": "文字动画",
+  "caption": "字幕效果",
+  "annotate": "强调与标注",
+  "data": "数据与数值",
+  "card": "信息卡与版式",
+  "camera": "画面运动",
+  "transition": "转场",
+  "composite": "合成",
+  "track": "跟踪附着",
+  "stylize": "风格化",
+  "light": "光效与粒子",
+  "background": "背景与氛围",
+  "screen": "屏幕与软件",
+  "sticker": "贴纸与表情",
+  "av": "声画联动",
+  "diagram": "图解与公式"
+ },
+ "components": {
+  "txt-fade-rise": {
+   "name": "渐显上浮",
+   "category": "text",
+   "primary_engine": "html",
+   "fallback_engine": "ass",
+   "editable_props": [
+    "text",
+    "color_role",
+    "duration"
+   ]
+  },
+  "txt-per-word-rise": {
+   "name": "逐词升起",
+   "category": "text",
+   "primary_engine": "html",
+   "fallback_engine": "ass",
+   "editable_props": [
+    "text",
+    "stagger_ms"
+   ]
+  },
+  "txt-typewriter": {
+   "name": "打字机",
+   "category": "text",
+   "primary_engine": "ass",
+   "fallback_engine": "html",
+   "editable_props": [
+    "text",
+    "cps",
+    "cursor"
+   ]
+  },
+  "txt-scramble-decode": {
+   "name": "乱码解码",
+   "category": "text",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "text",
+    "charset",
+    "duration"
+   ]
+  },
+  "txt-slam": {
+   "name": "重锤砸入",
+   "category": "text",
+   "primary_engine": "html",
+   "fallback_engine": "ass",
+   "editable_props": [
+    "text",
+    "scale_from",
+    "shake"
+   ]
+  },
+  "txt-blur-in": {
+   "name": "模糊聚焦",
+   "category": "text",
+   "primary_engine": "html",
+   "fallback_engine": "ffmpeg",
+   "editable_props": [
+    "text",
+    "blur_px"
+   ]
+  },
+  "txt-mask-reveal": {
+   "name": "遮罩揭示",
+   "category": "text",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "text",
+    "direction"
+   ]
+  },
+  "txt-stroke-draw": {
+   "name": "描边书写",
+   "category": "text",
+   "primary_engine": "html",
+   "fallback_engine": "lottie",
+   "editable_props": [
+    "text",
+    "stroke_width"
+   ]
+  },
+  "txt-split-flap": {
+   "name": "翻牌显示",
+   "category": "text",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "text",
+    "flip_ms"
+   ]
+  },
+  "txt-variable-weight": {
+   "name": "字重呼吸",
+   "category": "text",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "text",
+    "weight_range"
+   ]
+  },
+  "txt-gloss-sweep": {
+   "name": "光泽扫过",
+   "category": "text",
+   "primary_engine": "html",
+   "fallback_engine": "glsl",
+   "editable_props": [
+    "text",
+    "angle"
+   ]
+  },
+  "txt-handwrite": {
+   "name": "手写笔顺",
+   "category": "text",
+   "primary_engine": "lottie",
+   "fallback_engine": "html",
+   "editable_props": [
+    "text",
+    "stroke_order"
+   ]
+  },
+  "txt-calligraphy-title": {
+   "name": "书法题字",
+   "category": "text",
+   "primary_engine": "lottie",
+   "fallback_engine": "html",
+   "editable_props": [
+    "text",
+    "brush_asset"
+   ]
+  },
+  "txt-3d-extrude": {
+   "name": "立体字",
+   "category": "text",
+   "primary_engine": "three",
+   "fallback_engine": "blender",
+   "editable_props": [
+    "text",
+    "depth",
+    "material"
+   ]
+  },
+  "cap-karaoke-fill": {
+   "name": "逐词填色",
+   "category": "caption",
+   "primary_engine": "ass",
+   "fallback_engine": "html",
+   "editable_props": [
+    "fill_color_role"
+   ]
+  },
+  "cap-pill-highlight": {
+   "name": "胶囊底高亮",
+   "category": "caption",
+   "primary_engine": "html",
+   "fallback_engine": "ass",
+   "editable_props": [
+    "pill_color_role",
+    "radius"
+   ]
+  },
+  "cap-word-pop": {
+   "name": "逐词弹出",
+   "category": "caption",
+   "primary_engine": "ass",
+   "fallback_engine": "html",
+   "editable_props": [
+    "scale",
+    "overshoot"
+   ]
+  },
+  "cap-keyword-recolor": {
+   "name": "关键词变色",
+   "category": "caption",
+   "primary_engine": "ass",
+   "fallback_engine": "html",
+   "editable_props": [
+    "keyword_ids",
+    "color_role"
+   ]
+  },
+  "cap-emoji-pop": {
+   "name": "表情点缀",
+   "category": "caption",
+   "primary_engine": "html",
+   "fallback_engine": "lottie",
+   "editable_props": [
+    "emoji",
+    "density"
+   ]
+  },
+  "cap-behind-subject": {
+   "name": "文字穿人",
+   "category": "caption",
+   "primary_engine": "vision",
+   "fallback_engine": "html",
+   "editable_props": [
+    "word_ids",
+    "coverage_target"
+   ]
+  },
+  "cap-camera-follow-3d": {
+   "name": "3D 跟随字幕",
+   "category": "caption",
+   "primary_engine": "vision",
+   "fallback_engine": "three",
+   "editable_props": [
+    "anchor",
+    "depth"
+   ]
+  },
+  "cap-bilingual-stack": {
+   "name": "双语上下",
+   "category": "caption",
+   "primary_engine": "ass",
+   "fallback_engine": "html",
+   "editable_props": [
+    "primary_lang",
+    "secondary_scale"
+   ]
+  },
+  "cap-speaker-color": {
+   "name": "说话人分色",
+   "category": "caption",
+   "primary_engine": "ass",
+   "fallback_engine": null,
+   "editable_props": [
+    "speaker_color_map"
+   ]
+  },
+  "cap-danmaku": {
+   "name": "弹幕滚动",
+   "category": "caption",
+   "primary_engine": "ass",
+   "fallback_engine": "html",
+   "editable_props": [
+    "lanes",
+    "speed"
+   ]
+  },
+  "anno-marker-highlight": {
+   "name": "荧光划线",
+   "category": "annotate",
+   "primary_engine": "html",
+   "fallback_engine": "ass",
+   "editable_props": [
+    "target_word_ids",
+    "color_role"
+   ]
+  },
+  "anno-underline-draw": {
+   "name": "下划线描出",
+   "category": "annotate",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "target",
+    "thickness"
+   ]
+  },
+  "anno-circle-callout": {
+   "name": "手绘圈注",
+   "category": "annotate",
+   "primary_engine": "lottie",
+   "fallback_engine": "html",
+   "editable_props": [
+    "target_rect"
+   ]
+  },
+  "anno-arrow-point": {
+   "name": "箭头指示",
+   "category": "annotate",
+   "primary_engine": "html",
+   "fallback_engine": "lottie",
+   "editable_props": [
+    "from",
+    "to",
+    "curve"
+   ]
+  },
+  "anno-box-label": {
+   "name": "框选标签",
+   "category": "annotate",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "rect",
+    "label"
+   ]
+  },
+  "anno-strike-replace": {
+   "name": "划掉改写",
+   "category": "annotate",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "old_text",
+    "new_text"
+   ]
+  },
+  "anno-magnifier": {
+   "name": "局部放大镜",
+   "category": "annotate",
+   "primary_engine": "ffmpeg",
+   "fallback_engine": "html",
+   "editable_props": [
+    "src_rect",
+    "zoom"
+   ]
+  },
+  "anno-spotlight": {
+   "name": "聚光压暗",
+   "category": "annotate",
+   "primary_engine": "ffmpeg",
+   "fallback_engine": "html",
+   "editable_props": [
+    "rect",
+    "dim"
+   ]
+  },
+  "anno-red-pen": {
+   "name": "红笔批改",
+   "category": "annotate",
+   "primary_engine": "lottie",
+   "fallback_engine": "html",
+   "editable_props": [
+    "target",
+    "mark_type"
+   ]
+  },
+  "anno-source-label": {
+   "name": "来源标注",
+   "category": "annotate",
+   "primary_engine": "html",
+   "fallback_engine": "ass",
+   "editable_props": [
+    "source_text"
+   ]
+  },
+  "data-count-up": {
+   "name": "数字滚动",
+   "category": "data",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "from",
+    "to",
+    "unit",
+    "format"
+   ]
+  },
+  "data-number-impact": {
+   "name": "巨型数字",
+   "category": "data",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "value",
+    "unit",
+    "label"
+   ]
+  },
+  "data-bar-chart": {
+   "name": "柱状图",
+   "category": "data",
+   "primary_engine": "html",
+   "fallback_engine": "canvas",
+   "editable_props": [
+    "series",
+    "unit",
+    "highlight"
+   ]
+  },
+  "data-line-graph": {
+   "name": "折线图",
+   "category": "data",
+   "primary_engine": "html",
+   "fallback_engine": "canvas",
+   "editable_props": [
+    "series",
+    "unit",
+    "annotations"
+   ]
+  },
+  "data-donut": {
+   "name": "环形占比",
+   "category": "data",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "parts",
+    "unit"
+   ]
+  },
+  "data-bar-race": {
+   "name": "排名竞赛",
+   "category": "data",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "frames",
+    "unit"
+   ]
+  },
+  "data-progress-ring": {
+   "name": "进度环",
+   "category": "data",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "value",
+    "max"
+   ]
+  },
+  "data-spec-table": {
+   "name": "规格表逐行点亮",
+   "category": "data",
+   "primary_engine": "html",
+   "fallback_engine": "host",
+   "editable_props": [
+    "rows",
+    "active_row",
+    "side"
+   ]
+  },
+  "data-compare-split": {
+   "name": "左右对比",
+   "category": "data",
+   "primary_engine": "html",
+   "fallback_engine": "ffmpeg",
+   "editable_props": [
+    "left",
+    "right",
+    "axis"
+   ]
+  },
+  "data-star-rating": {
+   "name": "星级评分",
+   "category": "data",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "score",
+    "max"
+   ]
+  },
+  "data-timeline": {
+   "name": "时间轴",
+   "category": "data",
+   "primary_engine": "html",
+   "fallback_engine": "canvas",
+   "editable_props": [
+    "events",
+    "active"
+   ]
+  },
+  "data-map-route": {
+   "name": "地图路线",
+   "category": "data",
+   "primary_engine": "html",
+   "fallback_engine": "canvas",
+   "editable_props": [
+    "points",
+    "route",
+    "active"
+   ]
+  },
+  "data-price-tag": {
+   "name": "价格条件标签",
+   "category": "data",
+   "primary_engine": "html",
+   "fallback_engine": "host",
+   "editable_props": [
+    "price",
+    "condition",
+    "valid_until"
+   ]
+  },
+  "card-lower-third": {
+   "name": "姓名条",
+   "category": "card",
+   "primary_engine": "html",
+   "fallback_engine": "host",
+   "editable_props": [
+    "name",
+    "title",
+    "side"
+   ]
+  },
+  "card-chapter": {
+   "name": "章节页",
+   "category": "card",
+   "primary_engine": "html",
+   "fallback_engine": "host",
+   "editable_props": [
+    "index",
+    "title"
+   ]
+  },
+  "card-title": {
+   "name": "片头标题",
+   "category": "card",
+   "primary_engine": "html",
+   "fallback_engine": "lottie",
+   "editable_props": [
+    "title",
+    "subtitle"
+   ]
+  },
+  "card-quote": {
+   "name": "引语卡",
+   "category": "card",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "text",
+    "attribution"
+   ]
+  },
+  "card-checklist": {
+   "name": "清单勾选",
+   "category": "card",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "items",
+    "checked"
+   ]
+  },
+  "card-step": {
+   "name": "步骤指示",
+   "category": "card",
+   "primary_engine": "html",
+   "fallback_engine": "ass",
+   "editable_props": [
+    "step",
+    "total",
+    "label"
+   ]
+  },
+  "card-testimonial": {
+   "name": "用户评价卡",
+   "category": "card",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "text",
+    "author",
+    "rating"
+   ]
+  },
+  "card-social-post": {
+   "name": "社媒帖与评论卡",
+   "category": "card",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "author",
+    "text",
+    "metrics"
+   ]
+  },
+  "card-chat-thread": {
+   "name": "聊天气泡",
+   "category": "card",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "messages"
+   ]
+  },
+  "card-notification": {
+   "name": "通知弹出",
+   "category": "card",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "app",
+    "text"
+   ]
+  },
+  "card-cta-end": {
+   "name": "片尾引导",
+   "category": "card",
+   "primary_engine": "html",
+   "fallback_engine": "host",
+   "editable_props": [
+    "text",
+    "handle"
+   ]
+  },
+  "card-logo-sting": {
+   "name": "标志落版",
+   "category": "card",
+   "primary_engine": "lottie",
+   "fallback_engine": "html",
+   "editable_props": [
+    "logo_asset"
+   ]
+  },
+  "card-question": {
+   "name": "问题卡",
+   "category": "card",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "question"
+   ]
+  },
+  "card-ticker": {
+   "name": "新闻滚动条",
+   "category": "card",
+   "primary_engine": "html",
+   "fallback_engine": "ass",
+   "editable_props": [
+    "items",
+    "speed"
+   ]
+  },
+  "cam-punch-in": {
+   "name": "推近强调",
+   "category": "camera",
+   "primary_engine": "ffmpeg",
+   "fallback_engine": "host",
+   "editable_props": [
+    "scale",
+    "center",
+    "ease"
+   ]
+  },
+  "cam-ken-burns": {
+   "name": "静图运镜",
+   "category": "camera",
+   "primary_engine": "ffmpeg",
+   "fallback_engine": null,
+   "editable_props": [
+    "from_rect",
+    "to_rect"
+   ]
+  },
+  "cam-reframe-follow": {
+   "name": "主体跟随重构图",
+   "category": "camera",
+   "primary_engine": "vision",
+   "fallback_engine": "ffmpeg",
+   "editable_props": [
+    "subject",
+    "aspect"
+   ]
+  },
+  "cam-speed-ramp": {
+   "name": "速度曲线",
+   "category": "camera",
+   "primary_engine": "host",
+   "fallback_engine": "ffmpeg",
+   "editable_props": [
+    "curve"
+   ]
+  },
+  "cam-freeze-frame": {
+   "name": "定格",
+   "category": "camera",
+   "primary_engine": "ffmpeg",
+   "fallback_engine": null,
+   "editable_props": [
+    "frame",
+    "hold_ms"
+   ]
+  },
+  "cam-shake": {
+   "name": "震动",
+   "category": "camera",
+   "primary_engine": "ffmpeg",
+   "fallback_engine": "html",
+   "editable_props": [
+    "amplitude",
+    "decay"
+   ]
+  },
+  "cam-rack-focus": {
+   "name": "虚实转换",
+   "category": "camera",
+   "primary_engine": "ffmpeg",
+   "fallback_engine": "glsl",
+   "editable_props": [
+    "from",
+    "to"
+   ]
+  },
+  "cam-whip-pan": {
+   "name": "甩镜",
+   "category": "camera",
+   "primary_engine": "glsl",
+   "fallback_engine": "ffmpeg",
+   "editable_props": [
+    "direction"
+   ]
+  },
+  "cam-parallax-25d": {
+   "name": "照片 2.5D 视差",
+   "category": "camera",
+   "primary_engine": "vision",
+   "fallback_engine": "three",
+   "editable_props": [
+    "depth_scale"
+   ]
+  },
+  "tr-dissolve": {
+   "name": "叠化",
+   "category": "transition",
+   "primary_engine": "ffmpeg",
+   "fallback_engine": null,
+   "editable_props": [
+    "duration"
+   ]
+  },
+  "tr-dip-color": {
+   "name": "闪白闪黑",
+   "category": "transition",
+   "primary_engine": "ffmpeg",
+   "fallback_engine": null,
+   "editable_props": [
+    "color",
+    "duration"
+   ]
+  },
+  "tr-wipe": {
+   "name": "方向擦除",
+   "category": "transition",
+   "primary_engine": "ffmpeg",
+   "fallback_engine": "glsl",
+   "editable_props": [
+    "direction",
+    "softness"
+   ]
+  },
+  "tr-push-slide": {
+   "name": "推移",
+   "category": "transition",
+   "primary_engine": "ffmpeg",
+   "fallback_engine": "glsl",
+   "editable_props": [
+    "direction"
+   ]
+  },
+  "tr-zoom-through": {
+   "name": "穿越推进",
+   "category": "transition",
+   "primary_engine": "glsl",
+   "fallback_engine": "html",
+   "editable_props": [
+    "center"
+   ]
+  },
+  "tr-glitch": {
+   "name": "故障转场",
+   "category": "transition",
+   "primary_engine": "glsl",
+   "fallback_engine": null,
+   "editable_props": [
+    "intensity"
+   ]
+  },
+  "tr-light-leak": {
+   "name": "漏光转场",
+   "category": "transition",
+   "primary_engine": "glsl",
+   "fallback_engine": "ffmpeg",
+   "editable_props": [
+    "leak_asset"
+   ]
+  },
+  "tr-ink-bleed": {
+   "name": "墨晕转场",
+   "category": "transition",
+   "primary_engine": "glsl",
+   "fallback_engine": null,
+   "editable_props": [
+    "spread"
+   ]
+  },
+  "tr-paper-tear": {
+   "name": "撕纸转场",
+   "category": "transition",
+   "primary_engine": "glsl",
+   "fallback_engine": "html",
+   "editable_props": [
+    "edge_asset"
+   ]
+  },
+  "tr-shape-iris": {
+   "name": "形状遮罩开合",
+   "category": "transition",
+   "primary_engine": "glsl",
+   "fallback_engine": "ffmpeg",
+   "editable_props": [
+    "shape",
+    "center"
+   ]
+  },
+  "tr-film-burn": {
+   "name": "胶片烧灼",
+   "category": "transition",
+   "primary_engine": "glsl",
+   "fallback_engine": null,
+   "editable_props": [
+    "intensity"
+   ]
+  },
+  "tr-match-assist": {
+   "name": "匹配剪辑辅助",
+   "category": "transition",
+   "primary_engine": "vision",
+   "fallback_engine": null,
+   "editable_props": [
+    "shape_anchor"
+   ]
+  },
+  "comp-pip": {
+   "name": "画中画",
+   "category": "composite",
+   "primary_engine": "ffmpeg",
+   "fallback_engine": "host",
+   "editable_props": [
+    "rect",
+    "border"
+   ]
+  },
+  "comp-split-screen": {
+   "name": "分屏",
+   "category": "composite",
+   "primary_engine": "ffmpeg",
+   "fallback_engine": "host",
+   "editable_props": [
+    "layout"
+   ]
+  },
+  "comp-device-frame": {
+   "name": "设备样机",
+   "category": "composite",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "device",
+    "screen_src"
+   ]
+  },
+  "comp-chroma-key": {
+   "name": "色键抠像",
+   "category": "composite",
+   "primary_engine": "ffmpeg",
+   "fallback_engine": null,
+   "editable_props": [
+    "key_color",
+    "tolerance"
+   ]
+  },
+  "comp-subject-cutout": {
+   "name": "人物抠像",
+   "category": "composite",
+   "primary_engine": "vision",
+   "fallback_engine": null,
+   "editable_props": [
+    "subject",
+    "feather"
+   ]
+  },
+  "comp-bg-replace": {
+   "name": "背景虚化或替换",
+   "category": "composite",
+   "primary_engine": "vision",
+   "fallback_engine": "ffmpeg",
+   "editable_props": [
+    "mode",
+    "asset"
+   ]
+  },
+  "comp-collage-layer": {
+   "name": "拼贴分层",
+   "category": "composite",
+   "primary_engine": "html",
+   "fallback_engine": "vision",
+   "editable_props": [
+    "layers"
+   ]
+  },
+  "comp-mono-keep-subject": {
+   "name": "黑白留人像色",
+   "category": "composite",
+   "primary_engine": "vision",
+   "fallback_engine": "ffmpeg",
+   "editable_props": [
+    "subject"
+   ]
+  },
+  "trk-label-follow": {
+   "name": "跟踪标签",
+   "category": "track",
+   "primary_engine": "vision",
+   "fallback_engine": "html",
+   "editable_props": [
+    "target",
+    "label"
+   ]
+  },
+  "trk-mosaic": {
+   "name": "跟踪打码",
+   "category": "track",
+   "primary_engine": "vision",
+   "fallback_engine": "ffmpeg",
+   "editable_props": [
+    "target",
+    "mode"
+   ]
+  },
+  "trk-object-outline": {
+   "name": "实物线框",
+   "category": "track",
+   "primary_engine": "vision",
+   "fallback_engine": "html",
+   "editable_props": [
+    "target",
+    "style"
+   ]
+  },
+  "sty-film-grain": {
+   "name": "胶片颗粒与光晕",
+   "category": "stylize",
+   "primary_engine": "ffmpeg",
+   "fallback_engine": null,
+   "editable_props": [
+    "grain",
+    "halation",
+    "vignette"
+   ]
+  },
+  "sty-vhs": {
+   "name": "录像带",
+   "category": "stylize",
+   "primary_engine": "glsl",
+   "fallback_engine": "ffmpeg",
+   "editable_props": [
+    "intensity"
+   ]
+  },
+  "sty-halftone": {
+   "name": "网点印刷",
+   "category": "stylize",
+   "primary_engine": "glsl",
+   "fallback_engine": null,
+   "editable_props": [
+    "dot_size"
+   ]
+  },
+  "sty-duotone": {
+   "name": "双色调",
+   "category": "stylize",
+   "primary_engine": "ffmpeg",
+   "fallback_engine": "glsl",
+   "editable_props": [
+    "colors"
+   ]
+  },
+  "sty-paper-texture": {
+   "name": "纸纹叠加",
+   "category": "stylize",
+   "primary_engine": "ffmpeg",
+   "fallback_engine": "html",
+   "editable_props": [
+    "paper_asset",
+    "opacity"
+   ]
+  },
+  "sty-handpaint-window": {
+   "name": "转绘窗口",
+   "category": "stylize",
+   "primary_engine": "stylize",
+   "fallback_engine": null,
+   "editable_props": [
+    "range",
+    "reference"
+   ]
+  },
+  "sty-line-sketch": {
+   "name": "线稿化",
+   "category": "stylize",
+   "primary_engine": "glsl",
+   "fallback_engine": "stylize",
+   "editable_props": [
+    "line_weight"
+   ]
+  },
+  "fx-light-leak": {
+   "name": "漏光叠加",
+   "category": "light",
+   "primary_engine": "ffmpeg",
+   "fallback_engine": "glsl",
+   "editable_props": [
+    "asset",
+    "opacity"
+   ]
+  },
+  "fx-glow-bloom": {
+   "name": "辉光",
+   "category": "light",
+   "primary_engine": "glsl",
+   "fallback_engine": "ffmpeg",
+   "editable_props": [
+    "threshold",
+    "radius"
+   ]
+  },
+  "fx-confetti": {
+   "name": "彩纸粒子",
+   "category": "light",
+   "primary_engine": "html",
+   "fallback_engine": "glsl",
+   "editable_props": [
+    "density",
+    "palette"
+   ]
+  },
+  "fx-snow-rain": {
+   "name": "雨雪",
+   "category": "light",
+   "primary_engine": "glsl",
+   "fallback_engine": "html",
+   "editable_props": [
+    "density"
+   ]
+  },
+  "fx-sparkle": {
+   "name": "闪光点缀",
+   "category": "light",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "target"
+   ]
+  },
+  "bg-gradient-mesh": {
+   "name": "渐变网格",
+   "category": "background",
+   "primary_engine": "html",
+   "fallback_engine": "glsl",
+   "editable_props": [
+    "palette"
+   ]
+  },
+  "bg-aurora": {
+   "name": "极光流动",
+   "category": "background",
+   "primary_engine": "glsl",
+   "fallback_engine": null,
+   "editable_props": [
+    "palette",
+    "speed"
+   ]
+  },
+  "bg-grid-paper": {
+   "name": "方格纸",
+   "category": "background",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "grid",
+    "color_role"
+   ]
+  },
+  "bg-noise-texture": {
+   "name": "噪点质感",
+   "category": "background",
+   "primary_engine": "glsl",
+   "fallback_engine": "ffmpeg",
+   "editable_props": [
+    "scale"
+   ]
+  },
+  "scr-cursor-zoom": {
+   "name": "光标跟随放大",
+   "category": "screen",
+   "primary_engine": "ffmpeg",
+   "fallback_engine": "html",
+   "editable_props": [
+    "focus_rect",
+    "zoom"
+   ]
+  },
+  "scr-click-ripple": {
+   "name": "点击涟漪",
+   "category": "screen",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "point"
+   ]
+  },
+  "scr-code-typing": {
+   "name": "代码打字",
+   "category": "screen",
+   "primary_engine": "html",
+   "fallback_engine": "canvas",
+   "editable_props": [
+    "code",
+    "language"
+   ]
+  },
+  "scr-code-diff": {
+   "name": "代码差异",
+   "category": "screen",
+   "primary_engine": "html",
+   "fallback_engine": "canvas",
+   "editable_props": [
+    "before",
+    "after"
+   ]
+  },
+  "scr-browser-frame": {
+   "name": "浏览器框",
+   "category": "screen",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "url",
+    "screen_src"
+   ]
+  },
+  "scr-keystroke": {
+   "name": "按键提示",
+   "category": "screen",
+   "primary_engine": "html",
+   "fallback_engine": "ass",
+   "editable_props": [
+    "keys"
+   ]
+  },
+  "stk-emoji-pop": {
+   "name": "表情弹出",
+   "category": "sticker",
+   "primary_engine": "html",
+   "fallback_engine": "lottie",
+   "editable_props": [
+    "emoji"
+   ]
+  },
+  "stk-sticker-bounce": {
+   "name": "贴纸弹跳",
+   "category": "sticker",
+   "primary_engine": "lottie",
+   "fallback_engine": "html",
+   "editable_props": [
+    "asset"
+   ]
+  },
+  "stk-reaction-burst": {
+   "name": "反应特效字",
+   "category": "sticker",
+   "primary_engine": "html",
+   "fallback_engine": null,
+   "editable_props": [
+    "text",
+    "palette"
+   ]
+  },
+  "av-beat-pulse": {
+   "name": "节拍脉冲",
+   "category": "av",
+   "primary_engine": "html",
+   "fallback_engine": "glsl",
+   "editable_props": [
+    "beats",
+    "intensity"
+   ]
+  },
+  "av-waveform": {
+   "name": "声波",
+   "category": "av",
+   "primary_engine": "html",
+   "fallback_engine": "canvas",
+   "editable_props": [
+    "audio_ref",
+    "style"
+   ]
+  },
+  "av-beat-freeze": {
+   "name": "卡点定格",
+   "category": "av",
+   "primary_engine": "ffmpeg",
+   "fallback_engine": "host",
+   "editable_props": [
+    "beats"
+   ]
+  },
+  "dia-flowchart": {
+   "name": "流程图",
+   "category": "diagram",
+   "primary_engine": "canvas",
+   "fallback_engine": "html",
+   "editable_props": [
+    "nodes",
+    "edges",
+    "active"
+   ]
+  },
+  "dia-cause-map": {
+   "name": "因果图",
+   "category": "diagram",
+   "primary_engine": "canvas",
+   "fallback_engine": "html",
+   "editable_props": [
+    "nodes",
+    "edges"
+   ]
+  },
+  "dia-whiteboard": {
+   "name": "白板手绘",
+   "category": "diagram",
+   "primary_engine": "lottie",
+   "fallback_engine": "html",
+   "editable_props": [
+    "strokes"
+   ]
+  },
+  "dia-formula": {
+   "name": "公式推导",
+   "category": "diagram",
+   "primary_engine": "manim",
+   "fallback_engine": "html",
+   "editable_props": [
+    "latex_steps"
+   ]
+  },
+  "dia-product-turntable": {
+   "name": "产品转台",
+   "category": "diagram",
+   "primary_engine": "three",
+   "fallback_engine": "blender",
+   "editable_props": [
+    "model",
+    "turns"
+   ]
+  }
+ },
+ "design_families": {
+  "handwritten-notes": {
+   "name": "手写、笔记与批注",
+   "ornament": 0.55,
+   "formality": 0.25
+  },
+  "paper-collage-print": {
+   "name": "剪纸、拼贴与套色印刷",
+   "ornament": 0.75,
+   "formality": 0.3
+  },
+  "editorial-magazine": {
+   "name": "人物、新闻与杂志版式",
+   "ornament": 0.5,
+   "formality": 0.75
+  },
+  "bold-type": {
+   "name": "大字、引言与字形动画",
+   "ornament": 0.35,
+   "formality": 0.45
+  },
+  "tech-dashboard": {
+   "name": "技术图解与数据看板",
+   "ornament": 0.3,
+   "formality": 0.7
+  },
+  "geometric-whitespace": {
+   "name": "几何、空间与留白",
+   "ornament": 0.2,
+   "formality": 0.65
+  },
+  "gradient-material-light": {
+   "name": "渐变、材质与光效",
+   "ornament": 0.6,
+   "formality": 0.5
+  },
+  "variety-show": {
+   "name": "综艺花字与二次元",
+   "ornament": 0.85,
+   "formality": 0.1
+  },
+  "neo-chinese": {
+   "name": "国潮与新中式",
+   "ornament": 0.65,
+   "formality": 0.6
+  },
+  "film-archive": {
+   "name": "胶片、档案与默片",
+   "ornament": 0.55,
+   "formality": 0.55
+  },
+  "corporate-clean": {
+   "name": "商务极简",
+   "ornament": 0.15,
+   "formality": 0.85
+  },
+  "game-hud": {
+   "name": "游戏、电竞与像素",
+   "ornament": 0.7,
+   "formality": 0.3
+  }
+ },
+ "design_systems": {
+  "paper-highlighter": {
+   "name": "纸感荧光",
+   "family": "handwritten-notes",
+   "bg": "F6F1E7",
+   "ink": "2B2724",
+   "accent": "F7E25C",
+   "fonts": "霞鹜文楷 + 思源宋体",
+   "motion": "笔触描出，慢入慢出"
+  },
+  "whiteboard-marker": {
+   "name": "白板马克笔",
+   "family": "handwritten-notes",
+   "bg": "FAFAF7",
+   "ink": "1F2A44",
+   "accent": "2F6FED",
+   "fonts": "站酷快乐体 + 思源黑体",
+   "motion": "笔画按讲解顺序出现"
+  },
+  "red-pen-review": {
+   "name": "红笔批改",
+   "family": "handwritten-notes",
+   "bg": "F3EFE6",
+   "ink": "222222",
+   "accent": "D7261E",
+   "fonts": "思源宋体 + 霞鹜文楷",
+   "motion": "圈、划、改，手势感"
+  },
+  "kraft-sticky": {
+   "name": "牛皮纸便签",
+   "family": "handwritten-notes",
+   "bg": "C9A97E",
+   "ink": "2E2418",
+   "accent": "F2D16B",
+   "fonts": "霞鹜文楷",
+   "motion": "便签贴上与掀起"
+  },
+  "torn-collage": {
+   "name": "撕纸拼贴",
+   "family": "paper-collage-print",
+   "bg": "EFE7DA",
+   "ink": "1E1B18",
+   "accent": "E2573B",
+   "fonts": "得意黑 + 思源宋体",
+   "motion": "逐层贴上，轻微错位"
+  },
+  "riso-duo": {
+   "name": "双色套印",
+   "family": "paper-collage-print",
+   "bg": "F4EFE4",
+   "ink": "1C3FAA",
+   "accent": "F25C54",
+   "fonts": "思源黑体 Heavy",
+   "motion": "套印错版与网点"
+  },
+  "retro-pop": {
+   "name": "复古波普",
+   "family": "paper-collage-print",
+   "bg": "FFF3D6",
+   "ink": "111111",
+   "accent": "FF4F79",
+   "fonts": "站酷庆科黄油体 + 思源黑体",
+   "motion": "弹跳与硬阴影"
+  },
+  "clipping-archive": {
+   "name": "剪报档案",
+   "family": "paper-collage-print",
+   "bg": "E9E2D0",
+   "ink": "2A2A2A",
+   "accent": "9C2B23",
+   "fonts": "思源宋体 + 等宽",
+   "motion": "剪报落下、红线连接"
+  },
+  "newsroom": {
+   "name": "新闻编辑部",
+   "family": "editorial-magazine",
+   "bg": "FFFFFF",
+   "ink": "121212",
+   "accent": "C8102E",
+   "fonts": "思源宋体 + 思源黑体",
+   "motion": "整页切换，克制"
+  },
+  "mono-portrait": {
+   "name": "黑白人物志",
+   "family": "editorial-magazine",
+   "bg": "0C0C0C",
+   "ink": "F5F5F5",
+   "accent": "FFFFFF",
+   "fonts": "思源宋体 Heavy + Inter",
+   "motion": "静止人物页、慢推"
+  },
+  "lifestyle-pictorial": {
+   "name": "生活画报",
+   "family": "editorial-magazine",
+   "bg": "FBF7F2",
+   "ink": "3A2E2A",
+   "accent": "C97B5A",
+   "fonts": "思源宋体 + 霞鹜文楷",
+   "motion": "图文分栏、柔和翻页"
+  },
+  "finance-journal": {
+   "name": "财经报刊",
+   "family": "editorial-magazine",
+   "bg": "F7F4EC",
+   "ink": "1A1A1A",
+   "accent": "1F6F5C",
+   "fonts": "思源宋体 + 等宽数字",
+   "motion": "数据页与引语页交替"
+  },
+  "manifesto-yellow": {
+   "name": "黄白宣言",
+   "family": "bold-type",
+   "bg": "111111",
+   "ink": "FFFFFF",
+   "accent": "FFD400",
+   "fonts": "得意黑 + 思源黑体 Heavy",
+   "motion": "整拍占屏、硬切"
+  },
+  "black-yellow-heavy": {
+   "name": "黑黄重字",
+   "family": "bold-type",
+   "bg": "FFD400",
+   "ink": "111111",
+   "accent": "111111",
+   "fonts": "思源黑体 Heavy",
+   "motion": "冲击放大、短停留"
+  },
+  "acid-green-type": {
+   "name": "酸绿花字",
+   "family": "bold-type",
+   "bg": "0B0B0B",
+   "ink": "E8FF3A",
+   "accent": "FF3AB0",
+   "fonts": "得意黑",
+   "motion": "错位与描边跳动"
+  },
+  "deep-blue-impact": {
+   "name": "深蓝冲击",
+   "family": "bold-type",
+   "bg": "0A1A4F",
+   "ink": "FFFFFF",
+   "accent": "3AE0FF",
+   "fonts": "思源黑体 Heavy + Bebas Neue",
+   "motion": "数字砸入、全屏引文"
+  },
+  "redline-tech": {
+   "name": "黑底红行",
+   "family": "tech-dashboard",
+   "bg": "0E0E10",
+   "ink": "F2F2F2",
+   "accent": "E3262F",
+   "fonts": "等宽数字 + 思源黑体",
+   "motion": "逐行点亮、滑入"
+  },
+  "light-tech-board": {
+   "name": "浅色科技看板",
+   "family": "tech-dashboard",
+   "bg": "F4F6FA",
+   "ink": "1B2330",
+   "accent": "2F80ED",
+   "fonts": "Inter + 思源黑体",
+   "motion": "卡片网格、轻弹"
+  },
+  "terminal-green": {
+   "name": "黑绿终端",
+   "family": "tech-dashboard",
+   "bg": "050805",
+   "ink": "B8FFB0",
+   "accent": "39FF14",
+   "fonts": "JetBrains Mono + 思源黑体",
+   "motion": "打字与扫描线"
+  },
+  "blueprint-line": {
+   "name": "蓝图线框",
+   "family": "tech-dashboard",
+   "bg": "0F2A4A",
+   "ink": "DCEBFF",
+   "accent": "FFFFFF",
+   "fonts": "Inter + 等宽",
+   "motion": "线条描出、标注引线"
+  },
+  "modernist-geometry": {
+   "name": "现代主义几何",
+   "family": "geometric-whitespace",
+   "bg": "F2EFE8",
+   "ink": "111111",
+   "accent": "E5432D",
+   "fonts": "Inter + 思源黑体",
+   "motion": "几何块推入"
+  },
+  "swiss-grid": {
+   "name": "瑞士网格",
+   "family": "geometric-whitespace",
+   "bg": "FFFFFF",
+   "ink": "000000",
+   "accent": "FF3B00",
+   "fonts": "思源黑体 + Inter",
+   "motion": "网格对齐、整齐滑移"
+  },
+  "quiet-whitespace": {
+   "name": "极简留白",
+   "family": "geometric-whitespace",
+   "bg": "FAFAFA",
+   "ink": "2A2A2A",
+   "accent": "8A8A8A",
+   "fonts": "思源宋体 Light",
+   "motion": "淡入、大量留白"
+  },
+  "warm-orange-geo": {
+   "name": "暖橙几何",
+   "family": "geometric-whitespace",
+   "bg": "FFF6EC",
+   "ink": "2B1D12",
+   "accent": "FF7A1A",
+   "fonts": "得意黑 + 思源黑体",
+   "motion": "圆角块弹入"
+  },
+  "soft-organic-gradient": {
+   "name": "柔光有机渐变",
+   "family": "gradient-material-light",
+   "bg": "1B1530",
+   "ink": "FFFFFF",
+   "accent": "B48CFF",
+   "fonts": "思源黑体 Light",
+   "motion": "缓慢流动"
+  },
+  "dark-liquid": {
+   "name": "深色流光",
+   "family": "gradient-material-light",
+   "bg": "07070B",
+   "ink": "EDEDF5",
+   "accent": "5CE1E6",
+   "fonts": "Inter + 思源黑体",
+   "motion": "光带扫过"
+  },
+  "glassmorph": {
+   "name": "玻璃拟态",
+   "family": "gradient-material-light",
+   "bg": "DDE6F2",
+   "ink": "1A2333",
+   "accent": "4C7DFF",
+   "fonts": "Inter + 思源黑体",
+   "motion": "毛玻璃卡片浮现"
+  },
+  "neon-night-board": {
+   "name": "霓虹夜",
+   "family": "gradient-material-light",
+   "bg": "0A0614",
+   "ink": "F8E9FF",
+   "accent": "FF2BD6",
+   "fonts": "得意黑",
+   "motion": "辉光闪烁（克制）"
+  },
+  "variety-color-caption": {
+   "name": "综艺彩字",
+   "family": "variety-show",
+   "bg": "FFFFFF",
+   "ink": "1A1A1A",
+   "accent": "FF3D3D",
+   "fonts": "站酷庆科黄油体",
+   "motion": "描边彩字弹跳"
+  },
+  "anime-danmaku": {
+   "name": "弹幕二次元",
+   "family": "variety-show",
+   "bg": "FFFFFF",
+   "ink": "222222",
+   "accent": "00A1D6",
+   "fonts": "思源黑体",
+   "motion": "弹幕横穿、贴纸"
+  },
+  "cute-sticker": {
+   "name": "萌系贴纸",
+   "family": "variety-show",
+   "bg": "FFF0F5",
+   "ink": "4A2B3A",
+   "accent": "FF8FB1",
+   "fonts": "站酷快乐体",
+   "motion": "Q 弹贴纸"
+  },
+  "meme-red": {
+   "name": "爆梗红字",
+   "family": "variety-show",
+   "bg": "000000",
+   "ink": "FFFFFF",
+   "accent": "FF0000",
+   "fonts": "思源黑体 Heavy",
+   "motion": "冲击字、震屏"
+  },
+  "ink-xuan": {
+   "name": "宣纸水墨",
+   "family": "neo-chinese",
+   "bg": "F2EDE3",
+   "ink": "1E1E1E",
+   "accent": "B22222",
+   "fonts": "思源宋体 + 书法题签",
+   "motion": "墨晕、留白"
+  },
+  "vermilion-gold": {
+   "name": "朱红金饰",
+   "family": "neo-chinese",
+   "bg": "7A0E0E",
+   "ink": "F6E7C1",
+   "accent": "D4AF37",
+   "fonts": "思源宋体 Heavy",
+   "motion": "金线描边、缓慢展开"
+  },
+  "azure-landscape": {
+   "name": "青绿山水",
+   "family": "neo-chinese",
+   "bg": "EEF3EC",
+   "ink": "1F3B36",
+   "accent": "2E8B7A",
+   "fonts": "思源宋体 + 霞鹜文楷",
+   "motion": "卷轴平移"
+  },
+  "neo-chinese-minimal": {
+   "name": "新中式极简",
+   "family": "neo-chinese",
+   "bg": "F7F4EE",
+   "ink": "2A2622",
+   "accent": "8B5A2B",
+   "fonts": "思源宋体",
+   "motion": "竖排、慢显"
+  },
+  "archive-typewriter": {
+   "name": "档案打字",
+   "family": "film-archive",
+   "bg": "EDE6D6",
+   "ink": "2B2B2B",
+   "accent": "7A1F1F",
+   "fonts": "等宽 + 思源宋体",
+   "motion": "打字、盖章"
+  },
+  "film-leader-card": {
+   "name": "胶片片头字卡",
+   "family": "film-archive",
+   "bg": "0D0D0D",
+   "ink": "EDE3C8",
+   "accent": "C9A227",
+   "fonts": "思源宋体 + Bebas Neue",
+   "motion": "倒计时、片孔边"
+  },
+  "old-photo-album": {
+   "name": "老照片相册",
+   "family": "film-archive",
+   "bg": "E8DCC6",
+   "ink": "3B2F25",
+   "accent": "8A5A3B",
+   "fonts": "霞鹜文楷",
+   "motion": "相角贴入、泛白"
+  },
+  "silent-intertitle": {
+   "name": "默片字幕卡",
+   "family": "film-archive",
+   "bg": "000000",
+   "ink": "F0F0F0",
+   "accent": "F0F0F0",
+   "fonts": "思源宋体",
+   "motion": "黑底字卡、闪烁边框"
+  },
+  "blue-professional": {
+   "name": "蓝色专业",
+   "family": "corporate-clean",
+   "bg": "FFFFFF",
+   "ink": "0F1B2D",
+   "accent": "1E5EFF",
+   "fonts": "思源黑体 + Inter",
+   "motion": "平滑滑入"
+  },
+  "black-gold-premium": {
+   "name": "黑金高端",
+   "family": "corporate-clean",
+   "bg": "0B0B0B",
+   "ink": "F4EBD0",
+   "accent": "C9A54C",
+   "fonts": "思源宋体 + Inter",
+   "motion": "慢推、金线"
+  },
+  "health-fresh": {
+   "name": "医疗健康清新",
+   "family": "corporate-clean",
+   "bg": "F5FBFA",
+   "ink": "16312E",
+   "accent": "1FB89A",
+   "fonts": "思源黑体",
+   "motion": "圆润淡入"
+  },
+  "pixel-retro": {
+   "name": "像素复古",
+   "family": "game-hud",
+   "bg": "1B1B2F",
+   "ink": "F5F5F5",
+   "accent": "FFCC00",
+   "fonts": "像素字体 + 思源黑体",
+   "motion": "逐格跳动"
+  },
+  "esports-hud": {
+   "name": "电竞 HUD",
+   "family": "game-hud",
+   "bg": "0A0E14",
+   "ink": "E6F1FF",
+   "accent": "00E0FF",
+   "fonts": "Bebas Neue + 思源黑体 Heavy",
+   "motion": "斜切面板、扫描"
+  },
+  "holo-scifi": {
+   "name": "科幻全息",
+   "family": "game-hud",
+   "bg": "02060C",
+   "ink": "BFEFFF",
+   "accent": "66FFE3",
+   "fonts": "Inter + 等宽",
+   "motion": "全息闪烁、线框"
+  }
+ },
+ "caption_styles": {
+  "cap-baseline-plain": {
+   "name": "整句白字黑描边（默认基线）",
+   "grouping": "sentence",
+   "emphasis": "none",
+   "animation": "none",
+   "engine": "ass",
+   "motion": 0.0,
+   "note": "B1 默认基线的字幕定义"
+  },
+  "cap-cinema": {
+   "name": "电影字幕",
+   "grouping": "sentence",
+   "emphasis": "none",
+   "animation": "fade",
+   "engine": "ass",
+   "motion": 0.05,
+   "note": "细字、柔阴影、无描边"
+  },
+  "cap-doc-caption": {
+   "name": "纪录片说明字",
+   "grouping": "sentence",
+   "emphasis": "none",
+   "animation": "fade",
+   "engine": "ass",
+   "motion": 0.05,
+   "note": "地点时间与来源说明"
+  },
+  "cap-phrase-clean": {
+   "name": "短语分组极简",
+   "grouping": "phrase",
+   "emphasis": "none",
+   "animation": "fade",
+   "engine": "ass",
+   "motion": 0.1,
+   "note": "按语义短语断开"
+  },
+  "cap-keyword-color": {
+   "name": "关键词变色",
+   "grouping": "phrase",
+   "emphasis": "keyword-color",
+   "animation": "none",
+   "engine": "ass",
+   "motion": 0.2,
+   "note": "只给一个强调色"
+  },
+  "cap-keyword-weight": {
+   "name": "关键词加粗放大",
+   "grouping": "phrase",
+   "emphasis": "keyword-weight",
+   "animation": "pop",
+   "engine": "ass",
+   "motion": 0.35,
+   "note": "强调词字重与字号提升"
+  },
+  "cap-karaoke": {
+   "name": "逐词卡拉OK",
+   "grouping": "word",
+   "emphasis": "word-karaoke",
+   "animation": "karaoke",
+   "engine": "ass",
+   "motion": 0.45,
+   "note": "已说出的词填色"
+  },
+  "cap-pill-karaoke": {
+   "name": "胶囊底逐词高亮",
+   "grouping": "word",
+   "emphasis": "highlight-box",
+   "animation": "karaoke",
+   "engine": "html",
+   "motion": 0.55,
+   "note": "当前词胶囊底"
+  },
+  "cap-word-pop": {
+   "name": "逐词弹出",
+   "grouping": "word",
+   "emphasis": "none",
+   "animation": "pop",
+   "engine": "ass",
+   "motion": 0.6,
+   "note": "每词弹入"
+  },
+  "cap-word-slam": {
+   "name": "大字逐词冲击",
+   "grouping": "word",
+   "emphasis": "keyword-weight",
+   "animation": "pop",
+   "engine": "html",
+   "motion": 0.85,
+   "note": "每屏 1–3 词，居中大字"
+  },
+  "cap-typewriter": {
+   "name": "打字机",
+   "grouping": "phrase",
+   "emphasis": "none",
+   "animation": "type-on",
+   "engine": "ass",
+   "motion": 0.4,
+   "note": "逐字打出"
+  },
+  "cap-hand-note": {
+   "name": "手写体整句",
+   "grouping": "sentence",
+   "emphasis": "none",
+   "animation": "fade",
+   "engine": "ass",
+   "motion": 0.1,
+   "note": "近似手写字体"
+  },
+  "cap-vertical": {
+   "name": "竖排题字",
+   "grouping": "phrase",
+   "emphasis": "none",
+   "animation": "fade",
+   "engine": "html",
+   "motion": 0.1,
+   "note": "竖排，适合国风与留白"
+  },
+  "cap-variety": {
+   "name": "综艺花字",
+   "grouping": "phrase",
+   "emphasis": "keyword-color",
+   "animation": "pop",
+   "engine": "html",
+   "motion": 0.8,
+   "note": "描边、投影、渐变彩字"
+  },
+  "cap-emoji-accent": {
+   "name": "表情点缀",
+   "grouping": "phrase",
+   "emphasis": "keyword-color",
+   "animation": "pop",
+   "engine": "html",
+   "motion": 0.6,
+   "note": "情绪词后带表情"
+  },
+  "cap-danmaku": {
+   "name": "弹幕式",
+   "grouping": "phrase",
+   "emphasis": "none",
+   "animation": "none",
+   "engine": "ass",
+   "motion": 0.5,
+   "note": "横向滚动"
+  },
+  "cap-lyric-karaoke": {
+   "name": "歌词卡拉OK",
+   "grouping": "phrase",
+   "emphasis": "word-karaoke",
+   "animation": "karaoke",
+   "engine": "ass",
+   "motion": 0.5,
+   "note": "按演唱节奏填色"
+  },
+  "cap-bilingual-stack": {
+   "name": "双语上下",
+   "grouping": "sentence",
+   "emphasis": "none",
+   "animation": "none",
+   "engine": "ass",
+   "motion": 0.05,
+   "note": "主语言在上"
+  },
+  "cap-bilingual-foreign-first": {
+   "name": "外语为主中文小字",
+   "grouping": "sentence",
+   "emphasis": "none",
+   "animation": "none",
+   "engine": "ass",
+   "motion": 0.05,
+   "note": "出海版"
+  },
+  "cap-speaker-color": {
+   "name": "多人分色",
+   "grouping": "sentence",
+   "emphasis": "none",
+   "animation": "none",
+   "engine": "ass",
+   "motion": 0.1,
+   "note": "说话人颜色区分"
+  },
+  "cap-news-lower": {
+   "name": "新闻下三分之一",
+   "grouping": "sentence",
+   "emphasis": "none",
+   "animation": "none",
+   "engine": "html",
+   "motion": 0.1,
+   "note": "条带底与滚动条"
+  },
+  "cap-text-behind": {
+   "name": "文字穿人",
+   "grouping": "word",
+   "emphasis": "keyword-weight",
+   "animation": "pop",
+   "engine": "vision",
+   "motion": 0.7,
+   "note": "大词位于人物后，覆盖 30–55%"
+  },
+  "cap-3d-follow": {
+   "name": "3D 跟随",
+   "grouping": "phrase",
+   "emphasis": "keyword-weight",
+   "animation": "pop",
+   "engine": "vision",
+   "motion": 0.75,
+   "note": "随说话人空间移动"
+  },
+  "cap-neon-glow": {
+   "name": "霓虹发光",
+   "grouping": "phrase",
+   "emphasis": "keyword-color",
+   "animation": "fade",
+   "engine": "html",
+   "motion": 0.4,
+   "note": "夜景与音乐"
+  },
+  "cap-glitch-rgb": {
+   "name": "故障分离",
+   "grouping": "phrase",
+   "emphasis": "keyword-color",
+   "animation": "pop",
+   "engine": "html",
+   "motion": 0.7,
+   "note": "科技与游戏"
+  },
+  "cap-gradient-fill": {
+   "name": "渐变填充",
+   "grouping": "phrase",
+   "emphasis": "keyword-color",
+   "animation": "fade",
+   "engine": "html",
+   "motion": 0.35,
+   "note": "品牌色渐变"
+  },
+  "cap-sdh-accessible": {
+   "name": "无障碍大字",
+   "grouping": "sentence",
+   "emphasis": "none",
+   "animation": "none",
+   "engine": "ass",
+   "motion": 0.0,
+   "note": "含声音描述，大字号高对比"
+  },
+  "cap-minimal-thin": {
+   "name": "极简细字",
+   "grouping": "sentence",
+   "emphasis": "none",
+   "animation": "fade",
+   "engine": "ass",
+   "motion": 0.05,
+   "note": "高级感，小字号"
+  },
+  "cap-quote-serif": {
+   "name": "衬线引语",
+   "grouping": "sentence",
+   "emphasis": "keyword-weight",
+   "animation": "fade",
+   "engine": "html",
+   "motion": 0.15,
+   "note": "引用原话"
+  },
+  "cap-none-when-component": {
+   "name": "组件承担时让位",
+   "grouping": "none-when-component",
+   "emphasis": "none",
+   "animation": "none",
+   "engine": "ass",
+   "motion": 0.1,
+   "note": "大字组件出现时隐藏字幕"
+  }
+ },
+ "looks": {
+  "look-neutral": {
+   "name": "中性准确",
+   "warmth": 0.5,
+   "contrast": 0.5,
+   "implementation": "color-grade-compile 曝光与白平衡校正",
+   "mechanism": false,
+   "note": "基线影调"
+  },
+  "look-clean-bright": {
+   "name": "清透提亮",
+   "warmth": 0.5,
+   "contrast": 0.45,
+   "implementation": "曝光+高光滚降+轻饱和",
+   "mechanism": false,
+   "note": "口播与教程"
+  },
+  "look-warm-life": {
+   "name": "暖调生活",
+   "warmth": 0.75,
+   "contrast": 0.45,
+   "implementation": "白平衡偏暖+中间调提亮",
+   "mechanism": false,
+   "note": "Vlog 与陪伴"
+  },
+  "look-cool-tech": {
+   "name": "冷调科技",
+   "warmth": 0.25,
+   "contrast": 0.65,
+   "implementation": "白平衡偏冷+对比",
+   "mechanism": false,
+   "note": "科技测评"
+  },
+  "look-film-warm": {
+   "name": "胶片暖褐",
+   "warmth": 0.7,
+   "contrast": 0.55,
+   "implementation": "曲线+颗粒+光晕",
+   "mechanism": false,
+   "note": "怀旧与人文"
+  },
+  "look-film-green": {
+   "name": "胶片青绿",
+   "warmth": 0.4,
+   "contrast": 0.55,
+   "implementation": "HSL 绿青偏移+颗粒",
+   "mechanism": false,
+   "note": "文艺与城市"
+  },
+  "look-bw-contrast": {
+   "name": "高对比黑白",
+   "warmth": 0.5,
+   "contrast": 0.9,
+   "implementation": "去色+曲线",
+   "mechanism": false,
+   "note": "人物与纪实"
+  },
+  "look-mono-subject": {
+   "name": "黑白留人像色",
+   "warmth": 0.5,
+   "contrast": 0.8,
+   "implementation": "主体遮罩+分区去色",
+   "mechanism": true,
+   "note": "需 subject-matte"
+  },
+  "look-grey-muted": {
+   "name": "低饱和高级灰",
+   "warmth": 0.45,
+   "contrast": 0.4,
+   "implementation": "整体降饱和+肤色保护",
+   "mechanism": false,
+   "note": "商务与时尚"
+  },
+  "look-airy": {
+   "name": "日系清新",
+   "warmth": 0.55,
+   "contrast": 0.3,
+   "implementation": "提亮+低对比+青蓝阴影",
+   "mechanism": false,
+   "note": "生活与校园"
+  },
+  "look-hk-night": {
+   "name": "港风夜色",
+   "warmth": 0.6,
+   "contrast": 0.7,
+   "implementation": "高光暖、阴影青、颗粒",
+   "mechanism": false,
+   "note": "夜景与情绪"
+  },
+  "look-food-rich": {
+   "name": "美食暖饱和",
+   "warmth": 0.8,
+   "contrast": 0.55,
+   "implementation": "暖白平衡+红橙饱和",
+   "mechanism": false,
+   "note": "美食"
+  },
+  "look-product-true": {
+   "name": "商品真色",
+   "warmth": 0.5,
+   "contrast": 0.5,
+   "implementation": "白平衡锁定+色卡校准",
+   "mechanism": false,
+   "note": "商品颜色不得偏移"
+  },
+  "look-doc-natural": {
+   "name": "纪实自然",
+   "warmth": 0.5,
+   "contrast": 0.45,
+   "implementation": "轻校正，保留现场光",
+   "mechanism": false,
+   "note": "纪录与新闻"
+  },
+  "look-vhs-retro": {
+   "name": "录像带复古",
+   "warmth": 0.6,
+   "contrast": 0.4,
+   "implementation": "色偏+噪点+扫描线",
+   "mechanism": false,
+   "note": "复古与搞笑"
+  },
+  "look-neon-cyber": {
+   "name": "霓虹赛博",
+   "warmth": 0.35,
+   "contrast": 0.75,
+   "implementation": "品红青分离",
+   "mechanism": false,
+   "note": "游戏与夜景"
+  },
+  "look-soft-skin": {
+   "name": "柔肤人像",
+   "warmth": 0.6,
+   "contrast": 0.35,
+   "implementation": "肤色区柔化+提亮",
+   "mechanism": false,
+   "note": "人像口播（克制）"
+  },
+  "look-high-key-summer": {
+   "name": "夏日高调",
+   "warmth": 0.65,
+   "contrast": 0.35,
+   "implementation": "高曝光+饱和",
+   "mechanism": false,
+   "note": "旅行与运动"
+  },
+  "look-winter-blue": {
+   "name": "冬日冷蓝",
+   "warmth": 0.2,
+   "contrast": 0.5,
+   "implementation": "冷白平衡+低饱和",
+   "mechanism": false,
+   "note": "安静与孤独"
+  },
+  "look-golden-hour": {
+   "name": "黄金时刻",
+   "warmth": 0.85,
+   "contrast": 0.5,
+   "implementation": "高光橙金+柔对比",
+   "mechanism": false,
+   "note": "婚礼与旅行"
+  },
+  "look-black-gold": {
+   "name": "黑金质感",
+   "warmth": 0.65,
+   "contrast": 0.8,
+   "implementation": "压暗+金色高光",
+   "mechanism": false,
+   "note": "高端品牌"
+  },
+  "look-morandi": {
+   "name": "莫兰迪",
+   "warmth": 0.55,
+   "contrast": 0.3,
+   "implementation": "降饱和+灰调",
+   "mechanism": false,
+   "note": "家居与生活方式"
+  },
+  "look-pastel-book": {
+   "name": "绘本柔彩",
+   "warmth": 0.65,
+   "contrast": 0.25,
+   "implementation": "粉彩+低对比",
+   "mechanism": false,
+   "note": "亲子与童趣"
+  },
+  "look-archive-faded": {
+   "name": "档案褪色",
+   "warmth": 0.6,
+   "contrast": 0.35,
+   "implementation": "褪色+轻黄+颗粒",
+   "mechanism": false,
+   "note": "历史与回忆"
+  },
+  "look-night-clean": {
+   "name": "夜景低噪",
+   "warmth": 0.45,
+   "contrast": 0.6,
+   "implementation": "降噪+黑位校正",
+   "mechanism": false,
+   "note": "夜间实拍"
+  }
+ },
+ "sounds": {
+  "snd-voice-only": {
+   "name": "只留人声",
+   "density": 0.0,
+   "description": "原声为主，不加音乐与音效"
+  },
+  "snd-minimal-ticks": {
+   "name": "极简提示音",
+   "density": 0.2,
+   "description": "组件出现时轻微提示音"
+  },
+  "snd-statement-hits": {
+   "name": "观点重音",
+   "density": 0.4,
+   "description": "主张入场时一次低频重音"
+  },
+  "snd-lofi-bed": {
+   "name": "Lo-fi 底声",
+   "density": 0.3,
+   "description": "-24 LUFS 以下的安静底乐"
+  },
+  "snd-ambience": {
+   "name": "环境声主导",
+   "density": 0.2,
+   "description": "保留并修整现场环境声"
+  },
+  "snd-asmr-foley": {
+   "name": "拟音前置",
+   "density": 0.5,
+   "description": "物件声放大，人声退后或删除"
+  },
+  "snd-variety-sfx": {
+   "name": "综艺音效",
+   "density": 0.8,
+   "description": "笑点、反转、尴尬等定点音效"
+  },
+  "snd-news-bed": {
+   "name": "资讯底乐",
+   "density": 0.3,
+   "description": "稳定节奏底乐与转场提示"
+  },
+  "snd-cinematic-swell": {
+   "name": "电影化铺垫",
+   "density": 0.5,
+   "description": "只在高潮前铺垫，克制使用"
+  },
+  "snd-beat-driven": {
+   "name": "节拍驱动",
+   "density": 0.7,
+   "description": "画面按音乐节拍组织"
+  },
+  "snd-corporate-uplift": {
+   "name": "商务明亮",
+   "density": 0.4,
+   "description": "积极、不抢人声"
+  },
+  "snd-acoustic-vlog": {
+   "name": "原声吉他",
+   "density": 0.35,
+   "description": "轻快生活感"
+  },
+  "snd-suspense-drone": {
+   "name": "悬疑低鸣",
+   "density": 0.35,
+   "description": "持续低频与静默断点"
+  },
+  "snd-retro-game": {
+   "name": "复古游戏音",
+   "density": 0.6,
+   "description": "8-bit 提示音"
+  },
+  "snd-room-tone": {
+   "name": "纪实房间底噪",
+   "density": 0.1,
+   "description": "统一房间声，修补剪切"
+  },
+  "snd-silence-punct": {
+   "name": "静默断点",
+   "density": 0.15,
+   "description": "关键处突然无声"
+  }
+ },
+ "rhythms": {
+  "rhy-natural": {
+   "name": "自然气口",
+   "tempo": 0.35,
+   "description": "保留有意停顿与气口，修接点优先于加速"
+  },
+  "rhy-tight-explainer": {
+   "name": "紧凑讲解",
+   "tempo": 0.6,
+   "description": "数值后给 1.5–2 秒吸收"
+  },
+  "rhy-fast-claim-first": {
+   "name": "主张前置快剪",
+   "tempo": 0.85,
+   "description": "开头 3 秒内给主张"
+  },
+  "rhy-unhurried": {
+   "name": "舒缓陪伴",
+   "tempo": 0.25,
+   "description": "长停顿保留，慢切换"
+  },
+  "rhy-chaptered": {
+   "name": "章节呼吸",
+   "tempo": 0.45,
+   "description": "章节间留 1 秒"
+  },
+  "rhy-hook-3s": {
+   "name": "三秒钩子",
+   "tempo": 0.75,
+   "description": "开头 3 秒给悬念或结果"
+  },
+  "rhy-beat-sync": {
+   "name": "节拍同步",
+   "tempo": 0.8,
+   "description": "切点落在拍点或乐句"
+  },
+  "rhy-montage-build": {
+   "name": "递进蒙太奇",
+   "tempo": 0.65,
+   "description": "镜头越来越短，最后放慢"
+  },
+  "rhy-observational": {
+   "name": "长镜观察",
+   "tempo": 0.15,
+   "description": "长镜头，不催促"
+  },
+  "rhy-live-slice": {
+   "name": "直播切片",
+   "tempo": 0.7,
+   "description": "一段一主题，去等待"
+  },
+  "rhy-tutorial-follow": {
+   "name": "可跟做",
+   "tempo": 0.4,
+   "description": "每步停留到可操作"
+  },
+  "rhy-highlight-burst": {
+   "name": "高光爆发",
+   "tempo": 0.8,
+   "description": "铺垫—爆发—回放"
+  },
+  "rhy-trailer": {
+   "name": "预告节奏",
+   "tempo": 0.7,
+   "description": "声先入、黑场、字卡、加速"
+  },
+  "rhy-news-brisk": {
+   "name": "资讯快节奏",
+   "tempo": 0.7,
+   "description": "一条一事，干净转场"
+  }
+ }
+}

@@ -1,0 +1,343 @@
+{
+ "schema": "scenario-catalog/1",
+ "scenarios": {
+  "S01": {
+   "name": "知识科普口播",
+   "domain": "真人口播与知识表达",
+   "workflow": "raven-speech-edit",
+   "material_start": "单人口播原片",
+   "key_signals": "步骤、概念关系、误区、数值",
+   "requires": []
+  },
+  "S02": {
+   "name": "观点评论",
+   "domain": "真人口播与知识表达",
+   "workflow": "raven-speech-edit",
+   "material_start": "单人口播原片",
+   "key_signals": "主张、转折、反例、引语",
+   "requires": []
+  },
+  "S03": {
+   "name": "数码家电测评",
+   "domain": "真人口播与知识表达",
+   "workflow": "raven-speech-edit",
+   "material_start": "口播原片＋产品 B-roll",
+   "key_signals": "规格对、测量读数、比较、缺点",
+   "requires": []
+  },
+  "S04": {
+   "name": "教学讲解",
+   "domain": "真人口播与知识表达",
+   "workflow": "raven-speech-edit",
+   "material_start": "讲课原片",
+   "key_signals": "步骤、例题、常见错误、检验方法",
+   "requires": []
+  },
+  "S05": {
+   "name": "个人经历与情感口播",
+   "domain": "真人口播与知识表达",
+   "workflow": "raven-speech-edit",
+   "material_start": "口播原片＋旧照片或 B-roll",
+   "key_signals": "故事节拍、情绪峰、停顿",
+   "requires": []
+  },
+  "S06": {
+   "name": "资讯快讯播报",
+   "domain": "真人口播与知识表达",
+   "workflow": "raven-speech-edit",
+   "material_start": "播报原片＋来源材料",
+   "key_signals": "事实条目、来源、更新、地点",
+   "requires": []
+  },
+  "S07": {
+   "name": "财经商业分析",
+   "domain": "真人口播与知识表达",
+   "workflow": "raven-speech-edit",
+   "material_start": "口播原片＋数据",
+   "key_signals": "数值、趋势、因果、引语",
+   "requires": []
+  },
+  "S08": {
+   "name": "企业发言与正式讲话",
+   "domain": "真人口播与知识表达",
+   "workflow": "raven-speech-edit",
+   "material_start": "讲话录像＋原稿",
+   "key_signals": "承诺、行动主体、议题、限定",
+   "requires": []
+  },
+  "S09": {
+   "name": "人物访谈",
+   "domain": "对话与多人",
+   "workflow": "raven-interview-multicam",
+   "material_start": "多机位访谈",
+   "key_signals": "问答关系、说话人、金句、章节",
+   "requires": []
+  },
+  "S10": {
+   "name": "视频播客与圆桌",
+   "domain": "对话与多人",
+   "workflow": "raven-interview-multicam",
+   "material_start": "多机位或单机位多人录制",
+   "key_signals": "回应关系、分歧、笑点、金句",
+   "requires": []
+  },
+  "S11": {
+   "name": "课程录播",
+   "domain": "对话与多人",
+   "workflow": "raven-course-meeting",
+   "material_start": "课堂或录屏课程",
+   "key_signals": "概念、证明、案例、章节",
+   "requires": []
+  },
+  "S12": {
+   "name": "会议与发布会纪要",
+   "domain": "对话与多人",
+   "workflow": "raven-course-meeting",
+   "material_start": "会议录像",
+   "key_signals": "决定、行动项、风险、未决问题",
+   "requires": []
+  },
+  "S13": {
+   "name": "实拍种草与推荐",
+   "domain": "商品与商业",
+   "workflow": "raven-commerce-story",
+   "material_start": "商品实拍＋本人讲解",
+   "key_signals": "主张—证据表、使用动作、结果",
+   "requires": []
+  },
+  "S14": {
+   "name": "直播带货切片",
+   "domain": "商品与商业",
+   "workflow": "raven-commerce-story",
+   "material_start": "直播回放",
+   "key_signals": "SKU 出场与返场、价格条件、演示",
+   "requires": []
+  },
+  "S15": {
+   "name": "开箱与 ASMR",
+   "domain": "商品与商业",
+   "workflow": "raven-commerce-story",
+   "material_start": "开箱实拍",
+   "key_signals": "取物序列、物声、第一反应",
+   "requires": []
+  },
+  "S16": {
+   "name": "品牌广告后期包装",
+   "domain": "商品与商业",
+   "workflow": "raven-commerce-story",
+   "material_start": "品牌实拍或已生成镜头",
+   "key_signals": "品牌标识、产品特写、宣言",
+   "requires": []
+  },
+  "S17": {
+   "name": "本地生活探店",
+   "domain": "商品与商业",
+   "workflow": "raven-commerce-story",
+   "material_start": "到店实拍",
+   "key_signals": "地点、菜品或服务、价格、排队",
+   "requires": []
+  },
+  "S18": {
+   "name": "房产与空间展示",
+   "domain": "商品与商业",
+   "workflow": "raven-commerce-story",
+   "material_start": "空间实拍＋户型",
+   "key_signals": "动线、面积、光线、适合人群",
+   "requires": []
+  },
+  "S19": {
+   "name": "软件发布与功能宣传",
+   "domain": "商品与商业",
+   "workflow": "raven-software-tutorial",
+   "material_start": "真实界面录屏",
+   "key_signals": "功能、版本差异、使用场景",
+   "requires": []
+  },
+  "S20": {
+   "name": "软件教程",
+   "domain": "商品与商业",
+   "workflow": "raven-software-tutorial",
+   "material_start": "操作录屏",
+   "key_signals": "步骤、点击、报错、完成状态",
+   "requires": []
+  },
+  "S21": {
+   "name": "企业宣传与雇主品牌",
+   "domain": "商品与商业",
+   "workflow": "raven-documentary-story",
+   "material_start": "企业实拍与采访",
+   "key_signals": "人物、价值观、数字、工艺",
+   "requires": []
+  },
+  "S22": {
+   "name": "日常 Vlog",
+   "domain": "生活与纪实",
+   "workflow": "raven-vlog-journey",
+   "material_start": "手机日常素材",
+   "key_signals": "日常动作、任务、情绪变化",
+   "requires": []
+  },
+  "S23": {
+   "name": "旅行",
+   "domain": "生活与纪实",
+   "workflow": "raven-vlog-journey",
+   "material_start": "旅行素材",
+   "key_signals": "路线、地点、当地人、天气",
+   "requires": []
+  },
+  "S24": {
+   "name": "美食制作",
+   "domain": "生活与纪实",
+   "workflow": "raven-vlog-journey",
+   "material_start": "烹饪实拍",
+   "key_signals": "步骤、配比、物声、成品",
+   "requires": []
+  },
+  "S25": {
+   "name": "健身与运动教学",
+   "domain": "生活与纪实",
+   "workflow": "raven-event-highlights",
+   "material_start": "训练实拍",
+   "key_signals": "动作要点、计数、进步、错误动作",
+   "requires": []
+  },
+  "S26": {
+   "name": "婚礼、家庭与纪念",
+   "domain": "生活与纪实",
+   "workflow": "raven-vlog-journey",
+   "material_start": "活动与家庭素材",
+   "key_signals": "仪式时刻、原声、旧照片",
+   "requires": []
+  },
+  "S27": {
+   "name": "人物纪录",
+   "domain": "生活与纪实",
+   "workflow": "raven-documentary-story",
+   "material_start": "纪实素材与采访",
+   "key_signals": "人物行为、地点、档案、声音",
+   "requires": []
+  },
+  "S28": {
+   "name": "新闻调查与解释",
+   "domain": "生活与纪实",
+   "workflow": "raven-documentary-story",
+   "material_start": "采访、档案与网页证据",
+   "key_signals": "主张、证据、来源、更正",
+   "requires": []
+  },
+  "S29": {
+   "name": "活动、展会与演出",
+   "domain": "生活与纪实",
+   "workflow": "raven-event-highlights",
+   "material_start": "活动多源素材",
+   "key_signals": "议程、来宾、高潮、演示",
+   "requires": []
+  },
+  "S30": {
+   "name": "影视解说",
+   "domain": "娱乐与叙事后期",
+   "workflow": "raven-film-recap",
+   "material_start": "已授权影视素材",
+   "key_signals": "因果、线索、人物弧、名场面",
+   "requires": []
+  },
+  "S31": {
+   "name": "短剧后期包装与切条",
+   "domain": "娱乐与叙事后期",
+   "workflow": "raven-drama-production",
+   "material_start": "已剪短剧正片",
+   "key_signals": "钩子冲突、人物出场、集尾悬念",
+   "requires": []
+  },
+  "S32": {
+   "name": "综艺与搞笑段子",
+   "domain": "娱乐与叙事后期",
+   "workflow": "raven-event-highlights",
+   "material_start": "综艺或段子原片",
+   "key_signals": "笑点、反应、重复梗",
+   "requires": []
+  },
+  "S33": {
+   "name": "游戏高光",
+   "domain": "娱乐与叙事后期",
+   "workflow": "raven-event-highlights",
+   "material_start": "游戏录屏",
+   "key_signals": "决策、连招、经济曲线、失误",
+   "requires": []
+  },
+  "S34": {
+   "name": "体育高光",
+   "domain": "娱乐与叙事后期",
+   "workflow": "raven-event-highlights",
+   "material_start": "比赛录像",
+   "key_signals": "关键回合、转折、配合、回放身份",
+   "requires": []
+  },
+  "S35": {
+   "name": "音乐卡点与 MV 混剪",
+   "domain": "娱乐与叙事后期",
+   "workflow": "raven-music-montage",
+   "material_start": "多素材＋音乐",
+   "key_signals": "拍点、乐句、视觉母题、歌词",
+   "requires": []
+  },
+  "S36": {
+   "name": "多平台拆条",
+   "domain": "版本与适配",
+   "workflow": "raven-multiplatform-batch",
+   "material_start": "已有成片",
+   "key_signals": "独立成立的段落、主体位置、画幅",
+   "requires": []
+  },
+  "S37": {
+   "name": "本地化与双语",
+   "domain": "版本与适配",
+   "workflow": "raven-localization",
+   "material_start": "已有成片＋字幕",
+   "key_signals": "术语、文化项、画面文字、口型",
+   "requires": []
+  },
+  "S38": {
+   "name": "精华版与节奏重构",
+   "domain": "版本与适配",
+   "workflow": "raven-pacing-restructure",
+   "material_start": "已有成片",
+   "key_signals": "主张链、气口、章节、音乐密度",
+   "requires": []
+  },
+  "S39": {
+   "name": "参考复刻",
+   "domain": "版本与适配",
+   "workflow": "raven-reference-style",
+   "material_start": "目标素材＋参考片",
+   "key_signals": "参考的节奏、色板、构图、声画关系",
+   "requires": []
+  },
+  "S40": {
+   "name": "图文与照片成片",
+   "domain": "图文与生成补足",
+   "workflow": "raven-script-generation",
+   "material_start": "照片与文字",
+   "key_signals": "地点、时间、细节、引用",
+   "requires": []
+  },
+  "S41": {
+   "name": "动画讲解与数据可视化",
+   "domain": "图文与生成补足",
+   "workflow": "raven-script-generation",
+   "material_start": "脚本或数据",
+   "key_signals": "概念关系、数值、步骤、比喻",
+   "requires": []
+  },
+  "S42": {
+   "name": "数字人口播",
+   "domain": "图文与生成补足",
+   "workflow": "raven-script-generation",
+   "material_start": "脚本＋授权形象",
+   "key_signals": "讲解段、演示段、对话角色",
+   "requires": [
+    "gen"
+   ]
+  }
+ }
+}

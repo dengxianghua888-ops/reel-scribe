@@ -34,7 +34,7 @@ SHARED_FACETS = ("method", "design_system", "caption_style", "sound")
 
 
 def similarity(a, b):
-    """03-style-routing §六: 0.6 * (1 - L2/sqrt(7)) + 0.4 * shared discrete facets."""
+    """05-style-routing §六: 0.6 * (1 - L2/sqrt(7)) + 0.4 * shared discrete facets."""
     va, vb = a["vector"], b["vector"]
     dist = math.sqrt(sum((va.get(k, 0.0) - vb.get(k, 0.0)) ** 2 for k in AXES))
     continuous = 1 - dist / math.sqrt(len(AXES))

@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "reel-scribe/multi-style/exemplar-card/1",
+  "title": "exemplar-card/1 优质样本卡（草案）",
+  "description": "一个公开优质作品的参照记录：只存链接与测量结果，不存媒体。用于校准节奏与密度、提炼风格包、培训评审。",
+  "type": "object",
+  "required": ["schema", "id", "identity", "scenario", "selection", "fingerprint", "style", "borrow"],
+  "properties": {
+    "schema": {"const": "exemplar-card/1"},
+    "id": {"type": "string"},
+    "identity": {
+      "type": "object",
+      "required": ["url", "platform", "captured_on", "duration_s", "aspect"],
+      "properties": {
+        "url": {"type": "string"},
+        "platform": {"type": "string"},
+        "published_on": {"type": "string"},
+        "captured_on": {"type": "string"},
+        "duration_s": {"type": "number"},
+        "aspect": {"type": "string"},
+        "rights_note": {"type": "string", "description": "只作参照，不下载分发"}
+      }
+    },
+    "scenario": {"type": "string", "description": "S01–S42"},
+    "selection": {
+      "type": "object",
+      "required": ["basis", "approvers"],
+      "properties": {
+        "basis": {"enum": ["top-creator", "platform-curated", "award", "brand-official", "editor-nominated"]},
+        "basis_note": {"type": "string"},
+        "approvers": {"type": "array", "minItems": 2, "items": {"type": "string"}}
+      }
+    },
+    "fingerprint": {
+      "type": "object",
+      "properties": {
+        "avg_shot_s": {"type": "number"},
+        "cuts_per_min": {"type": "number"},
+        "hook_within_3s": {"type": "boolean"},
+        "caption_cps": {"type": "number"},
+        "caption_grouping": {"enum": ["word", "phrase", "sentence", "none"]},
+        "graphics_per_min": {"type": "number"},
+        "max_concurrent_components": {"type": "integer"},
+        "accent_area_ratio": {"type": "number"},
+        "loudness_lufs": {"type": "number"},
+        "music_ratio": {"type": "number"},
+        "sfx_per_min": {"type": "number"},
+        "shot_size_distribution": {"type": "object", "additionalProperties": {"type": "number"}},
+        "cut_type_distribution": {"type": "object", "additionalProperties": {"type": "number"}, "description": "MovieCuts 10 类口径"},
+        "measured_with": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "style": {
+      "type": "object",
+      "properties": {
+        "one_liner": {"type": "string"},
+        "design_family": {"type": "string"},
+        "caption_style": {"type": "string"},
+        "look": {"type": "string"},
+        "signature": {"type": "string"},
+        "closest_packs": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "borrow": {
+      "type": "object",
+      "required": ["mechanisms", "do_not_borrow"],
+      "properties": {
+        "mechanisms": {"type": "array", "items": {"type": "string"}},
+        "do_not_borrow": {"type": "array", "items": {"type": "string"}, "description": "人脸、声音、商标、片头、独有配色组合等身份元素"}
+      }
+    }
+  }
+}
