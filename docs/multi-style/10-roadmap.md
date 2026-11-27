@@ -1,5 +1,7 @@
 # 10 路线图与需要拍板的决定
 
+> **2026 年 11 月 27 日更新：** 本章的三期排期已由 [v2 · 06 路线图](../architecture-v2/06-roadmap.md)重新安排：在第一期之前增加“测量与冻结”，第一期收成一条纵切，并给每个阶段写了放弃或转向条件。本章保留作为原始规划记录。
+
 按 [00 顶层设计](00-top-level.md) 的收敛路径（A 离线验证 → B 外部接入剪辑 Agent → C 应用内置）排期，并与研究库[口播与带货建设判断](https://github.com/dengxianghua888-ops/editing-agent-research-library/blob/92b600d605b8bd8ed0e2c938c13561d3e66276e7/library-sync/followups/20261126-chatcut/2026-11-26-chatcut-0.10.14/%E8%87%AA%E7%A0%94%E6%98%A0%E5%B0%84/%E5%8F%A3%E6%92%AD%E4%B8%8E%E5%B8%A6%E8%B4%A7%E5%BB%BA%E8%AE%BE%E5%88%A4%E6%96%AD.md)的顺序对齐：先口播精剪与实拍单品，静态规格卡是两者共用的第一个包装模板。
 
 ## 第一期（P0，离线验证）：一条流水线、三类引擎、首批皮肤包
