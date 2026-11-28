@@ -89,6 +89,7 @@ flowchart TB
 | `frozen` / `negations` | 冻结与否定约束，如“音乐和前面都别动” | 原话优先 |
 | `style_intent` | 风格说法记成的约束 | 原话 |
 | `budget` | token、时长、积分上限；没设时按分批规则执行 | 用户或项目默认 |
+| `state_authority` | `local-work`（兼容模式）或 `host:<项目 ID>`（接入模式），任务进行中不切换 | 连接状态与任务指向，见 [04](04-harness.md) §二 |
 | `missing` | 缺项与要问用户的问题 | 解析结果 |
 
 ### 2. `evidence-record/1`：取证助手交回什么
